@@ -153,6 +153,9 @@ python -m ruff check backend
   emoji and GitHub-style shortcodes are accepted.
 - Use `npm run commit` for the interactive helper, or enter a valid message in
   VS Code's Source Control commit field.
+- The interactive helper runs lint-staged before asking for the commit message,
+  then skips the duplicate pre-commit lint pass when it creates the commit.
+  Direct Git and VS Code commits still use the normal pre-commit hook.
 - Do not bypass hooks with `--no-verify` except for a documented emergency.
 
 ### Frontend

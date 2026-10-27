@@ -122,6 +122,18 @@ git add .
 npm run commit
 ```
 
+The interactive command performs these steps in order:
+
+1. Confirm that at least one file has been staged with `git add`.
+2. Run lint-staged against the staged files.
+3. Stop immediately if ESLint, Prettier, or Ruff fails.
+4. After all checks pass, ask for the Gitmoji, optional scope, and subject.
+5. Create the commit and validate the final message through the `commit-msg`
+   hook.
+
+The pre-commit hook is not run twice by the interactive command. Direct commits
+from Git or VS Code still run lint-staged normally.
+
 Manual commits and commits created through VS Code are also supported:
 
 ```bash

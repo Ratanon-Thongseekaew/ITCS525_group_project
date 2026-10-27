@@ -1,1 +1,5 @@
+if [ "$SKIP_LINT_STAGED" = "1" ]; then
+  exit 0
+fi
+
 npx lint-staged
