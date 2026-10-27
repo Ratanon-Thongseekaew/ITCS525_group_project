@@ -1,0 +1,6 @@
+* text=auto
+
+# Git hooks and Node scripts must keep Unix line endings across platforms.
+.husky/* text eol=lf
+*.sh text eol=lf
+*.mjs text eol=lf

@@ -129,6 +129,9 @@ npm run dev:backend     # Start only FastAPI with reload enabled
 npm run build           # Type-check and build the frontend
 npm run test            # Run frontend tests, then backend tests
 npm run lint            # Run ESLint, then Ruff
+npm run format          # Format frontend/docs and Python files
+npm run format:check    # Check formatting without modifying files
+npm run commit          # Create an interactive Gitmoji commit
 ```
 
 Targeted checks:
@@ -141,6 +144,16 @@ python -m ruff check backend
 ```
 
 ## Implementation conventions
+
+### Git and commits
+
+- Husky runs `lint-staged` before commits and validates the commit subject in
+  the `commit-msg` hook.
+- Commit subjects must follow `<gitmoji> [scope]: <message>`. Both Unicode
+  emoji and GitHub-style shortcodes are accepted.
+- Use `npm run commit` for the interactive helper, or enter a valid message in
+  VS Code's Source Control commit field.
+- Do not bypass hooks with `--no-verify` except for a documented emergency.
 
 ### Frontend
 
@@ -206,4 +219,3 @@ Before considering a code change complete:
 - FastAPI's `TestClient` may need to run outside a restricted Windows sandbox
   because it starts a local asynchronous worker thread. This is an execution
   environment limitation, not an application failure.
-

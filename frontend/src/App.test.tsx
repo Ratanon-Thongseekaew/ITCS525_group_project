@@ -55,4 +55,3 @@ test('redirects the demo admin login to the admin workspace', async () => {
     await screen.findByRole('heading', { name: 'Control with confidence.' }),
   ).toBeInTheDocument()
 })
-

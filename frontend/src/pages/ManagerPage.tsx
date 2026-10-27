@@ -13,9 +13,21 @@ export function ManagerPage() {
         { label: 'Pending approvals', value: '7', detail: '2 due today' },
       ]}
       actions={[
-        { title: 'Review pending approvals', description: 'Seven requests are waiting for a manager decision.', label: 'Review' },
-        { title: 'Weekly team check-in', description: 'Prepare talking points from the latest project updates.', label: 'Prepare' },
-        { title: 'Capacity planning', description: 'Balance assignments before the next work cycle starts.', label: 'Plan' },
+        {
+          title: 'Review pending approvals',
+          description: 'Seven requests are waiting for a manager decision.',
+          label: 'Review',
+        },
+        {
+          title: 'Weekly team check-in',
+          description: 'Prepare talking points from the latest project updates.',
+          label: 'Prepare',
+        },
+        {
+          title: 'Capacity planning',
+          description: 'Balance assignments before the next work cycle starts.',
+          label: 'Plan',
+        },
       ]}
     />
   )

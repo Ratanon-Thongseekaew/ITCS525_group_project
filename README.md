@@ -68,13 +68,13 @@ Vite proxies `/api` requests to FastAPI during development. To point the fronten
 
 ## Frontend routes
 
-| Route | Purpose |
-| --- | --- |
-| `/` | Fullscreen responsive login page |
-| `/login` | Alternate URL for the login page |
-| `/manager` | Manager workspace |
-| `/staff` | Staff workspace |
-| `/admin` | Admin workspace |
+| Route      | Purpose                          |
+| ---------- | -------------------------------- |
+| `/`        | Fullscreen responsive login page |
+| `/login`   | Alternate URL for the login page |
+| `/manager` | Manager workspace                |
+| `/staff`   | Staff workspace                  |
+| `/admin`   | Admin workspace                  |
 
 The login page currently runs in demo mode because the project does not have a
 user database or authentication API. Select a role, enter any non-empty
@@ -101,5 +101,40 @@ npm run lint
 ```
 
 You can run each side independently with `npm run dev:frontend` and `npm run dev:backend`.
+
+## Commit standards
+
+This repository uses Husky, lint-staged, Prettier, Ruff, and Gitmoji to keep
+commits consistent.
+
+After cloning, `npm install` runs the `prepare` script and installs the Git
+hooks. Before each commit:
+
+- Staged frontend source files run through ESLint and Prettier.
+- Staged Python files run through Ruff check and Ruff format.
+- Staged Markdown, JSON, and YAML files run through Prettier.
+- The commit subject must begin with an official Gitmoji or shortcode.
+
+Recommended interactive commit command:
+
+```bash
+git add .
+npm run commit
+```
+
+Manual commits and commits created through VS Code are also supported:
+
+```bash
+git commit -m "✨ Add role-based login"
+git commit -m "🐛 (auth): Fix role redirect"
+git commit -m ":memo: Update project documentation"
+```
+
+See the complete Gitmoji list at https://gitmoji.dev.
+
+The Python hook uses the project-local `.venv` automatically when available,
+so commits created from VS Code do not require an activated terminal. The
+environment must still be created and have `backend[dev]` installed as described
+in the installation section.
 
 # ITCS525_group_project

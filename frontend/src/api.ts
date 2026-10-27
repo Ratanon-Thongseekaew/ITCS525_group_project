@@ -13,4 +13,3 @@ export async function getGreeting(): Promise<Greeting> {
 
   return response.json() as Promise<Greeting>
 }
-

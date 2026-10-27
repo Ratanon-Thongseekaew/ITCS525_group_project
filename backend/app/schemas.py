@@ -7,4 +7,3 @@ class HealthCheck(BaseModel):
 
 class Greeting(BaseModel):
     message: str
-

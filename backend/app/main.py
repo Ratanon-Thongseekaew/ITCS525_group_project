@@ -40,4 +40,3 @@ async def health_check() -> HealthCheck:
 @app.get("/api/greeting", response_model=Greeting, tags=["example"])
 async def greeting() -> Greeting:
     return Greeting(message="Hello from FastAPI!")
-

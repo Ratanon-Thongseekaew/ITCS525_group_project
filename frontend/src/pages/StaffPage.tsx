@@ -13,9 +13,21 @@ export function StaffPage() {
         { label: 'Team updates', value: '4', detail: 'Since yesterday' },
       ]}
       actions={[
-        { title: 'Complete assigned tasks', description: 'Three priority items remain in your queue for today.', label: 'Open tasks' },
-        { title: 'Post your daily update', description: 'Share progress and flag anything blocking your work.', label: 'Update' },
-        { title: 'Review your schedule', description: 'You have two upcoming team sessions this afternoon.', label: 'Schedule' },
+        {
+          title: 'Complete assigned tasks',
+          description: 'Three priority items remain in your queue for today.',
+          label: 'Open tasks',
+        },
+        {
+          title: 'Post your daily update',
+          description: 'Share progress and flag anything blocking your work.',
+          label: 'Update',
+        },
+        {
+          title: 'Review your schedule',
+          description: 'You have two upcoming team sessions this afternoon.',
+          label: 'Schedule',
+        },
       ]}
     />
   )

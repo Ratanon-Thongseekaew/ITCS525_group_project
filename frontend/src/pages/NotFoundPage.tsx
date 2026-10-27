@@ -6,7 +6,9 @@ export function NotFoundPage() {
       <span className="eyebrow">404 error</span>
       <h1>That page is not in this workspace.</h1>
       <p>Check the address or return to the manager dashboard.</p>
-      <Link className="primary-button" to="/manager">Return to dashboard</Link>
+      <Link className="primary-button" to="/manager">
+        Return to dashboard
+      </Link>
     </section>
   )
 }

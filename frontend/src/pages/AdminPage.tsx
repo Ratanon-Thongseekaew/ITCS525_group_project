@@ -13,9 +13,21 @@ export function AdminPage() {
         { label: 'Access requests', value: '6', detail: 'Awaiting review' },
       ]}
       actions={[
-        { title: 'Review access requests', description: 'Six users are waiting for role or workspace access.', label: 'Manage' },
-        { title: 'Inspect audit activity', description: 'Review recent administrative and security events.', label: 'View log' },
-        { title: 'Configure workspace', description: 'Update global defaults, integrations, and policies.', label: 'Configure' },
+        {
+          title: 'Review access requests',
+          description: 'Six users are waiting for role or workspace access.',
+          label: 'Manage',
+        },
+        {
+          title: 'Inspect audit activity',
+          description: 'Review recent administrative and security events.',
+          label: 'View log',
+        },
+        {
+          title: 'Configure workspace',
+          description: 'Update global defaults, integrations, and policies.',
+          label: 'Configure',
+        },
       ]}
     />
   )

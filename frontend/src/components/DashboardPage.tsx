@@ -54,7 +54,9 @@ export function DashboardPage({
             <span className="eyebrow">Quick access</span>
             <h2>What needs your attention</h2>
           </div>
-          <button type="button" className="secondary-button">View all</button>
+          <button type="button" className="secondary-button">
+            View all
+          </button>
         </div>
 
         <div className="action-list">

@@ -19,4 +19,5 @@ Repository-wide requirements:
 - Update tests and documentation when behavior or configuration changes.
 - Before finishing, run relevant tests and linters; run the frontend production
   build when frontend code or shared API contracts change.
-
+- Use an official Gitmoji at the start of commit subjects and do not bypass the
+  Husky pre-commit or commit-message hooks.

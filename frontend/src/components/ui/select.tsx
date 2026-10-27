@@ -45,7 +45,10 @@ const SelectContent = React.forwardRef<
         <ChevronUp className="size-4" />
       </SelectPrimitive.ScrollUpButton>
       <SelectPrimitive.Viewport
-        className={cn('p-1', position === 'popper' && 'w-full min-w-[var(--radix-select-trigger-width)]')}
+        className={cn(
+          'p-1',
+          position === 'popper' && 'w-full min-w-[var(--radix-select-trigger-width)]',
+        )}
       >
         {children}
       </SelectPrimitive.Viewport>
@@ -71,7 +74,9 @@ const SelectItem = React.forwardRef<
   >
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
     <span className="absolute right-2 flex size-4 items-center justify-center">
-      <SelectPrimitive.ItemIndicator><Check className="size-4" /></SelectPrimitive.ItemIndicator>
+      <SelectPrimitive.ItemIndicator>
+        <Check className="size-4" />
+      </SelectPrimitive.ItemIndicator>
     </span>
   </SelectPrimitive.Item>
 ))
