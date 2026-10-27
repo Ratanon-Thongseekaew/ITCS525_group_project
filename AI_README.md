@@ -131,7 +131,7 @@ npm run test            # Run frontend tests, then backend tests
 npm run lint            # Run ESLint, then Ruff
 npm run format          # Format frontend/docs and Python files
 npm run format:check    # Check formatting without modifying files
-npm run commit          # Create an interactive Gitmoji commit
+npm run commit          # Create a Commitizen/Gitmoji commit
 ```
 
 Targeted checks:
@@ -149,16 +149,17 @@ python -m ruff check backend
 
 - Husky runs `lint-staged` before commits and validates the commit subject in
   the `commit-msg` hook.
-- Commit subjects must follow `<gitmoji> [scope]: <message>`. Both Unicode
-  emoji and GitHub-style shortcodes are accepted.
-- Use `npm run commit` for the interactive helper, or enter a valid message in
-  VS Code's Source Control commit field.
-- The interactive helper runs lint-staged before asking for the commit message,
-  then skips the duplicate pre-commit lint pass when it creates the commit.
-  Direct Git and VS Code commits still use the normal pre-commit hook.
-- Interactive commit scopes are selected from `api`, `admin`, `web`,
+- Commit subjects must follow `<gitmoji> type(scope): <message>`. Both Unicode
+  emoji and GitHub-style shortcodes are accepted by the validator.
+- Use `npm run commit` to run lint-staged and then open the Commitizen prompt
+  backed by `cz-customizable` and `cz.config.cjs`. A valid message may also be
+  entered manually in VS Code's Source Control commit field.
+- The Commitizen npm script sets `SKIP_LINT_STAGED=1` after its initial checks,
+  preventing the resulting `git commit` from running lint-staged twice. Direct
+  Git and VS Code commits still use the normal pre-commit hook.
+- Commitizen scopes are selected from `api`, `admin`, `web`,
   `database`, `ci`, `cd`, `docker`, or `general`. A no-scope option is also
-  available; update the `scopes` array in `scripts/gitmoji-commit.mjs` when the
+  available; update the `scopes` array in `cz.config.cjs` when the
   repository structure requires another scope.
 - Do not bypass hooks with `--no-verify` except for a documented emergency.
 

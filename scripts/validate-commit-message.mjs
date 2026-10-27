@@ -13,40 +13,62 @@ if (!inlineMessage && !commitMessagePath) {
 const rawMessage = inlineMessage ?? readFileSync(commitMessagePath, 'utf8')
 const firstLine = rawMessage.split(/\r?\n/, 1)[0].trim()
 const automaticMessage = /^(Merge|Revert|fixup!|squash!)/
+const allowedTypes = [
+  'feat',
+  'fix',
+  'docs',
+  'style',
+  'refactor',
+  'perf',
+  'test',
+  'chore',
+  'revert',
+  'wip',
+  'build',
+  'ci',
+]
+const allowedScopes = ['api', 'admin', 'web', 'database', 'ci', 'cd', 'docker', 'general']
+const convention = new RegExp(
+  `^(${allowedTypes.join('|')})(\\((${allowedScopes.join('|')})\\))?!?:\\s+\\S`,
+)
 
 function normalizeEmoji(value) {
   return value.replaceAll('\uFE0F', '')
 }
 
-function hasValidGitmoji(message) {
+function getMessageAfterGitmoji(message) {
   const normalizedMessage = normalizeEmoji(message)
 
-  return gitmojis.some(({ code, emoji }) => {
+  for (const { code, emoji } of gitmojis) {
     if (message.startsWith(code)) {
-      return message.slice(code.length).trim().length > 0
+      return message.slice(code.length).trim()
     }
 
     const normalizedEmoji = normalizeEmoji(emoji)
-    return (
-      normalizedMessage.startsWith(normalizedEmoji) &&
-      normalizedMessage.slice(normalizedEmoji.length).trim().length > 0
-    )
-  })
+    if (normalizedMessage.startsWith(normalizedEmoji)) {
+      return normalizedMessage.slice(normalizedEmoji.length).trim()
+    }
+  }
+
+  return undefined
 }
 
-if (!automaticMessage.test(firstLine) && !hasValidGitmoji(firstLine)) {
+const conventionalPart = getMessageAfterGitmoji(firstLine)
+const isValid = conventionalPart !== undefined && convention.test(conventionalPart)
+
+if (!automaticMessage.test(firstLine) && !isValid) {
   console.error(`
 Invalid commit message: "${firstLine}"
 
 Start the subject with an official Gitmoji or shortcode.
-Format: <gitmoji> [scope]: <message>
+Format: <gitmoji> type(scope): <message>
 
 Examples:
-  ✨ Add role-based login
-  🐛 (auth): Fix role redirect
-  :memo: Update setup documentation
+  :sparkles: feat(web): Add role-based login
+  :bug: fix(api): Fix role redirect
+  :memo: docs(general): Update setup documentation
 
-Run "npm run commit" for an interactive Gitmoji commit.
+Run "npm run commit" for the Commitizen prompt.
 See https://gitmoji.dev for the complete list.
 `)
   process.exit(1)

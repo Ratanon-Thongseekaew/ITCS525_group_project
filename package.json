@@ -12,13 +12,16 @@
     "build": "npm run build --workspace frontend",
     "test": "npm run test --workspace frontend && python -m pytest backend",
     "lint": "npm run lint --workspace frontend && node scripts/run-ruff.mjs check backend",
-    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,md,yml,yaml}\" && node scripts/run-ruff.mjs format backend",
-    "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,json,css,md,yml,yaml}\" && node scripts/run-ruff.mjs format --check backend",
-    "commit": "node scripts/gitmoji-commit.mjs",
+    "format": "prettier --write \"**/*.{js,cjs,mjs,jsx,ts,tsx,json,css,md,yml,yaml}\" && node scripts/run-ruff.mjs format backend",
+    "format:check": "prettier --check \"**/*.{js,cjs,mjs,jsx,ts,tsx,json,css,md,yml,yaml}\" && node scripts/run-ruff.mjs format --check backend",
+    "commit": "lint-staged && cross-env SKIP_LINT_STAGED=1 cz",
     "prepare": "husky"
   },
   "devDependencies": {
+    "commitizen": "^4.3.2",
     "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "cz-customizable": "5.5.0",
     "gitmojis": "^3.15.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.6.0",
@@ -31,6 +34,17 @@
   "dependencies": {
     "lucide-react": "^1.62.0"
   },
+  "overrides": {
+    "word-wrap": "^1.2.5"
+  },
+  "config": {
+    "commitizen": {
+      "path": "node_modules/cz-customizable"
+    },
+    "cz-customizable": {
+      "config": "./cz.config.cjs"
+    }
+  },
   "lint-staged": {
     "frontend/**/*.{js,jsx,ts,tsx}": [
       "eslint --config frontend/eslint.config.js --fix --max-warnings=0",
@@ -41,6 +55,7 @@
       "node scripts/run-ruff.mjs check --fix",
       "node scripts/run-ruff.mjs format"
     ],
+    "*.{cjs,mjs}": "prettier --write",
     "*.{json,md,yml,yaml}": "prettier --write"
   }
 }

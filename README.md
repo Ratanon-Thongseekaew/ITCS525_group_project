@@ -104,8 +104,8 @@ You can run each side independently with `npm run dev:frontend` and `npm run dev
 
 ## Commit standards
 
-This repository uses Husky, lint-staged, Prettier, Ruff, and Gitmoji to keep
-commits consistent.
+This repository uses Husky, lint-staged, Prettier, Ruff, Commitizen,
+cz-customizable, and Gitmoji to keep commits consistent.
 
 After cloning, `npm install` runs the `prepare` script and installs the Git
 hooks. Before each commit:
@@ -127,9 +127,10 @@ The interactive command performs these steps in order:
 1. Confirm that at least one file has been staged with `git add`.
 2. Run lint-staged against the staged files.
 3. Stop immediately if ESLint, Prettier, or Ruff fails.
-4. After all checks pass, ask you to select a Gitmoji and scope, then enter the
-   subject. Available scopes are `api`, `admin`, `web`, `database`, `ci`, `cd`,
-   `docker`, and `general`; select `No scope` when no scope is needed.
+4. After all checks pass, open the Commitizen prompts configured in
+   `cz.config.cjs` to select the change type and scope, then enter the subject,
+   optional body, breaking changes, and related issues. Available scopes are
+   `api`, `admin`, `web`, `database`, `ci`, `cd`, `docker`, and `general`.
 5. Create the commit and validate the final message through the `commit-msg`
    hook.
 
@@ -139,9 +140,9 @@ from Git or VS Code still run lint-staged normally.
 Manual commits and commits created through VS Code are also supported:
 
 ```bash
-git commit -m "✨ Add role-based login"
-git commit -m "🐛 (auth): Fix role redirect"
-git commit -m ":memo: Update project documentation"
+git commit -m ":sparkles: feat(web): Add role-based login"
+git commit -m ":bug: fix(api): Fix role redirect"
+git commit -m ":memo: docs(general): Update project documentation"
 ```
 
 See the complete Gitmoji list at https://gitmoji.dev.
