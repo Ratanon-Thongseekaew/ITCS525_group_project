@@ -143,9 +143,31 @@ be opened directly during development.
 npm run build
 npm run test
 npm run lint
+npm run format:check
 ```
 
 You can run each side independently with `npm run dev:frontend` and `npm run dev:backend`.
+
+## Continuous integration
+
+GitHub Actions runs `.github/workflows/ci.yaml` for pull requests targeting
+`main`, pushes to `main`, and manual workflow dispatches. The workflow runs
+three independent checks:
+
+- **Backend checks:** install `backend[dev]` on Python 3.12, run Ruff lint and
+  formatting checks, then run Pytest.
+- **Frontend checks:** install the locked npm dependencies on Node.js 24, check
+  Prettier and ESLint, run Vitest, then create a production build.
+- **Compose validation:** resolve `compose.yaml` with non-production CI values
+  and validate its syntax without starting MySQL.
+
+MySQL is intentionally not started in CI yet because the backend does not have
+database integration. Add a MySQL service container, migrations, and database
+integration tests when SQLModel is introduced.
+
+After the workflow has run at least once, configure the `main` branch ruleset
+to require `Backend checks`, `Frontend checks`, and `Compose validation` before
+a pull request can be merged.
 
 ## Commit standards
 

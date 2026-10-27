@@ -18,6 +18,7 @@ This is a minimal full-stack monorepo:
   workspace; the Python backend is managed through `backend/pyproject.toml`.
 - MySQL infrastructure exists, but the backend does not yet have an ORM,
   migrations, a database driver, or application-level database integration.
+  SQLModel is the planned ORM, but it has not been installed or configured.
   Authentication and deployment configuration also remain unimplemented.
 
 ## Repository map
@@ -47,6 +48,9 @@ This is a minimal full-stack monorepo:
 │   ├── tests/
 │   │   └── test_main.py     API tests using FastAPI TestClient
 │   └── pyproject.toml       Python package and tool configuration
+├── .github/
+│   └── workflows/
+│       └── ci.yaml           Pull request and main-branch CI checks
 ├── compose.yaml             Local MySQL service
 ├── .env.example             Safe template for local environment values
 ├── package.json             Root development commands
@@ -143,6 +147,24 @@ npm run format          # Format frontend/docs and Python files
 npm run format:check    # Check formatting without modifying files
 npm run commit          # Create a Commitizen/Gitmoji commit
 ```
+
+## Continuous integration
+
+`.github/workflows/ci.yaml` runs on pull requests targeting `main`, pushes to
+`main`, and manual dispatches. It provides these independent status checks:
+
+- `Backend checks`: Python 3.12, editable `backend[dev]` installation, Ruff
+  lint, Ruff format check, and Pytest.
+- `Frontend checks`: Node.js 24, `npm ci`, Prettier, ESLint, Vitest, and the
+  production Vite build.
+- `Compose validation`: validates the resolved Compose configuration with
+  disposable CI environment values and does not start containers.
+
+CI dependency caches are keyed from `backend/pyproject.toml` and the root
+`package-lock.json`. Superseded runs for the same pull request are cancelled.
+MySQL is intentionally absent from CI until SQLModel, migrations, and database
+integration tests exist. When those are added, use a MySQL service container
+and non-production credentials rather than the repository's local `.env`.
 
 Targeted checks:
 
