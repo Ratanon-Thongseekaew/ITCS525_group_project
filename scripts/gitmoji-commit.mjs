@@ -19,6 +19,17 @@ const commonNames = [
   'heavy-plus-sign',
 ]
 
+const scopes = [
+  { name: 'api' },
+  { name: 'admin' },
+  { name: 'web' },
+  { name: 'database' },
+  { name: 'ci' },
+  { name: 'cd' },
+  { name: 'docker' },
+  { name: 'general' },
+]
+
 const choices = commonNames
   .map((name) => gitmojis.find((gitmoji) => gitmoji.name === name))
   .filter(Boolean)
@@ -69,7 +80,21 @@ if (!gitmoji) {
   process.exit(1)
 }
 
-const scope = (await prompt.question('Scope (optional): ')).trim()
+console.log('\nChoose a scope:\n')
+console.log(' 0. No scope')
+scopes.forEach((scope, index) => {
+  console.log(`${String(index + 1).padStart(2, ' ')}. ${scope.name}`)
+})
+
+const scopeSelection = Number(await prompt.question('\nScope number: '))
+const scope = scopeSelection === 0 ? '' : scopes[scopeSelection - 1]?.name
+
+if (scope === undefined) {
+  console.error('Invalid scope selection.')
+  prompt.close()
+  process.exit(1)
+}
+
 const subject = (await prompt.question('Commit message: ')).trim()
 prompt.close()
 

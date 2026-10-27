@@ -127,7 +127,9 @@ The interactive command performs these steps in order:
 1. Confirm that at least one file has been staged with `git add`.
 2. Run lint-staged against the staged files.
 3. Stop immediately if ESLint, Prettier, or Ruff fails.
-4. After all checks pass, ask for the Gitmoji, optional scope, and subject.
+4. After all checks pass, ask you to select a Gitmoji and scope, then enter the
+   subject. Available scopes are `api`, `admin`, `web`, `database`, `ci`, `cd`,
+   `docker`, and `general`; select `No scope` when no scope is needed.
 5. Create the commit and validate the final message through the `commit-msg`
    hook.
 

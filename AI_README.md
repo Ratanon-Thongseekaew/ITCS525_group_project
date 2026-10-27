@@ -156,6 +156,10 @@ python -m ruff check backend
 - The interactive helper runs lint-staged before asking for the commit message,
   then skips the duplicate pre-commit lint pass when it creates the commit.
   Direct Git and VS Code commits still use the normal pre-commit hook.
+- Interactive commit scopes are selected from `api`, `admin`, `web`,
+  `database`, `ci`, `cd`, `docker`, or `general`. A no-scope option is also
+  available; update the `scopes` array in `scripts/gitmoji-commit.mjs` when the
+  repository structure requires another scope.
 - Do not bypass hooks with `--no-verify` except for a documented emergency.
 
 ### Frontend
