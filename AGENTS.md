@@ -15,6 +15,8 @@ Repository-wide requirements:
 - Keep `/manager`, `/staff`, and `/admin` unprotected until real authentication
   is implemented or route protection is explicitly requested.
 - Keep public API endpoints under `/api` and Swagger at `/docs`.
+- Use the `mysql` service in `compose.yaml` for local database development and
+  never commit real database credentials or silently delete its named volume.
 - Do not edit dependencies, build output, virtual environments, or cache files.
 - Update tests and documentation when behavior or configuration changes.
 - Before finishing, run relevant tests and linters; run the frontend production

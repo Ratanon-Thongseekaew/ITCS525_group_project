@@ -23,6 +23,7 @@ assistants, see [AI_README.md](./AI_README.md).
 
 - Node.js 20+ and npm 10+
 - Python 3.11+
+- Docker Desktop or Docker Engine with Compose
 
 ## Install
 
@@ -51,6 +52,50 @@ macOS/Linux:
 source .venv/bin/activate
 python -m pip install -e './backend[dev]'
 ```
+
+Create the local environment file used by Docker Compose:
+
+```bash
+cp .env.example .env
+```
+
+On Windows Command Prompt, use `copy .env.example .env`. Change both MySQL
+passwords in `.env` before starting the database. The `.env` file is ignored by
+Git and must not be committed.
+
+## Database
+
+Local development uses MySQL 8.4 LTS through `compose.yaml`. The database binds
+only to `127.0.0.1`, uses `utf8mb4` with `utf8mb4_0900_ai_ci`, and stores data
+in the named Docker volume `textile-track_mysql_data`.
+
+Start MySQL:
+
+```bash
+npm run db:up
+```
+
+Check its status or follow its logs:
+
+```bash
+npm run db:status
+npm run db:logs
+```
+
+Stop MySQL without deleting its data:
+
+```bash
+npm run db:down
+```
+
+To connect from the host machine, use `127.0.0.1`, the `MYSQL_PORT` from
+`.env` (the template uses `3307` to avoid common conflicts with a locally
+installed MySQL server), and the database/user/password values from that file.
+Containers added to the same Compose project should connect to host `mysql` on
+port `3306`.
+
+The FastAPI application is not connected to MySQL yet; ORM models, migrations,
+and the Python database driver will be added separately.
 
 ## Develop
 

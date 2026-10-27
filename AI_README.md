@@ -13,10 +13,12 @@ This is a minimal full-stack monorepo:
   primitives, Radix UI, and Lucide icons.
 - `backend/` is a Python 3.11+ HTTP API built with FastAPI and served by
   Uvicorn.
+- `compose.yaml` provides the MySQL 8.4 LTS service used for local development.
 - The root `package.json` coordinates both applications. The frontend is an npm
   workspace; the Python backend is managed through `backend/pyproject.toml`.
-- There is currently no database, authentication, container configuration, or
-  deployment configuration.
+- MySQL infrastructure exists, but the backend does not yet have an ORM,
+  migrations, a database driver, or application-level database integration.
+  Authentication and deployment configuration also remain unimplemented.
 
 ## Repository map
 
@@ -45,6 +47,8 @@ This is a minimal full-stack monorepo:
 │   ├── tests/
 │   │   └── test_main.py     API tests using FastAPI TestClient
 │   └── pyproject.toml       Python package and tool configuration
+├── compose.yaml             Local MySQL service
+├── .env.example             Safe template for local environment values
 ├── package.json             Root development commands
 └── README.md                Human setup and usage guide
 ```
@@ -62,6 +66,8 @@ During local development:
 4. `frontend/src/api.ts` can instead use an explicit base URL from
    `VITE_API_URL`.
 5. FastAPI permits requests from `http://localhost:5173` through CORS.
+6. Docker Compose exposes MySQL only at `127.0.0.1:${MYSQL_PORT:-3307}`. Other
+   containers in the Compose project use `mysql:3306`.
 
 React Router owns client-side navigation. The current frontend routes are:
 
@@ -126,6 +132,10 @@ that invoke Python.
 npm run dev             # Start frontend and backend together
 npm run dev:frontend    # Start only Vite
 npm run dev:backend     # Start only FastAPI with reload enabled
+npm run db:up           # Start the local MySQL service
+npm run db:down         # Stop Compose services without deleting data
+npm run db:status       # Show MySQL container and health status
+npm run db:logs         # Follow MySQL container logs
 npm run build           # Type-check and build the frontend
 npm run test            # Run frontend tests, then backend tests
 npm run lint            # Run ESLint, then Ruff
@@ -195,6 +205,10 @@ python -m ruff check backend
   server host, port, or documentation path becomes configurable. If they become
   configurable, update the message to use the same configuration source.
 - Follow Ruff's configured 100-character line length and Python 3.11 target.
+- Use the existing `mysql` Compose service for local database work. Do not
+  hardcode credentials; read them from `.env` or future application settings.
+- Preserve the named volume unless the user explicitly requests a database
+  reset. `docker compose down -v` deletes local database data and is destructive.
 
 ## Change checklist
 
