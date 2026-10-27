@@ -75,7 +75,7 @@ export function LoginPage() {
           <CardContent className="px-5 pb-6 sm:px-8 sm:pb-8">
             <form className="space-y-4 sm:space-y-5" onSubmit={handleSubmit}>
               <div className="space-y-2">
-                <Label htmlFor="role">Workspace role 1</Label>
+                <Label htmlFor="role">Workspace role</Label>
                 <Select value={role} onValueChange={changeRole}>
                   <SelectTrigger id="role" aria-label="Workspace role">
                     <SelectValue />

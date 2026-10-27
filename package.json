@@ -19,6 +19,8 @@
   "engines": {
     "node": ">=20",
     "npm": ">=10"
+  },
+  "dependencies": {
+    "lucide-react": "^1.62.0"
   }
 }
-
