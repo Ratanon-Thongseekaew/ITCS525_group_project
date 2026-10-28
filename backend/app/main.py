@@ -17,8 +17,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(
-    title="React + FastAPI Starter",
-    description="API for the React and FastAPI monorepo starter.",
+    title="Textile Track API",
+    description="API for the Textile Track application.",
     version="0.1.0",
     lifespan=lifespan,
 )
