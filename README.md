@@ -113,13 +113,13 @@ Vite proxies `/api` requests to FastAPI during development. To point the fronten
 
 ## Frontend routes
 
-| Route      | Purpose                          |
-| ---------- | -------------------------------- |
-| `/`        | Fullscreen responsive login page |
-| `/login`   | Alternate URL for the login page |
-| `/manager` | Manager workspace                |
-| `/staff`   | Staff workspace                  |
-| `/admin`   | Admin workspace                  |
+| Route                          | Purpose                          |
+| ------------------------------ | -------------------------------- |
+| `/`                            | Fullscreen responsive login page |
+| `/login`                       | Alternate URL for the login page |
+| `/manager`, `/staff`, `/admin` | Role workspace dashboard         |
+| `/:role/resale-bins`           | Resale bin records placeholder   |
+| `/:role/recycle-bins`          | Recycle bin records placeholder  |
 
 The login page currently runs in demo mode because the project does not have a
 user database or authentication API. Select a role, enter any non-empty
@@ -132,6 +132,10 @@ be opened directly during development.
 
 - Tailwind CSS provides responsive layout and utility styling.
 - Reusable shadcn/ui-style components live in `frontend/src/components/ui/`.
+- `WorkspaceSidebar` provides the responsive shared navigation for manager,
+  staff, and admin workspaces. Menu definitions live in
+  `frontend/src/config/workspace-navigation.ts`; add a `roles` list to a menu
+  item when role-specific visibility is required.
 - The login design uses `Card`, `Input`, `Label`, `Select`, and `Button`
   primitives with Lucide icons.
 - The login screen fills the available viewport and adapts its header, card,

@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react'
-import { LockKeyhole, LogIn, Shirt, UserRound } from 'lucide-react'
+import { LockKeyhole, LogIn, UserRound } from 'lucide-react'
 import { useNavigate } from 'react-router'
+import textileTrackLogo from '@/assets/logos/textile-track-app-logo-1024.png'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -12,10 +13,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import type { WorkspaceRole } from '@/types/workspace'
 
-export type UserRole = 'manager' | 'staff' | 'admin'
-
-const roleDetails: Record<UserRole, { access: string; username: string }> = {
+const roleDetails: Record<WorkspaceRole, { access: string; username: string }> = {
   manager: { access: 'Manager access', username: 'Manager01' },
   staff: { access: 'Staff access', username: 'Staff01' },
   admin: { access: 'Admin access', username: 'Admin01' },
@@ -23,11 +23,11 @@ const roleDetails: Record<UserRole, { access: string; username: string }> = {
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const [role, setRole] = useState<UserRole>('admin')
+  const [role, setRole] = useState<WorkspaceRole>('admin')
   const [username, setUsername] = useState(roleDetails.admin.username)
 
   function changeRole(value: string) {
-    const nextRole = value as UserRole
+    const nextRole = value as WorkspaceRole
     setRole(nextRole)
     setUsername(roleDetails[nextRole].username)
   }
@@ -41,9 +41,12 @@ export function LoginPage() {
     <main className="flex min-h-screen min-h-svh w-full flex-col bg-white text-slate-950">
       <header className="flex min-h-16 shrink-0 items-center justify-between border-b border-slate-100 px-5 py-4 sm:min-h-20 sm:px-8 lg:px-12">
         <div className="flex items-center gap-2.5" aria-label="Textile Track">
-          <span className="grid size-8 place-items-center rounded-md bg-teal-700 text-white sm:size-9">
-            <Shirt className="size-5" strokeWidth={1.8} />
-          </span>
+          <img
+            src={textileTrackLogo}
+            alt=""
+            className="size-8 object-contain sm:size-9"
+            aria-hidden="true"
+          />
           <span className="text-sm font-semibold tracking-tight sm:text-base">Textile Track</span>
         </div>
 
@@ -75,7 +78,7 @@ export function LoginPage() {
           <CardContent className="px-5 pb-6 sm:px-8 sm:pb-8">
             <form className="space-y-4 sm:space-y-5" onSubmit={handleSubmit}>
               <div className="space-y-2">
-                <Label htmlFor="role">Workspace role 1</Label>
+                <Label htmlFor="role">Workspace role</Label>
                 <Select value={role} onValueChange={changeRole}>
                   <SelectTrigger id="role" aria-label="Workspace role">
                     <SelectValue />
