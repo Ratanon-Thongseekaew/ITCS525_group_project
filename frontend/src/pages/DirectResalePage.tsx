@@ -16,7 +16,7 @@ const initialBins: Bin[] = [
     id: 'bin-id-001',
     count: 100,
     weight: 40,
-    packed: '3:30 PM, 1 OCT 2026',
+    packed: '3:31 PM, 1 OCT 2026',
     status: 'Awaiting Process',
   },
 ]
