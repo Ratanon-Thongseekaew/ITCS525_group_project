@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router'
+import { NavLink, Outlet, useLocation } from 'react-router'
 import { ApiStatus } from './ApiStatus'
 
 const navigation = [
@@ -8,6 +8,10 @@ const navigation = [
 ]
 
 export function AppLayout() {
+  const { pathname } = useLocation()
+
+  if (pathname === '/direct-resale') return <Outlet />
+
   return (
     <div className="app-shell">
       <header className="topbar">
