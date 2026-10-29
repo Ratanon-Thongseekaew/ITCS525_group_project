@@ -1,305 +1,415 @@
-import React, { useState } from 'react';
+import React, { useState } from 'react'
+import { useNavigate } from 'react-router'
+import {
+  UploadCloud,
+  FileSpreadsheet,
+  Download,
+  AlertCircle,
+  CheckCircle2,
+  AlertTriangle,
+  ArrowRight,
+  HelpCircle,
+  RefreshCw,
+} from 'lucide-react'
 
-interface SorterReportRow {
-  row: number;
-  binId: string;
-  contractor: string;
-  retailerWt: number;
-  reportedWt: number;
-  resoldKg: number;
-  recycledKg: number;
-  downcycledKg: number;
-  exportedKg: number;
-  landfilledKg: number;
-  status: 'Verified' | 'Warning' | 'Error';
-  errorDetail?: string;
+interface ReportRow {
+  row: number
+  binId: string
+  contractor: string
+  storeWeight: number
+  reportedWeight: number
+  resoldKg: number
+  recycledFiberKg: number
+  downcycledKg: number
+  exportedKg: number
+  landfilledKg: number
+  status: 'Verified' | 'Warning' | 'Error'
+  errorDetail?: string
 }
 
 export default function ContractorReportImport() {
-  const [step, setStep] = useState<number>(1);
-  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const navigate = useNavigate()
+  const [step, setStep] = useState<number>(1)
+  const [isProcessing, setIsProcessing] = useState<boolean>(false)
+  const [selectedContractor, setSelectedContractor] = useState<string>('Contractor 1')
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
 
-  // 严格对齐 ISO/IEC 29110 及课程要求的 5 类法定去向数据
-  const mockRows: SorterReportRow[] = [
+  const reportRows: ReportRow[] = [
     {
       row: 1,
       binId: 'BIN-C-0047',
       contractor: 'GreenSort Textiles',
-      retailerWt: 12.3,
-      reportedWt: 12.1,
+      storeWeight: 12.3,
+      reportedWeight: 12.1,
       resoldKg: 4.2,
-      recycledKg: 4.8,
+      recycledFiberKg: 4.8,
       downcycledKg: 1.8,
       exportedKg: 0.9,
       landfilledKg: 0.4,
-      status: 'Verified'
+      status: 'Verified',
     },
     {
       row: 2,
       binId: 'BIN-C-0046',
       contractor: 'ReWeave Recyclers',
-      retailerWt: 15.1,
-      reportedWt: 10.0,
+      storeWeight: 15.1,
+      reportedWeight: 10.0,
       resoldKg: 5.3,
-      recycledKg: 2.7,
+      recycledFiberKg: 2.7,
       downcycledKg: 1.0,
       exportedKg: 0.6,
       landfilledKg: 0.4,
       status: 'Error',
-      errorDetail: 'Weight variance exceeds ±5% threshold (-5.1kg discrepancy)'
+      errorDetail: 'Weight variance exceeds ±5% threshold (-5.1kg discrepancy)',
     },
     {
       row: 3,
       binId: 'MISSING_ID',
       contractor: 'Loopfibre Co.',
-      retailerWt: 14.0,
-      reportedWt: 13.9,
+      storeWeight: 14.0,
+      reportedWeight: 13.9,
       resoldKg: 3.5,
-      recycledKg: 4.5,
+      recycledFiberKg: 4.5,
       downcycledKg: 3.0,
       exportedKg: 2.0,
       landfilledKg: 0.9,
       status: 'Error',
-      errorDetail: 'Missing or Invalid Bin ID format'
+      errorDetail: 'Missing or Invalid Bin ID format',
     },
     {
       row: 4,
       binId: 'BIN-C-0042',
       contractor: 'ReWeave Recyclers',
-      retailerWt: 16.5,
-      reportedWt: 15.8,
+      storeWeight: 16.5,
+      reportedWeight: 15.8,
       resoldKg: 4.5,
-      recycledKg: 4.0,
+      recycledFiberKg: 4.0,
       downcycledKg: 3.2,
       exportedKg: 2.5,
       landfilledKg: 1.6,
       status: 'Warning',
-      errorDetail: 'Minor weight variance flagged (-0.7kg)'
-    }
-  ];
+      errorDetail: 'Minor weight variance flagged (-0.7kg)',
+    },
+  ]
 
-  const handleSimulateUpload = () => {
-    setIsAnalyzing(true);
+  const handleStartReview = () => {
+    setIsProcessing(true)
     setTimeout(() => {
-      setIsAnalyzing(false);
-      setStep(2);
-    }, 600);
-  };
+      setIsProcessing(false)
+      setUploadedFileName('monthly_contractor_report_october.xlsx')
+      setStep(2)
+    }, 400)
+  }
 
-  const totalRows = mockRows.length;
-  const validCount = mockRows.filter(r => r.status === 'Verified').length;
-  const errorCount = mockRows.filter(r => r.status === 'Error').length;
-  const warningCount = mockRows.filter(r => r.status === 'Warning').length;
+  const totalRows = reportRows.length
+  const verifiedCount = reportRows.filter((r) => r.status === 'Verified').length
+  const warningCount = reportRows.filter((r) => r.status === 'Warning').length
+  const errorCount = reportRows.filter((r) => r.status === 'Error').length
 
   return (
-    <div className="max-w-6xl mx-auto p-6 md:p-8 space-y-7 bg-slate-50/60 min-h-[720px] rounded-3xl border border-slate-200/90 shadow-sm font-sans text-slate-800">
-      
-      {/* 顶部 Header 卡片 */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-7 rounded-2xl border border-slate-200/80 shadow-sm gap-4">
-        <div className="space-y-1.5">
-          <div className="inline-flex items-center gap-2">
-            <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80 uppercase tracking-wider">
-              Feature 5 Module
-            </span>
-            <span className="text-slate-300">•</span>
-            <span className="text-xs font-semibold text-slate-500">ISO/IEC 29110 Compliance</span>
-          </div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-            Contractor Monthly Report Import & Verification
-          </h2>
-          <p className="text-xs md:text-sm text-slate-500 max-w-2xl">
-            Automated intake validation pipeline. Audits contractor monthly records across the 5 statutory disposition categories and isolates data discrepancies.
-          </p>
-        </div>
-        <button 
-          onClick={() => alert("Downloading Standard Contractor CSV/XLSX Template...")}
-          style={{ color: '#0f172a' }}
-          className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 active:scale-95 rounded-xl border border-slate-300/80 shadow-sm transition-all"
-        >
-          <span>📥</span>
-          <span>Download Template</span>
-        </button>
-      </div>
-
-      {/* 步骤向导 (Steppers) */}
-      <div className="grid grid-cols-3 gap-4">
+    <div className="w-full space-y-6">
+      {/* 步骤条 */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {[
-          { num: 1, title: 'Step 1: Upload File', desc: 'CSV or Excel (.xlsx)' },
+          { num: 1, title: 'Step 1: Upload File', desc: 'CSV, XLS, XLSX' },
           { num: 2, title: 'Step 2: Review 5 Categories', desc: 'Verify weights & rules' },
-          { num: 3, title: 'Step 3: Save to Database', desc: 'Isolate & commit' }
+          { num: 3, title: 'Step 3: Save Report', desc: 'Finalize & record' },
         ].map((s) => {
-          const isActive = step === s.num;
-          const isDone = step > s.num;
+          const isActive = step === s.num
+          const isDone = step > s.num
           return (
             <div
               key={s.num}
-              className={`p-4 rounded-2xl border transition-all duration-200 flex items-center gap-3.5 ${
-                isActive
-                  ? 'bg-emerald-700 border-emerald-700 shadow-md shadow-emerald-700/20'
-                  : isDone
-                  ? 'bg-emerald-50/80 border-emerald-300'
-                  : 'bg-white border-slate-200/90'
-              }`}
+              style={{
+                backgroundColor: isActive ? '#047857' : isDone ? '#ecfdf5' : '#ffffff',
+                borderColor: isActive ? '#047857' : isDone ? '#a7f3d0' : '#e2e8f0',
+              }}
+              className="p-3.5 rounded-xl border transition-all flex items-center gap-3 shadow-sm"
             >
               <div
-                style={{ color: isActive ? '#047857' : isDone ? '#ffffff' : '#94a3b8' }}
-                className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm shrink-0 ${
-                  isActive
-                    ? 'bg-white shadow-sm'
-                    : isDone
-                    ? 'bg-emerald-600'
-                    : 'bg-slate-100'
-                }`}
+                style={{
+                  backgroundColor: isActive ? '#ffffff' : isDone ? '#059669' : '#f1f5f9',
+                  color: isActive ? '#047857' : isDone ? '#ffffff' : '#64748b',
+                }}
+                className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0"
               >
                 {isDone ? '✓' : s.num}
               </div>
               <div>
-                <p 
-                  style={{ color: isActive ? '#ffffff' : isDone ? '#064e3b' : '#334155' }}
-                  className="text-xs md:text-sm font-bold tracking-tight"
+                <p
+                  style={{
+                    color: isActive ? '#ffffff' : isDone ? '#064e3b' : '#334155',
+                  }}
+                  className="text-xs font-bold leading-tight"
                 >
                   {s.title}
                 </p>
-                <p 
-                  style={{ color: isActive ? '#a7f3d0' : isDone ? '#059669' : '#94a3b8' }}
-                  className="text-[11px] font-medium"
+                <p
+                  style={{
+                    color: isActive ? '#d1fae5' : isDone ? '#047857' : '#94a3b8',
+                  }}
+                  className="text-[10px] mt-0.5"
                 >
                   {s.desc}
                 </p>
               </div>
             </div>
-          );
+          )
         })}
       </div>
 
-      {/* 主面板 */}
-      <div className="bg-white rounded-3xl border border-slate-200/90 p-8 shadow-sm">
-        
-        {/* Step 1: 上传区 */}
+      {/* 主卡片容器 */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-sm">
+        {/* Step 1: Upload File */}
         {step === 1 && (
-          <div className="border-2 border-dashed border-emerald-200/90 hover:border-emerald-500 transition-colors rounded-2xl p-16 text-center space-y-5 bg-emerald-50/20">
-            {isAnalyzing ? (
-              <div className="py-8 space-y-4">
-                <div className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                <div className="space-y-1">
-                  <p className="text-base font-bold text-slate-800">Auditing Sorter Spreadsheet...</p>
-                  <p className="text-xs text-slate-500">Checking weight variance (±5%) and validating all 5 disposition categories...</p>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="w-20 h-20 bg-emerald-100/70 text-emerald-700 rounded-3xl flex items-center justify-center mx-auto text-4xl shadow-inner border border-emerald-200/60">
-                  📊
-                </div>
-                <div className="space-y-1.5">
-                  <h3 className="text-lg font-bold text-slate-800 tracking-tight">
-                    Upload Monthly Recycler Outcome Spreadsheet
-                  </h3>
-                  <p className="text-xs text-slate-500 max-w-md mx-auto">
-                    Drag and drop contractor CSV/XLSX files here or click below to trigger simulated validation against retail intake logs.
+          <div className="space-y-6">
+            <h3 className="text-sm font-bold text-slate-900">Upload File</h3>
+
+            {/* 上传拖拽区域 */}
+            <div className="border-2 border-dashed border-emerald-300 hover:border-emerald-500 rounded-xl p-8 md:p-14 text-center transition bg-emerald-50/20">
+              {isProcessing ? (
+                <div className="py-6 space-y-3">
+                  <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                  <p className="text-xs font-semibold text-slate-700">
+                    Validating spreadsheet format...
                   </p>
                 </div>
-                <div className="pt-3">
-                  {/* 核心修复：内联纯白色字与深墨绿色底 */}
-                  <button
-                    onClick={handleSimulateUpload}
-                    style={{ color: '#ffffff', backgroundColor: '#047857' }}
-                    className="px-7 py-3.5 hover:opacity-95 active:scale-95 text-sm font-bold rounded-xl shadow-lg shadow-emerald-700/25 transition-all inline-flex items-center gap-2 cursor-pointer"
-                  >
-                    <span>🚀</span>
-                    <span>Simulate File Upload & Validation</span>
-                  </button>
+              ) : (
+                <div className="space-y-3">
+                  <div className="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-xl flex items-center justify-center mx-auto shadow-xs">
+                    <UploadCloud className="w-6 h-6 text-emerald-700" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">Drag and drop file here or</p>
+                    <button
+                      type="button"
+                      onClick={handleStartReview}
+                      style={{ backgroundColor: '#047857', color: '#ffffff' }}
+                      className="mt-3 px-5 py-2 text-xs font-bold rounded-lg shadow-sm hover:opacity-90 transition inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span style={{ color: '#ffffff' }}>Choose file</span>
+                    </button>
+                  </div>
                 </div>
-              </>
-            )}
-          </div>
-        )}
+              )}
+            </div>
 
-        {/* Step 2: 5 类去向明细与高亮 */}
-        {step === 2 && (
-          <div className="space-y-6">
-            {/* KPI 统计条 */}
-            <div className="grid grid-cols-4 gap-4">
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Bins Processed</span>
-                <p className="text-2xl font-black text-slate-900 mt-1">{totalRows}</p>
-              </div>
-              <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200/80">
-                <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Verified Records</span>
-                <p className="text-2xl font-black text-emerald-800 mt-1">{validCount}</p>
-              </div>
-              <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200/80">
-                <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">Flagged Warnings</span>
-                <p className="text-2xl font-black text-amber-800 mt-1">{warningCount}</p>
-              </div>
-              <div className="p-4 bg-rose-50 rounded-2xl border border-rose-200/80">
-                <span className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">Rejected Discrepancies</span>
-                <p className="text-2xl font-black text-rose-800 mt-1">{errorCount}</p>
+            {/* 文件限制说明 */}
+            <div className="flex flex-col sm:flex-row justify-between text-[11px] text-slate-400 gap-1 border-b border-slate-100 pb-4">
+              <span>Supported Formats: CSV, XLS, XLSX</span>
+              <div className="flex gap-4">
+                <span>Maximum File: 1</span>
+                <span>Maximum File Size: 100MB</span>
               </div>
             </div>
 
-            {/* 5-Tier 详细分类表格 */}
-            <div className="overflow-x-auto rounded-2xl border border-slate-200/90 shadow-sm">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-slate-100/90 text-slate-700 font-bold border-b border-slate-200">
+            {/* 样例模板下载 */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200 gap-3">
+              <div className="flex items-start gap-3">
+                <FileSpreadsheet className="w-5 h-5 text-emerald-700 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-xs font-bold text-slate-800">Table Example Template</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Download the attached example template and share to contractors to use as a
+                    starting point for their report files
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => alert('Downloading report template...')}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 shadow-xs shrink-0 self-start sm:self-auto cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-700" />
+                <span>Download</span>
+              </button>
+            </div>
+
+            {/* Contractor 下拉选择 */}
+            <div className="space-y-1.5">
+              <label
+                htmlFor="contractor-select"
+                className="text-xs font-semibold text-slate-700 block"
+              >
+                Contractor
+              </label>
+              <select
+                id="contractor-select"
+                value={selectedContractor}
+                onChange={(e) => setSelectedContractor(e.target.value)}
+                className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="Contractor 1">Contractor 1</option>
+                <option value="GreenSort Textiles">GreenSort Textiles</option>
+                <option value="ReWeave Recyclers">ReWeave Recyclers</option>
+              </select>
+            </div>
+
+            {/* 底部按钮条 */}
+            <div className="flex flex-col sm:flex-row items-center justify-between pt-4 border-t border-slate-100 gap-3">
+              <button
+                type="button"
+                onClick={() =>
+                  alert('Formatting guide: Ensure 5 statutory outcome columns are included.')
+                }
+                className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 underline self-start sm:self-auto cursor-pointer"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+                <span>Formatting Guide</span>
+              </button>
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => navigate('/manager')}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStartReview}
+                  style={{ backgroundColor: '#047857', color: '#ffffff' }}
+                  className="px-5 py-2 text-xs font-bold rounded-lg shadow-sm hover:opacity-90 transition inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span style={{ color: '#ffffff' }}>Next</span>
+                  <ArrowRight className="w-3.5 h-3.5 text-white" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Review Report */}
+        {step === 2 && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-100 gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Review Report Validation</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  File: <span className="font-semibold text-slate-700">{uploadedFileName}</span> (
+                  {selectedContractor})
+                </p>
+              </div>
+              <span className="text-xs font-semibold text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full self-start sm:self-auto border border-emerald-200">
+                Ready for Review
+              </span>
+            </div>
+
+            {/* KPI 指标卡片 */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <span className="text-[11px] font-bold text-slate-500 uppercase">Total Rows</span>
+                <p className="text-2xl font-black text-slate-900 mt-0.5">{totalRows}</p>
+              </div>
+              <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+                <span className="text-[11px] font-bold text-emerald-800 uppercase">
+                  Verified Records
+                </span>
+                <p className="text-2xl font-black text-emerald-800 mt-0.5">{verifiedCount}</p>
+              </div>
+              <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+                <span className="text-[11px] font-bold text-amber-800 uppercase">
+                  Flagged Warnings
+                </span>
+                <p className="text-2xl font-black text-amber-800 mt-0.5">{warningCount}</p>
+              </div>
+              <div className="p-4 bg-rose-50 rounded-xl border border-rose-200">
+                <span className="text-[11px] font-bold text-rose-800 uppercase">
+                  Rejected Errors
+                </span>
+                <p className="text-2xl font-black text-rose-800 mt-0.5">{errorCount}</p>
+              </div>
+            </div>
+
+            {/* 校验明细表格 */}
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full text-left text-xs whitespace-nowrap">
+                <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
                   <tr>
-                    <th className="py-3.5 px-3">Row</th>
-                    <th className="py-3.5 px-3">Bin ID</th>
-                    <th className="py-3.5 px-3">Contractor</th>
-                    <th className="py-3.5 px-3">Store Wt</th>
-                    <th className="py-3.5 px-3">Reported Wt</th>
-                    <th className="py-3.5 px-3 text-emerald-800 bg-emerald-100/40">Resold</th>
-                    <th className="py-3.5 px-3 text-blue-800 bg-blue-100/40">Recycled Fiber</th>
-                    <th className="py-3.5 px-3 text-amber-800 bg-amber-100/40">Downcycled</th>
-                    <th className="py-3.5 px-3 text-purple-800 bg-purple-100/40">Exported</th>
-                    <th className="py-3.5 px-3 text-rose-800 bg-rose-100/40">Landfilled</th>
-                    <th className="py-3.5 px-3.5">Validation Audit Status</th>
+                    <th className="py-3 px-3">Row</th>
+                    <th className="py-3 px-3">Bin ID</th>
+                    <th className="py-3 px-3">Contractor</th>
+                    <th className="py-3 px-3">Store Wt</th>
+                    <th className="py-3 px-3">Reported Wt</th>
+                    <th className="py-3 px-3 text-emerald-800 bg-emerald-100/60 font-bold">
+                      Resold
+                    </th>
+                    <th className="py-3 px-3 text-blue-800 bg-blue-100/60 font-bold">
+                      Recycled Fiber
+                    </th>
+                    <th className="py-3 px-3 text-amber-800 bg-amber-100/60 font-bold">
+                      Downcycled
+                    </th>
+                    <th className="py-3 px-3 text-purple-800 bg-purple-100/60 font-bold">
+                      Exported
+                    </th>
+                    <th className="py-3 px-3 text-rose-800 bg-rose-100/60 font-bold">Landfilled</th>
+                    <th className="py-3 px-3">Validation Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {mockRows.map((r) => (
-                    <tr 
-                      key={r.row} 
-                      className={`transition-colors ${
-                        r.status === 'Error' ? 'bg-rose-50/60 hover:bg-rose-50/80' : r.status === 'Warning' ? 'bg-amber-50/50 hover:bg-amber-50/70' : 'hover:bg-slate-50/80'
-                      }`}
+                  {reportRows.map((r) => (
+                    <tr
+                      key={r.row}
+                      className={
+                        r.status === 'Error'
+                          ? 'bg-rose-50/50'
+                          : r.status === 'Warning'
+                            ? 'bg-amber-50/40'
+                            : 'hover:bg-slate-50'
+                      }
                     >
-                      <td className="py-3.5 px-3 text-slate-400 font-bold">{r.row}</td>
-                      <td className={`py-3.5 px-3 font-mono font-bold ${r.binId === 'MISSING_ID' ? 'text-rose-600 underline' : 'text-slate-900'}`}>
+                      <td className="py-3 px-3 text-slate-400 font-bold">{r.row}</td>
+                      <td
+                        className={`py-3 px-3 font-mono font-bold ${
+                          r.binId === 'MISSING_ID' ? 'text-rose-600 underline' : 'text-slate-900'
+                        }`}
+                      >
                         {r.binId}
                       </td>
-                      <td className="py-3.5 px-3 text-slate-600 font-medium">{r.contractor}</td>
-                      <td className="py-3.5 px-3 text-slate-600">{r.retailerWt} kg</td>
-                      <td className="py-3.5 px-3 text-slate-900 font-black">{r.reportedWt} kg</td>
-                      
-                      {/* 5 类去向数据 */}
-                      <td className="py-3.5 px-3 text-emerald-700 font-semibold">{r.resoldKg} kg</td>
-                      <td className="py-3.5 px-3 text-blue-700 font-semibold">{r.recycledKg} kg</td>
-                      <td className="py-3.5 px-3 text-amber-700 font-semibold">{r.downcycledKg} kg</td>
-                      <td className="py-3.5 px-3 text-purple-700 font-semibold">{r.exportedKg} kg</td>
-                      <td className="py-3.5 px-3 text-rose-700 font-semibold">{r.landfilledKg} kg</td>
-                      
-                      {/* 状态徽章 */}
-                      <td className="py-3.5 px-3.5">
+                      <td className="py-3 px-3 text-slate-700 font-medium">{r.contractor}</td>
+                      <td className="py-3 px-3 text-slate-600">{r.storeWeight} kg</td>
+                      <td className="py-3 px-3 text-slate-900 font-bold">{r.reportedWeight} kg</td>
+                      <td className="py-3 px-3 text-emerald-800 font-bold bg-emerald-50/30">
+                        {r.resoldKg} kg
+                      </td>
+                      <td className="py-3 px-3 text-blue-800 font-bold bg-blue-50/30">
+                        {r.recycledFiberKg} kg
+                      </td>
+                      <td className="py-3 px-3 text-amber-800 font-bold bg-amber-50/30">
+                        {r.downcycledKg} kg
+                      </td>
+                      <td className="py-3 px-3 text-purple-800 font-bold bg-purple-50/30">
+                        {r.exportedKg} kg
+                      </td>
+                      <td className="py-3 px-3 text-rose-800 font-bold bg-rose-50/30">
+                        {r.landfilledKg} kg
+                      </td>
+                      <td className="py-3 px-3">
                         {r.status === 'Verified' && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                            ✓ Verified
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+                            <span>Verified</span>
                           </span>
                         )}
                         {r.status === 'Warning' && (
                           <div className="space-y-0.5">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                              ⚠ Flagged
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                              <AlertTriangle className="w-3 h-3 text-amber-700" />
+                              <span>Flagged</span>
                             </span>
-                            <p className="text-[10px] text-amber-700 font-medium">{r.errorDetail}</p>
+                            <p className="text-[10px] text-amber-800 font-medium">
+                              {r.errorDetail}
+                            </p>
                           </div>
                         )}
                         {r.status === 'Error' && (
                           <div className="space-y-0.5">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
-                              ✕ Rejected
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                              <AlertCircle className="w-3 h-3 text-rose-700" />
+                              <span>Rejected</span>
                             </span>
-                            <p className="text-[10px] text-rose-600 font-bold">{r.errorDetail}</p>
+                            <p className="text-[10px] text-rose-700 font-bold">{r.errorDetail}</p>
                           </div>
                         )}
                       </td>
@@ -309,57 +419,55 @@ export default function ContractorReportImport() {
               </table>
             </div>
 
-            {/* 操作控制栏 */}
-            <div className="flex justify-between items-center pt-2">
+            {/* 操作栏 - 彻底修好白色高亮文字 */}
+            <div className="flex flex-col sm:flex-row items-center justify-between pt-3 gap-3">
               <button
+                type="button"
                 onClick={() => setStep(1)}
-                style={{ color: '#475569' }}
-                className="text-xs font-bold hover:underline transition cursor-pointer"
+                className="text-xs font-semibold text-slate-500 hover:text-slate-800 underline self-start sm:self-auto cursor-pointer"
               >
-                ← Back to File Upload
+                Back to Upload
               </button>
-              
-              {/* 核心修复：纯白字底按钮 */}
               <button
+                type="button"
                 onClick={() => setStep(3)}
-                style={{ color: '#ffffff', backgroundColor: '#047857' }}
-                className="px-6 py-3 hover:opacity-95 active:scale-95 text-xs font-bold rounded-xl shadow-md shadow-emerald-700/20 transition-all flex items-center gap-2 cursor-pointer"
+                style={{ backgroundColor: '#047857', color: '#ffffff' }}
+                className="w-full sm:w-auto px-6 py-2.5 text-xs font-bold rounded-lg shadow-sm hover:opacity-90 transition inline-flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>Commit Valid Records ({validCount}) to Database</span>
-                <span>→</span>
+                <span style={{ color: '#ffffff' }}>Save Valid Records ({verifiedCount})</span>
+                <ArrowRight className="w-3.5 h-3.5 text-white" />
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 3: 完成入库页 */}
+        {/* Step 3: Mock Completion */}
         {step === 3 && (
-          <div className="p-12 text-center space-y-6 max-w-lg mx-auto">
-            <div className="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-3xl flex items-center justify-center mx-auto text-3xl font-black shadow-inner border border-emerald-200">
-              ✓
+          <div className="p-8 md:p-12 text-center space-y-4 max-w-md mx-auto">
+            <div className="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center mx-auto shadow-xs">
+              <CheckCircle2 className="w-6 h-6 text-emerald-700" />
             </div>
-            <div className="space-y-2">
-              <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-                Batch Ingestion Completed!
-              </h3>
-              <p className="text-xs leading-relaxed text-slate-500">
-                Verified records have been committed to the database. Rejected rows ({errorCount}) have been quarantined to prevent misleading environmental compliance disclosures.
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-slate-900">Validation Completed</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Mock import completed. Verified rows are staged for review and non-compliant records
+                have been flagged for contractor follow-up.
               </p>
             </div>
-            <div className="pt-2">
-              {/* 核心修复：显眼的高级深色按钮，内联纯白文字 */}
+            <div className="pt-4">
               <button
+                type="button"
                 onClick={() => setStep(1)}
-                style={{ color: '#ffffff', backgroundColor: '#0f172a' }}
-                className="px-6 py-3 hover:bg-slate-800 active:scale-95 text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
+                style={{ backgroundColor: '#0f172a', color: '#ffffff' }}
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-lg shadow-sm transition hover:opacity-90 cursor-pointer"
               >
-                🔄 Import Another Monthly Report
+                <RefreshCw className="w-4 h-4 text-white" />
+                <span style={{ color: '#ffffff' }}>Import Another Report</span>
               </button>
             </div>
           </div>
         )}
-
       </div>
     </div>
-  );
+  )
 }
