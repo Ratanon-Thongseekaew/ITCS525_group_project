@@ -106,9 +106,15 @@ export function ManagerPage() {
         <main className="p-8 flex-1 w-full space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                Compliance Dashboard
-              </h1>
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                  Keep the team moving.
+                </h1>
+                <p className="text-xs text-slate-500 mt-1">
+                  Compliance Dashboard • Overview of circularity validation metrics and contractor
+                  audit statuses.
+                </p>
+              </div>
               <p className="text-xs text-slate-500 mt-1">
                 Overview of circularity validation metrics, store collection tallies, and contractor
                 audit statuses.
