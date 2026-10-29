@@ -78,6 +78,7 @@ React Router owns client-side navigation. The current frontend routes are:
 - `/` and `/login` render the role-based demo login page.
 - `/manager` renders the manager workspace.
 - `/staff` renders the staff workspace.
+- `/direct-resale` renders the standalone Direct Resale workspace.
 - `/admin` renders the administrator workspace.
 - Unknown frontend paths render the local not-found page.
 

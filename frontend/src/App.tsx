@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router'
 import { AppLayout } from './components/AppLayout'
 import { AdminPage } from './pages/AdminPage'
+import { DirectResalePage } from './pages/DirectResalePage'
 import { LoginPage } from './pages/LoginPage'
 import { ManagerPage } from './pages/ManagerPage'
 import { NotFoundPage } from './pages/NotFoundPage'
@@ -14,6 +15,7 @@ function App() {
       <Route element={<AppLayout />}>
         <Route path="manager" element={<ManagerPage />} />
         <Route path="staff" element={<StaffPage />} />
+        <Route path="direct-resale" element={<DirectResalePage />} />
         <Route path="admin" element={<AdminPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
