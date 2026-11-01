@@ -11,6 +11,20 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+})
+
 function renderRoute(route: string) {
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(
     new Response(JSON.stringify({ message: 'Hello from FastAPI!' }), {
@@ -54,4 +68,15 @@ test('redirects the demo admin login to the admin workspace', async () => {
   expect(
     await screen.findByRole('heading', { name: 'Control with confidence.' }),
   ).toBeInTheDocument()
+})
+
+test('uses the shared workspace sidebar and navigates between staff sections', async () => {
+  renderRoute('/staff')
+
+  expect(screen.getByRole('link', { name: 'Textile Track dashboard' })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Compliance Dashboard' })).toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('link', { name: 'Resale Bin Records' }))
+
+  expect(await screen.findByRole('heading', { name: 'Resale Bin Records' })).toBeInTheDocument()
 })

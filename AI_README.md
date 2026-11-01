@@ -30,7 +30,9 @@ This is a minimal full-stack monorepo:
 │   │   ├── App.tsx          Client-side route definitions
 │   │   ├── components/      Shared layout and dashboard components
 │   │   │   └── ui/          Local shadcn/ui component primitives
+│   │   ├── config/          Role-aware workspace navigation configuration
 │   │   ├── pages/           Login, manager, staff, admin, and 404 pages
+│   │   ├── types/           Shared workspace role types and guards
 │   │   ├── App.test.tsx     Frontend component test
 │   │   ├── api.ts           Typed HTTP client functions
 │   │   ├── lib/utils.ts     Shared `cn` class-name utility
@@ -79,6 +81,10 @@ React Router owns client-side navigation. The current frontend routes are:
 - `/manager` renders the manager workspace.
 - `/staff` renders the staff workspace.
 - `/admin` renders the administrator workspace.
+- `/:role/resale-bins` renders the shared resale-bin placeholder for each
+  explicit manager, staff, and admin route.
+- `/:role/recycle-bins` renders the shared recycling-bin placeholder for each
+  explicit manager, staff, and admin route.
 - Unknown frontend paths render the local not-found page.
 
 Authentication is intentionally not enforced yet because the project has no
@@ -91,6 +97,13 @@ The login view is a fullscreen responsive page based on the provided Textile
 Track design. It defaults to the Admin role and exposes a role selector for the
 demo flow. Changing the role updates the suggested username and destination.
 The role-to-route mapping is maintained in `frontend/src/pages/LoginPage.tsx`.
+
+Authenticated workspace screens share `WorkspaceSidebar`, composed from the
+local shadcn sidebar primitives. `frontend/src/config/workspace-navigation.ts`
+owns labels, icons, route segments, and the optional `roles` arrays used to
+filter menu visibility. Items currently omit `roles`, so all three roles see
+the same navigation until permissions are defined. `AppLayout` derives the demo
+role from the URL only for presentation; this is not authentication.
 
 The backend root path `/` intentionally has no route and returns `404`. Swagger
 UI is available at `/docs`. On application startup, the FastAPI lifespan handler
@@ -205,6 +218,8 @@ python -m ruff check backend
   and must remain usable at widths down to 320px.
 - Keep reusable shadcn/ui primitives generic. Place application-specific login
   and workspace composition in `pages/` or non-`ui` components.
+- Keep workspace menu definitions in `config/workspace-navigation.ts` and use
+  each item's optional `roles` list instead of duplicating sidebars per role.
 - Preserve the current unprotected workspace routes until database-backed
   authentication is implemented or explicitly requested.
 - Keep backend calls and their response types in `frontend/src/api.ts` rather
