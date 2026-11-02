@@ -32,7 +32,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title="Textile Track API",
-    description="API for Textile Track garment intake, sorting, and bin management.",
+    description="API for the Textile Track application.",
     version="0.1.0",
     lifespan=lifespan,
 )
