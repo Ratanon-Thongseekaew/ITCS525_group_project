@@ -372,7 +372,7 @@ export function GarmentSortingWorkspace() {
                   onClick={() => setSelectedCategory(cat)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all ${
                     selectedCategory === cat
-                      ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                      ? 'bg-slate-900 !text-white border-slate-900 shadow-sm'
                       : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
                   }`}
                 >
@@ -389,7 +389,7 @@ export function GarmentSortingWorkspace() {
               type="button"
               disabled={sortingInProgress}
               onClick={() => void handleSort('good_reusable')}
-              className="group relative flex flex-col items-center justify-center p-6 rounded-xl border-2 border-emerald-500 bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98] transition-all shadow-md focus:outline-none focus:ring-4 focus:ring-emerald-300 disabled:opacity-50"
+              className="group relative flex flex-col items-center justify-center p-6 rounded-xl border-2 border-emerald-500 bg-emerald-600 !text-white hover:bg-emerald-700 active:scale-[0.98] transition-all shadow-md focus:outline-none focus:ring-4 focus:ring-emerald-300 disabled:opacity-50"
             >
               <div className="absolute top-3 right-3 flex items-center gap-1 bg-emerald-800/80 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded">
                 Key: [R] or [1]
@@ -406,7 +406,7 @@ export function GarmentSortingWorkspace() {
               type="button"
               disabled={sortingInProgress}
               onClick={() => void handleSort('worn_recyclable')}
-              className="group relative flex flex-col items-center justify-center p-6 rounded-xl border-2 border-amber-600 bg-amber-600 text-white hover:bg-amber-700 active:scale-[0.98] transition-all shadow-md focus:outline-none focus:ring-4 focus:ring-amber-300 disabled:opacity-50"
+              className="group relative flex flex-col items-center justify-center p-6 rounded-xl border-2 border-amber-600 bg-amber-600 !text-white hover:bg-amber-700 active:scale-[0.98] transition-all shadow-md focus:outline-none focus:ring-4 focus:ring-amber-300 disabled:opacity-50"
             >
               <div className="absolute top-3 right-3 flex items-center gap-1 bg-amber-800/80 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded">
                 Key: [C] or [2]
@@ -615,7 +615,7 @@ export function GarmentSortingWorkspace() {
                   onClick={() => setBinFilter(f.id)}
                   className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
                     binFilter === f.id
-                      ? 'bg-slate-900 text-white'
+                      ? 'bg-slate-900 !text-white'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
                 >
