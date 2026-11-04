@@ -96,6 +96,25 @@ test('renders the login page at the root route', () => {
   expect(screen.getByText('Admin access')).toBeInTheDocument()
 })
 
+test('toggles password visibility from the login form', () => {
+  renderRoute('/')
+
+  const passwordInput = screen.getByLabelText('Password')
+  expect(passwordInput).toHaveAttribute('type', 'password')
+
+  fireEvent.click(screen.getByRole('button', { name: 'Show password' }))
+
+  expect(passwordInput).toHaveAttribute('type', 'text')
+  expect(screen.getByRole('button', { name: 'Hide password' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: 'Hide password' }))
+
+  expect(passwordInput).toHaveAttribute('type', 'password')
+})
+
 test('redirects the demo admin login through the loader to the admin workspace', () => {
   vi.useFakeTimers()
   const successToast = vi.spyOn(toast, 'success')

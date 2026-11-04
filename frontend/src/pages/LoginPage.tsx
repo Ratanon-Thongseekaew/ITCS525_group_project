@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useState } from 'react'
-import { CircleAlert, LockKeyhole, LogIn, UserRound } from 'lucide-react'
+import { CircleAlert, Eye, EyeClosed, LockKeyhole, LogIn, UserRound } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import textileTrackLogo from '@/assets/logos/textile-track-app-logo-1024.png'
@@ -30,6 +30,7 @@ export function LoginPage() {
   const [username, setUsername] = useState(roleDetails.admin.username)
   const [pendingRole, setPendingRole] = useState<WorkspaceRole | null>(null)
   const [loginError, setLoginError] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
 
   useEffect(() => {
     if (!pendingRole) {
@@ -162,12 +163,27 @@ export function LoginPage() {
                   <Input
                     id="password"
                     name="password"
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     autoComplete="current-password"
-                    className="pl-10"
+                    className="pr-10 pl-10"
                     placeholder="Enter your password"
                     required
                   />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-1/2 right-1 size-8 -translate-y-1/2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword((isVisible) => !isVisible)}
+                  >
+                    {showPassword ? (
+                      <Eye className="size-4" aria-hidden="true" />
+                    ) : (
+                      <EyeClosed className="size-4" aria-hidden="true" />
+                    )}
+                  </Button>
                 </div>
               </div>
 
