@@ -6,6 +6,7 @@ import { LoginPage } from './pages/LoginPage'
 import { ManagerPage } from './pages/ManagerPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { StaffPage } from './pages/StaffPage'
+import { UserManagementPage } from './pages/UserManagementPage'
 
 function App() {
   return (
@@ -56,6 +57,7 @@ function App() {
           }
         />
         <Route path="admin" element={<AdminPage />} />
+        <Route path="admin/users" element={<UserManagementPage />} />
         <Route
           path="admin/resale-bins"
           element={
