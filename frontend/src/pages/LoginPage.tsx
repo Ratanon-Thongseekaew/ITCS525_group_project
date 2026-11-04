@@ -1,7 +1,9 @@
 import { type FormEvent, useEffect, useState } from 'react'
-import { LockKeyhole, LogIn, UserRound } from 'lucide-react'
+import { CircleAlert, LockKeyhole, LogIn, UserRound } from 'lucide-react'
 import { useNavigate } from 'react-router'
+import { toast } from 'sonner'
 import textileTrackLogo from '@/assets/logos/textile-track-app-logo-1024.png'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -27,6 +29,7 @@ export function LoginPage() {
   const [role, setRole] = useState<WorkspaceRole>('admin')
   const [username, setUsername] = useState(roleDetails.admin.username)
   const [pendingRole, setPendingRole] = useState<WorkspaceRole | null>(null)
+  const [loginError, setLoginError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!pendingRole) {
@@ -44,10 +47,23 @@ export function LoginPage() {
     const nextRole = value as WorkspaceRole
     setRole(nextRole)
     setUsername(roleDetails[nextRole].username)
+    setLoginError(null)
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
+    if (username.trim() !== roleDetails[role].username) {
+      const message = `Use ${roleDetails[role].username} for the ${role} workspace.`
+      setLoginError(message)
+      toast.error('Login failed', { description: message })
+      return
+    }
+
+    setLoginError(null)
+    toast.success('Login successful', {
+      description: `Opening the ${role} workspace...`,
+    })
     setPendingRole(role)
   }
 
@@ -95,6 +111,17 @@ export function LoginPage() {
 
           <CardContent className="px-5 pb-6 sm:px-8 sm:pb-8">
             <form className="space-y-4 sm:space-y-5" onSubmit={handleSubmit}>
+              {loginError ? (
+                <Alert
+                  variant="destructive"
+                  className="border-rose-200 bg-rose-50 text-rose-700 [&>svg]:text-rose-600"
+                >
+                  <CircleAlert aria-hidden="true" />
+                  <AlertTitle>Login failed</AlertTitle>
+                  <AlertDescription>{loginError}</AlertDescription>
+                </Alert>
+              ) : null}
+
               <div className="space-y-2">
                 <Label htmlFor="role">Workspace role</Label>
                 <Select value={role} onValueChange={changeRole}>
@@ -119,7 +146,10 @@ export function LoginPage() {
                     autoComplete="username"
                     className="pl-10"
                     value={username}
-                    onChange={(event) => setUsername(event.target.value)}
+                    onChange={(event) => {
+                      setUsername(event.target.value)
+                      setLoginError(null)
+                    }}
                     required
                   />
                 </div>
@@ -147,7 +177,7 @@ export function LoginPage() {
               </Button>
 
               <p className="text-center text-xs leading-5 text-slate-400">
-                Demo mode: credentials are not validated yet.
+                Demo mode: use the suggested username and any non-empty password.
               </p>
             </form>
           </CardContent>

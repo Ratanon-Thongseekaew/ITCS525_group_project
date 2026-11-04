@@ -3,6 +3,7 @@
 import '@testing-library/jest-dom/vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
+import { toast } from 'sonner'
 import { afterEach, expect, test, vi } from 'vitest'
 import App from './App'
 
@@ -97,6 +98,7 @@ test('renders the login page at the root route', () => {
 
 test('redirects the demo admin login through the loader to the admin workspace', () => {
   vi.useFakeTimers()
+  const successToast = vi.spyOn(toast, 'success')
   renderRoute('/')
 
   fireEvent.change(screen.getByLabelText('Password'), {
@@ -104,6 +106,9 @@ test('redirects the demo admin login through the loader to the admin workspace',
   })
   fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
+  expect(successToast).toHaveBeenCalledWith('Login successful', {
+    description: 'Opening the admin workspace...',
+  })
   expect(screen.getByRole('status', { name: 'loading...' })).toBeInTheDocument()
 
   act(() => {
@@ -111,6 +116,27 @@ test('redirects the demo admin login through the loader to the admin workspace',
   })
 
   expect(screen.getByRole('heading', { name: 'Control with confidence.' })).toBeInTheDocument()
+})
+
+test('keeps the login form visible and shows an alert for an invalid demo username', () => {
+  const errorToast = vi.spyOn(toast, 'error')
+  renderRoute('/')
+
+  fireEvent.change(screen.getByLabelText('Username'), {
+    target: { value: 'WrongUser' },
+  })
+  fireEvent.change(screen.getByLabelText('Password'), {
+    target: { value: 'demo-password' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+  expect(screen.getByRole('heading', { name: 'Login failed' })).toBeInTheDocument()
+  expect(screen.getByText('Use Admin01 for the admin workspace.')).toBeInTheDocument()
+  expect(errorToast).toHaveBeenCalledWith('Login failed', {
+    description: 'Use Admin01 for the admin workspace.',
+  })
+  expect(screen.getByRole('heading', { name: 'Login' })).toBeInTheDocument()
+  expect(screen.queryByRole('status', { name: 'loading...' })).not.toBeInTheDocument()
 })
 
 test('uses the shared workspace sidebar and navigates between staff sections', async () => {
