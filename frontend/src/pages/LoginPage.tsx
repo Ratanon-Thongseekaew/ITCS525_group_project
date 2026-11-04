@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { LockKeyhole, LogIn, UserRound } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import textileTrackLogo from '@/assets/logos/textile-track-app-logo-1024.png'
@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { TextileTrackLoader } from '@/components/TextileTrackLoader'
 import {
   Select,
   SelectContent,
@@ -25,6 +26,19 @@ export function LoginPage() {
   const navigate = useNavigate()
   const [role, setRole] = useState<WorkspaceRole>('admin')
   const [username, setUsername] = useState(roleDetails.admin.username)
+  const [pendingRole, setPendingRole] = useState<WorkspaceRole | null>(null)
+
+  useEffect(() => {
+    if (!pendingRole) {
+      return
+    }
+
+    const loadingTimer = window.setTimeout(() => {
+      navigate(`/${pendingRole}`)
+    }, 2_000)
+
+    return () => window.clearTimeout(loadingTimer)
+  }, [navigate, pendingRole])
 
   function changeRole(value: string) {
     const nextRole = value as WorkspaceRole
@@ -34,7 +48,11 @@ export function LoginPage() {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    navigate(`/${role}`)
+    setPendingRole(role)
+  }
+
+  if (pendingRole) {
+    return <TextileTrackLoader className="fixed inset-0 z-50" label="loading..." size={220} />
   }
 
   return (

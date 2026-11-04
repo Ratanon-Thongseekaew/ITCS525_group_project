@@ -2,6 +2,7 @@ import { Route, Routes } from 'react-router'
 import { AppLayout } from './components/AppLayout'
 import { WorkspaceFeaturePage } from './components/WorkspaceFeaturePage'
 import { AdminPage } from './pages/AdminPage'
+import { ComplianceDashboardPage } from './pages/ComplianceDashboardPage'
 import { LoginPage } from './pages/LoginPage'
 import { ManagerPage } from './pages/ManagerPage'
 import { NotFoundPage } from './pages/NotFoundPage'
@@ -15,7 +16,7 @@ function App() {
       <Route path="login" element={<LoginPage />} />
       <Route element={<AppLayout />}>
         <Route path="manager" element={<ManagerPage />} />
-        <Route path="manager/compliance-dashboard" element={<ManagerPage />} />
+        <Route path="manager/compliance-dashboard" element={<ComplianceDashboardPage />} />
         <Route
           path="manager/resale-bins"
           element={

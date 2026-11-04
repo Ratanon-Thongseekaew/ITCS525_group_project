@@ -26,6 +26,17 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 })
 
+class ResizeObserverMock {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+}
+
+Object.defineProperty(globalThis, 'ResizeObserver', {
+  writable: true,
+  value: ResizeObserverMock,
+})
+
 function renderRoute(route: string) {
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(
     new Response(JSON.stringify({ message: 'Hello from FastAPI!' }), {
@@ -47,52 +58,23 @@ test('renders the staff route', () => {
   expect(screen.getByRole('heading', { name: 'Your work, clearly organized.' })).toBeInTheDocument()
 })
 
-test('shows the loading component for two seconds before rendering the admin page', () => {
-  vi.useFakeTimers()
+test('renders the admin page immediately when visited directly', () => {
   renderRoute('/admin')
 
-  const loadingStatus = screen.getByRole('status', { name: 'loading...' })
-
-  expect(loadingStatus).toHaveClass('fixed', 'inset-0')
-  expect(loadingStatus.querySelector('.textile-loader__mark')).toHaveStyle(
-    '--textile-loader-size: 220px',
-  )
-  expect(
-    screen.queryByRole('heading', { name: 'Control with confidence.' }),
-  ).not.toBeInTheDocument()
-
-  act(() => {
-    vi.advanceTimersByTime(2_000)
-  })
-
   expect(screen.getByRole('heading', { name: 'Control with confidence.' })).toBeInTheDocument()
+  expect(screen.queryByRole('status', { name: 'loading...' })).not.toBeInTheDocument()
 })
 
-test('shows the loading component for two seconds before rendering the manager page', () => {
-  vi.useFakeTimers()
+test('renders the manager page immediately when visited directly', () => {
   renderRoute('/manager')
-
-  const loadingStatus = screen.getByRole('status', { name: 'loading...' })
-
-  expect(loadingStatus).toHaveClass('fixed', 'inset-0')
-  expect(loadingStatus.querySelector('.textile-loader__mark')).toHaveStyle(
-    '--textile-loader-size: 220px',
-  )
-  expect(
-    screen.queryByRole('heading', { name: 'Contractor Monthly Report Import & Verification' }),
-  ).not.toBeInTheDocument()
-
-  act(() => {
-    vi.advanceTimersByTime(2_000)
-  })
 
   expect(
     screen.getByRole('heading', { name: 'Contractor Monthly Report Import & Verification' }),
   ).toBeInTheDocument()
+  expect(screen.queryByRole('status', { name: 'loading...' })).not.toBeInTheDocument()
 })
 
 test('navigates from the manager workspace to the compliance dashboard path', () => {
-  vi.useFakeTimers()
   renderRoute('/manager')
 
   fireEvent.click(screen.getByRole('link', { name: 'Compliance Dashboard' }))
@@ -101,15 +83,9 @@ test('navigates from the manager workspace to the compliance dashboard path', ()
 
   expect(complianceDashboardLink).toHaveAttribute('href', '/manager/compliance-dashboard')
   expect(complianceDashboardLink).toHaveAttribute('data-active', 'true')
-  expect(screen.getByRole('status', { name: 'loading...' })).toBeInTheDocument()
-
-  act(() => {
-    vi.advanceTimersByTime(2_000)
-  })
-
-  expect(
-    screen.getByRole('heading', { name: 'Contractor Monthly Report Import & Verification' }),
-  ).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Compliance Dashboard' })).toBeInTheDocument()
+  expect(screen.getByText('Recycling Bins Collected')).toBeInTheDocument()
+  expect(screen.getByRole('table')).toBeInTheDocument()
 })
 
 test('renders the login page at the root route', () => {

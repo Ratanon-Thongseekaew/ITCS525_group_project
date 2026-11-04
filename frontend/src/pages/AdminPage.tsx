@@ -1,22 +1,6 @@
-import { useEffect, useState } from 'react'
 import { DashboardPage } from '../components/DashboardPage'
-import { TextileTrackLoader } from '../components/TextileTrackLoader'
 
 export function AdminPage() {
-  const [isLoading, setIsLoading] = useState(true)
-
-  useEffect(() => {
-    const loadingTimer = window.setTimeout(() => {
-      setIsLoading(false)
-    }, 2_000)
-
-    return () => window.clearTimeout(loadingTimer)
-  }, [])
-
-  if (isLoading) {
-    return <TextileTrackLoader className="fixed inset-0 z-50" label="loading..." size={220} />
-  }
-
   return (
     <DashboardPage
       accent="violet"

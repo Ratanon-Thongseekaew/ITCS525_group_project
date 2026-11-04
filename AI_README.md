@@ -90,10 +90,12 @@ React Router owns client-side navigation. The current frontend routes are:
 - Unknown frontend paths render the local not-found page.
 
 Authentication is intentionally not enforced yet because the project has no
-user database. The login form accepts any non-empty credentials and redirects
-to the workspace selected in the role field. All workspace URLs remain directly
-accessible. Do not add route guards until a real authentication source is
-available or the user explicitly requests mocked protection.
+user database. The login form accepts any non-empty credentials, shows the
+shared loading screen for two seconds, and then redirects to the workspace
+selected in the role field. All workspace URLs remain directly accessible and
+render without that login transition. Do not add route guards until a real
+authentication source is available or the user explicitly requests mocked
+protection.
 
 The login view is a fullscreen responsive page based on the provided Textile
 Track design. It defaults to the Admin role and exposes a role selector for the
