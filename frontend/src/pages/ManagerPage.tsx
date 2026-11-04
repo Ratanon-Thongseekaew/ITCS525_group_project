@@ -1,11 +1,7 @@
-import ContractorReportImport from '../components/ContractorReportImport'
+import { Navigate } from 'react-router'
 
 export function ManagerPage() {
-  return (
-    <div className="p-4">
-      <ContractorReportImport />
-    </div>
-  )
+  return <Navigate to="/manager/compliance-dashboard" replace />
 }
 
 export default ManagerPage

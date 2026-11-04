@@ -66,17 +66,19 @@ test('renders the admin page immediately when visited directly', () => {
   expect(screen.queryByRole('status', { name: 'loading...' })).not.toBeInTheDocument()
 })
 
-test('renders the manager page immediately when visited directly', () => {
+test('redirects the manager root to the compliance dashboard', () => {
   renderRoute('/manager')
 
-  expect(
-    screen.getByRole('heading', { name: 'Contractor Monthly Report Import & Verification' }),
-  ).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Compliance Dashboard' })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Compliance Dashboard' })).toHaveAttribute(
+    'data-active',
+    'true',
+  )
   expect(screen.queryByRole('status', { name: 'loading...' })).not.toBeInTheDocument()
 })
 
 test('navigates from the manager workspace to the compliance dashboard path', () => {
-  renderRoute('/manager')
+  renderRoute('/manager/resale-bins')
 
   fireEvent.click(screen.getByRole('link', { name: 'Compliance Dashboard' }))
 
