@@ -94,6 +94,14 @@ test('renders the login page at the root route', () => {
 
   expect(screen.getByRole('heading', { name: 'Login' })).toBeInTheDocument()
   expect(screen.getByText('Admin access')).toBeInTheDocument()
+
+  const backgroundVideo = document.querySelector('video')
+  const videoSource = backgroundVideo?.querySelector('source')
+
+  expect(backgroundVideo).toHaveAttribute('autoplay')
+  expect(backgroundVideo).toHaveAttribute('loop')
+  expect(backgroundVideo).toHaveAttribute('playsinline')
+  expect(videoSource).toHaveAttribute('src', 'https://www.pexels.com/download/video/9594356/')
 })
 
 test('toggles password visibility from the login form', () => {

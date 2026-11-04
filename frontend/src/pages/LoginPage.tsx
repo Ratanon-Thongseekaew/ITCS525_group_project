@@ -92,13 +92,24 @@ export function LoginPage() {
         </div>
       </header>
 
-      <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-slate-50/60 px-4 py-8 sm:px-6 sm:py-12 lg:px-10">
+      <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-slate-900 px-4 py-8 sm:px-6 sm:py-12 lg:px-10">
+        <video
+          className="absolute inset-0 size-full object-cover motion-reduce:hidden"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          aria-hidden="true"
+        >
+          <source src="https://www.pexels.com/download/video/9594356/" type="video/mp4" />
+        </video>
         <div
-          className="pointer-events-none absolute inset-0 opacity-50"
+          className="pointer-events-none absolute inset-0 bg-slate-950/50"
           aria-hidden="true"
           style={{
             backgroundImage:
-              'radial-gradient(circle at 20% 20%, rgba(13, 148, 136, 0.08), transparent 32%), radial-gradient(circle at 85% 80%, rgba(15, 118, 110, 0.06), transparent 30%)',
+              'radial-gradient(circle at 20% 20%, rgba(13, 148, 136, 0.22), transparent 36%), radial-gradient(circle at 85% 80%, rgba(15, 118, 110, 0.16), transparent 34%)',
           }}
         />
 
