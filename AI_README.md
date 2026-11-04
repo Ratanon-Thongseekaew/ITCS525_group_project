@@ -81,6 +81,8 @@ React Router owns client-side navigation. The current frontend routes are:
 - `/manager` renders the manager workspace.
 - `/staff` renders the staff workspace.
 - `/admin` renders the administrator workspace.
+- `/:role/compliance-dashboard` renders the compliance dashboard for each
+  explicit manager, staff, and admin route.
 - `/:role/resale-bins` renders the shared resale-bin placeholder for each
   explicit manager, staff, and admin route.
 - `/:role/recycle-bins` renders the shared recycling-bin placeholder for each

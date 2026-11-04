@@ -11,7 +11,7 @@ export interface WorkspaceNavigationItem {
 export const workspaceNavigation: readonly WorkspaceNavigationItem[] = [
   {
     label: 'Compliance Dashboard',
-    segment: '',
+    segment: 'compliance-dashboard',
     icon: ChartNoAxesCombined,
   },
   {

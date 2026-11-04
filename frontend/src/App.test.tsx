@@ -51,7 +51,7 @@ test('shows the loading component for two seconds before rendering the admin pag
   vi.useFakeTimers()
   renderRoute('/admin')
 
-  const loadingStatus = screen.getByRole('status', { name: 'กำลังโหลดหน้า Admin...' })
+  const loadingStatus = screen.getByRole('status', { name: 'loading...' })
 
   expect(loadingStatus).toHaveClass('fixed', 'inset-0')
   expect(loadingStatus.querySelector('.textile-loader__mark')).toHaveStyle(
@@ -72,7 +72,7 @@ test('shows the loading component for two seconds before rendering the manager p
   vi.useFakeTimers()
   renderRoute('/manager')
 
-  const loadingStatus = screen.getByRole('status', { name: 'กำลังโหลดหน้า Manager...' })
+  const loadingStatus = screen.getByRole('status', { name: 'loading...' })
 
   expect(loadingStatus).toHaveClass('fixed', 'inset-0')
   expect(loadingStatus.querySelector('.textile-loader__mark')).toHaveStyle(
@@ -81,6 +81,27 @@ test('shows the loading component for two seconds before rendering the manager p
   expect(
     screen.queryByRole('heading', { name: 'Contractor Monthly Report Import & Verification' }),
   ).not.toBeInTheDocument()
+
+  act(() => {
+    vi.advanceTimersByTime(2_000)
+  })
+
+  expect(
+    screen.getByRole('heading', { name: 'Contractor Monthly Report Import & Verification' }),
+  ).toBeInTheDocument()
+})
+
+test('navigates from the manager workspace to the compliance dashboard path', () => {
+  vi.useFakeTimers()
+  renderRoute('/manager')
+
+  fireEvent.click(screen.getByRole('link', { name: 'Compliance Dashboard' }))
+
+  const complianceDashboardLink = screen.getByRole('link', { name: 'Compliance Dashboard' })
+
+  expect(complianceDashboardLink).toHaveAttribute('href', '/manager/compliance-dashboard')
+  expect(complianceDashboardLink).toHaveAttribute('data-active', 'true')
+  expect(screen.getByRole('status', { name: 'loading...' })).toBeInTheDocument()
 
   act(() => {
     vi.advanceTimersByTime(2_000)
@@ -107,7 +128,7 @@ test('redirects the demo admin login through the loader to the admin workspace',
   })
   fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
-  expect(screen.getByRole('status', { name: 'กำลังโหลดหน้า Admin...' })).toBeInTheDocument()
+  expect(screen.getByRole('status', { name: 'loading...' })).toBeInTheDocument()
 
   act(() => {
     vi.advanceTimersByTime(2_000)

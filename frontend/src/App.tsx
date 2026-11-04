@@ -15,6 +15,7 @@ function App() {
       <Route path="login" element={<LoginPage />} />
       <Route element={<AppLayout />}>
         <Route path="manager" element={<ManagerPage />} />
+        <Route path="manager/compliance-dashboard" element={<ManagerPage />} />
         <Route
           path="manager/resale-bins"
           element={
@@ -36,6 +37,7 @@ function App() {
           }
         />
         <Route path="staff" element={<StaffPage />} />
+        <Route path="staff/compliance-dashboard" element={<StaffPage />} />
         <Route
           path="staff/resale-bins"
           element={
@@ -57,6 +59,7 @@ function App() {
           }
         />
         <Route path="admin" element={<AdminPage />} />
+        <Route path="admin/compliance-dashboard" element={<AdminPage />} />
         <Route path="admin/users" element={<UserManagementPage />} />
         <Route
           path="admin/resale-bins"
