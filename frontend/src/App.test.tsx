@@ -1,13 +1,14 @@
 /** @vitest-environment jsdom */
 
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
 import App from './App'
 
 afterEach(() => {
   cleanup()
+  vi.useRealTimers()
   vi.restoreAllMocks()
 })
 
@@ -40,14 +41,54 @@ function renderRoute(route: string) {
   )
 }
 
-test.each([
-  ['/manager', 'Keep the team moving.'],
-  ['/staff', 'Your work, clearly organized.'],
-  ['/admin', 'Control with confidence.'],
-])('renders the %s route', (route, heading) => {
-  renderRoute(route)
+test('renders the staff route', () => {
+  renderRoute('/staff')
 
-  expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Your work, clearly organized.' })).toBeInTheDocument()
+})
+
+test('shows the loading component for two seconds before rendering the admin page', () => {
+  vi.useFakeTimers()
+  renderRoute('/admin')
+
+  const loadingStatus = screen.getByRole('status', { name: 'กำลังโหลดหน้า Admin...' })
+
+  expect(loadingStatus).toHaveClass('fixed', 'inset-0')
+  expect(loadingStatus.querySelector('.textile-loader__mark')).toHaveStyle(
+    '--textile-loader-size: 220px',
+  )
+  expect(
+    screen.queryByRole('heading', { name: 'Control with confidence.' }),
+  ).not.toBeInTheDocument()
+
+  act(() => {
+    vi.advanceTimersByTime(2_000)
+  })
+
+  expect(screen.getByRole('heading', { name: 'Control with confidence.' })).toBeInTheDocument()
+})
+
+test('shows the loading component for two seconds before rendering the manager page', () => {
+  vi.useFakeTimers()
+  renderRoute('/manager')
+
+  const loadingStatus = screen.getByRole('status', { name: 'กำลังโหลดหน้า Manager...' })
+
+  expect(loadingStatus).toHaveClass('fixed', 'inset-0')
+  expect(loadingStatus.querySelector('.textile-loader__mark')).toHaveStyle(
+    '--textile-loader-size: 220px',
+  )
+  expect(
+    screen.queryByRole('heading', { name: 'Contractor Monthly Report Import & Verification' }),
+  ).not.toBeInTheDocument()
+
+  act(() => {
+    vi.advanceTimersByTime(2_000)
+  })
+
+  expect(
+    screen.getByRole('heading', { name: 'Contractor Monthly Report Import & Verification' }),
+  ).toBeInTheDocument()
 })
 
 test('renders the login page at the root route', () => {
@@ -57,7 +98,8 @@ test('renders the login page at the root route', () => {
   expect(screen.getByText('Admin access')).toBeInTheDocument()
 })
 
-test('redirects the demo admin login to the admin workspace', async () => {
+test('redirects the demo admin login through the loader to the admin workspace', () => {
+  vi.useFakeTimers()
   renderRoute('/')
 
   fireEvent.change(screen.getByLabelText('Password'), {
@@ -65,9 +107,13 @@ test('redirects the demo admin login to the admin workspace', async () => {
   })
   fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
-  expect(
-    await screen.findByRole('heading', { name: 'Control with confidence.' }),
-  ).toBeInTheDocument()
+  expect(screen.getByRole('status', { name: 'กำลังโหลดหน้า Admin...' })).toBeInTheDocument()
+
+  act(() => {
+    vi.advanceTimersByTime(2_000)
+  })
+
+  expect(screen.getByRole('heading', { name: 'Control with confidence.' })).toBeInTheDocument()
 })
 
 test('uses the shared workspace sidebar and navigates between staff sections', async () => {
