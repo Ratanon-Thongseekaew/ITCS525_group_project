@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Archive, ArrowDownUp, Calculator, Check, ClipboardList, Shirt, X } from 'lucide-react'
-import { Button } from '../components/ui/button'
-import { Input } from '../components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 type Bin = {
   id: string
@@ -56,7 +56,7 @@ export function DirectResalePage() {
   return (
     <div className="resale-workspace">
       <aside className="resale-sidebar">
-        <a className="resale-brand" href="/direct-resale">
+        <a className="resale-brand" href="/staff/direct-resale">
           <span className="resale-brand__icon">
             <Shirt />
           </span>

@@ -55,16 +55,16 @@ function renderRoute(route: string) {
   )
 }
 
-test('renders the staff route', () => {
-  renderRoute('/staff')
+test('renders the garment sorting workspace at the staff sorting route', () => {
+  renderRoute('/staff/sorting')
 
   expect(screen.getByRole('heading', { name: 'Your work, clearly organized.' })).toBeInTheDocument()
 })
 
-test('renders the admin page immediately when visited directly', () => {
-  renderRoute('/admin')
+test('renders user management immediately when visited directly', () => {
+  renderRoute('/admin/users')
 
-  expect(screen.getByRole('heading', { name: 'Control with confidence.' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'User Management' })).toBeInTheDocument()
   expect(screen.queryByRole('status', { name: 'loading...' })).not.toBeInTheDocument()
 })
 
@@ -94,7 +94,7 @@ test('navigates from the manager workspace to the compliance dashboard path', ()
 })
 
 test('renders and processes a direct resale bin on its own page', async () => {
-  renderRoute('/direct-resale')
+  renderRoute('/staff/direct-resale')
 
   expect(screen.getByRole('heading', { name: 'Direct Resale Bins' })).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: /#bin-id-001/i }))
@@ -137,7 +137,7 @@ test('toggles password visibility from the login form', () => {
   expect(passwordInput).toHaveAttribute('type', 'password')
 })
 
-test('redirects the demo admin login through the loader to the admin workspace', () => {
+test('redirects the demo admin login through the loader to user management', () => {
   vi.useFakeTimers()
   const successToast = vi.spyOn(toast, 'success')
   renderRoute('/')
@@ -156,7 +156,11 @@ test('redirects the demo admin login through the loader to the admin workspace',
     vi.advanceTimersByTime(2_000)
   })
 
-  expect(screen.getByRole('heading', { name: 'Control with confidence.' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'User Management' })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'User Management' })).toHaveAttribute(
+    'data-active',
+    'true',
+  )
 })
 
 test('keeps the login form visible and shows an alert for an invalid demo username', () => {
@@ -181,15 +185,15 @@ test('keeps the login form visible and shows an alert for an invalid demo userna
 })
 
 const staffNavigation = [
-  ['Sorting', '/staff'],
-  ['Direct Resale', '/direct-resale'],
+  ['Sorting', '/staff/sorting'],
+  ['Direct Resale', '/staff/direct-resale'],
   ['Recycle Bin Handoff', '/staff/recycle-bin-handoff'],
 ] as const
 
 const sharedNavigation = ['Compliance Dashboard', 'Resale Bin Records', 'Recycle Bin Records']
 
 test('shows the Figma navigation in the staff sidebar', () => {
-  renderRoute('/staff')
+  renderRoute('/staff/sorting')
 
   expect(screen.getByRole('link', { name: 'Textile Track dashboard' })).toBeInTheDocument()
   for (const [label, href] of staffNavigation) {
@@ -201,12 +205,12 @@ test('shows the Figma navigation in the staff sidebar', () => {
 })
 
 test.each([
-  ['/manager', false],
-  ['/admin', true],
-])('keeps the existing sidebar items at %s', (route, hasUserManagement) => {
+  ['/manager', sharedNavigation, false],
+  ['/admin/users', ['Compliance Dashboard'], true],
+])('shows the role sidebar items at %s', (route, visibleNavigation, hasUserManagement) => {
   renderRoute(route)
 
-  for (const label of sharedNavigation) {
+  for (const label of visibleNavigation) {
     expect(screen.getByRole('link', { name: label })).toBeInTheDocument()
   }
   for (const [label] of staffNavigation) {
@@ -224,7 +228,7 @@ test('navigates between shared workspace sections from the sidebar', async () =>
 })
 
 test('opens New Bins for Handoff from the staff sidebar', async () => {
-  renderRoute('/staff')
+  renderRoute('/staff/sorting')
 
   fireEvent.click(screen.getByRole('link', { name: 'Recycle Bin Handoff' }))
 
@@ -232,7 +236,7 @@ test('opens New Bins for Handoff from the staff sidebar', async () => {
 })
 
 test('opens Direct Resale from the staff sidebar', async () => {
-  renderRoute('/staff')
+  renderRoute('/staff/sorting')
 
   fireEvent.click(screen.getByRole('link', { name: 'Direct Resale' }))
 
@@ -266,7 +270,7 @@ test.each(['Scheduled Pickup Dates', 'Handoff Records'])(
 )
 
 test('renders Handoff Records with the mock data', () => {
-  renderRoute('/staff/recycle-bin-handoff/records')
+  renderRoute('/staff/recycle-bin-handoff/handoff-records')
 
   expect(screen.getByRole('heading', { name: 'Handoff Records' })).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: '#bin-id-001' })).toBeInTheDocument()
@@ -278,7 +282,7 @@ test('renders Handoff Records with the mock data', () => {
 })
 
 test('returns to New Bins for Handoff from Handoff Records', async () => {
-  renderRoute('/staff/recycle-bin-handoff/records')
+  renderRoute('/staff/recycle-bin-handoff/handoff-records')
 
   fireEvent.click(screen.getByRole('link', { name: 'Back to Handoff' }))
 
@@ -286,7 +290,7 @@ test('returns to New Bins for Handoff from Handoff Records', async () => {
 })
 
 test('keeps Recycle Bin Handoff active on its sub-routes', () => {
-  renderRoute('/staff/recycle-bin-handoff/records')
+  renderRoute('/staff/recycle-bin-handoff/handoff-records')
 
   expect(screen.getByRole('link', { name: 'Recycle Bin Handoff' })).toHaveAttribute(
     'data-active',
@@ -295,12 +299,69 @@ test('keeps Recycle Bin Handoff active on its sub-routes', () => {
   expect(screen.getByRole('link', { name: 'Sorting' })).toHaveAttribute('data-active', 'false')
 })
 
-test('marks only Sorting active at the staff root', () => {
-  renderRoute('/staff')
+test('marks only Sorting active at the sorting route', () => {
+  renderRoute('/staff/sorting')
 
   expect(screen.getByRole('link', { name: 'Sorting' })).toHaveAttribute('data-active', 'true')
   expect(screen.getByRole('link', { name: 'Recycle Bin Handoff' })).toHaveAttribute(
     'data-active',
     'false',
   )
+})
+
+test.each([
+  ['/staff/sorting', '/staff/sorting'],
+  ['/admin/compliance-dashboard', '/admin/users'],
+])('links the sidebar logo at %s to %s', (route, href) => {
+  renderRoute(route)
+
+  expect(screen.getByRole('link', { name: 'Textile Track dashboard' })).toHaveAttribute(
+    'href',
+    href,
+  )
+})
+
+test('renders Direct Resale without the workspace sidebar', () => {
+  renderRoute('/staff/direct-resale')
+
+  expect(screen.queryByRole('link', { name: 'Sorting' })).not.toBeInTheDocument()
+})
+
+test('shows the compliance dashboard to admins and keeps them in their workspace', () => {
+  renderRoute('/admin/compliance-dashboard')
+
+  expect(screen.getByRole('heading', { name: 'Compliance Dashboard' })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Compliance Dashboard' })).toHaveAttribute(
+    'data-active',
+    'true',
+  )
+  expect(screen.getByRole('link', { name: 'Export Report' })).toHaveAttribute(
+    'href',
+    '/admin/compliance-dashboard',
+  )
+})
+
+test('redirects the demo staff login to the sorting workspace', () => {
+  Object.assign(Element.prototype, {
+    hasPointerCapture: () => false,
+    setPointerCapture: () => undefined,
+    releasePointerCapture: () => undefined,
+    scrollIntoView: () => undefined,
+  })
+  vi.useFakeTimers()
+  renderRoute('/')
+
+  fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' })
+  fireEvent.click(screen.getByRole('option', { name: /staff/i }))
+  fireEvent.change(screen.getByLabelText('Password'), {
+    target: { value: 'demo-password' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+  act(() => {
+    vi.advanceTimersByTime(2_000)
+  })
+
+  expect(screen.getByRole('link', { name: 'Sorting' })).toHaveAttribute('data-active', 'true')
+  expect(screen.getByText('Your work, clearly organized.')).toBeInTheDocument()
 })

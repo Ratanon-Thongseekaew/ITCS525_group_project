@@ -11,10 +11,14 @@ import type { WorkspaceRole } from '@/types/workspace'
 export interface WorkspaceNavigationItem {
   label: string
   segment: string
-  // Absolute path for destinations outside `/:role/`. Takes precedence over `segment`.
-  href?: string
   icon: LucideIcon
   roles?: readonly WorkspaceRole[]
+}
+
+const workspaceHomeUrls: Record<WorkspaceRole, string> = {
+  manager: '/manager',
+  staff: '/staff/sorting',
+  admin: '/admin/users',
 }
 
 export const workspaceNavigation: readonly WorkspaceNavigationItem[] = [
@@ -28,13 +32,13 @@ export const workspaceNavigation: readonly WorkspaceNavigationItem[] = [
     label: 'Resale Bin Records',
     segment: 'resale-bins',
     icon: Shirt,
-    roles: ['manager', 'admin'],
+    roles: ['manager'],
   },
   {
     label: 'Recycle Bin Records',
     segment: 'recycle-bins',
     icon: Recycle,
-    roles: ['manager', 'admin'],
+    roles: ['manager'],
   },
   {
     label: 'User Management',
@@ -44,14 +48,13 @@ export const workspaceNavigation: readonly WorkspaceNavigationItem[] = [
   },
   {
     label: 'Sorting',
-    segment: '',
+    segment: 'sorting',
     icon: ArrowDownUp,
     roles: ['staff'],
   },
   {
     label: 'Direct Resale',
     segment: 'direct-resale',
-    href: '/direct-resale',
     icon: Shirt,
     roles: ['staff'],
   },
@@ -68,5 +71,9 @@ export function getWorkspaceNavigation(role: WorkspaceRole) {
 }
 
 export function getWorkspaceNavigationUrl(role: WorkspaceRole, segment: string) {
-  return segment ? `/${role}/${segment}` : `/${role}`
+  return `/${role}/${segment}`
+}
+
+export function getWorkspaceHomeUrl(role: WorkspaceRole) {
+  return workspaceHomeUrls[role]
 }

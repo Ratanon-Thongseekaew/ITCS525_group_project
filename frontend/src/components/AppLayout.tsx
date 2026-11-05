@@ -7,7 +7,7 @@ import { isWorkspaceRole } from '@/types/workspace'
 export function AppLayout() {
   const { pathname } = useLocation()
 
-  if (pathname === '/direct-resale') {
+  if (pathname === '/staff/direct-resale') {
     return <Outlet />
   }
 

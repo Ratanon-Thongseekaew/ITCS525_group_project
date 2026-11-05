@@ -135,13 +135,13 @@ export function NewBinsForHandoffPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline" className={actionButtonClass}>
-              <Link to="/staff/recycle-bin-handoff/pickup-dates">
+              <Link to="/staff/recycle-bin-handoff/scheduled-pickup-dates">
                 <CalendarDays aria-hidden="true" />
                 Scheduled Pickup Dates
               </Link>
             </Button>
             <Button asChild variant="outline" className={actionButtonClass}>
-              <Link to="/staff/recycle-bin-handoff/records">
+              <Link to="/staff/recycle-bin-handoff/handoff-records">
                 <ArchiveRestore aria-hidden="true" />
                 Handoff Records
               </Link>

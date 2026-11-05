@@ -287,7 +287,7 @@ export function ComplianceDashboardPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild size="sm" className="bg-teal-700 text-white hover:bg-teal-800">
-            <Link to="/manager">
+            <Link to=".">
               <Download aria-hidden="true" />
               Export Report
             </Link>

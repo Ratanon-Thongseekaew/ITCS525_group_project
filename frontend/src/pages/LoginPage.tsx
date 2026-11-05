@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { TextileTrackLoader } from '@/components/TextileTrackLoader'
+import { getWorkspaceHomeUrl } from '@/config/workspace-navigation'
 import {
   Select,
   SelectContent,
@@ -38,7 +39,7 @@ export function LoginPage() {
     }
 
     const loadingTimer = window.setTimeout(() => {
-      navigate(`/${pendingRole}`)
+      navigate(getWorkspaceHomeUrl(pendingRole))
     }, 2_000)
 
     return () => window.clearTimeout(loadingTimer)

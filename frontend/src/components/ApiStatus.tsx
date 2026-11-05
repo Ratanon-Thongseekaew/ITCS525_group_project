@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getGreeting } from '../api'
+import { getGreeting } from '@/api'
 
 export function ApiStatus() {
   const [connected, setConnected] = useState(false)

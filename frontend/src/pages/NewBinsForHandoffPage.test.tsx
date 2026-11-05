@@ -132,8 +132,8 @@ test('shows a dash when no pickup is scheduled', () => {
 })
 
 test.each([
-  ['Scheduled Pickup Dates', '/staff/recycle-bin-handoff/pickup-dates'],
-  ['Handoff Records', '/staff/recycle-bin-handoff/records'],
+  ['Scheduled Pickup Dates', '/staff/recycle-bin-handoff/scheduled-pickup-dates'],
+  ['Handoff Records', '/staff/recycle-bin-handoff/handoff-records'],
 ])('links %s to its page', (label, href) => {
   renderPage()
 
