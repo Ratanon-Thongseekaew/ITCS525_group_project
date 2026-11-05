@@ -3,10 +3,10 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import * as api from '../api'
-import { StaffPage } from './StaffPage'
+import * as api from '@/api'
+import { GarmentSortingWorkspace } from './GarmentSortingWorkspace'
 
-describe('StaffPage - Garment Sorting & Bin Records (Feature 2)', () => {
+describe('GarmentSortingWorkspace', () => {
   const mockStats: api.SortingStatsResponse = {
     total_sorted_today: 36,
     resale_count: 14,
@@ -122,7 +122,7 @@ describe('StaffPage - Garment Sorting & Bin Records (Feature 2)', () => {
   })
 
   test('renders the garment sorting workspace with header, KPIs, and quick-tap controls', async () => {
-    render(<StaffPage />)
+    render(<GarmentSortingWorkspace />)
 
     expect(
       screen.getByRole('heading', { name: 'Garment Sorting & Bin Records' }),
@@ -142,7 +142,7 @@ describe('StaffPage - Garment Sorting & Bin Records (Feature 2)', () => {
   })
 
   test('handles quick-tap sorting to direct resale', async () => {
-    render(<StaffPage />)
+    render(<GarmentSortingWorkspace />)
 
     const resaleBtn = screen.getByRole('button', { name: /Good \/ Reusable/i })
     fireEvent.click(resaleBtn)
@@ -162,7 +162,7 @@ describe('StaffPage - Garment Sorting & Bin Records (Feature 2)', () => {
   })
 
   test('handles quick-tap sorting to recycling', async () => {
-    render(<StaffPage />)
+    render(<GarmentSortingWorkspace />)
 
     const recycleBtn = screen.getByRole('button', { name: /Worn \/ Recyclable/i })
     fireEvent.click(recycleBtn)
@@ -178,7 +178,7 @@ describe('StaffPage - Garment Sorting & Bin Records (Feature 2)', () => {
   })
 
   test('opens and closes the new bin modal', async () => {
-    render(<StaffPage />)
+    render(<GarmentSortingWorkspace />)
 
     const newBinBtn = screen.getByRole('button', { name: /New Bin Record/i })
     fireEvent.click(newBinBtn)
@@ -192,7 +192,7 @@ describe('StaffPage - Garment Sorting & Bin Records (Feature 2)', () => {
   })
 
   test('responds to keyboard shortcut for quick intake', async () => {
-    render(<StaffPage />)
+    render(<GarmentSortingWorkspace />)
 
     fireEvent.keyDown(window, { key: 'r' })
 

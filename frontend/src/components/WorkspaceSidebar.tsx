@@ -2,6 +2,7 @@ import { LogOut } from 'lucide-react'
 import { Link, useLocation } from 'react-router'
 import textileTrackLogo from '@/assets/logos/textile-track-app-logo-1024.png'
 import {
+  getWorkspaceHomeUrl,
   getWorkspaceNavigation,
   getWorkspaceNavigationUrl,
   type WorkspaceNavigationItem,
@@ -34,7 +35,7 @@ export function WorkspaceSidebar({ role, items }: WorkspaceSidebarProps) {
     <Sidebar collapsible="offcanvas" className="border-r border-slate-200">
       <SidebarHeader className="px-4 py-2">
         <Link
-          to={`/${role}`}
+          to={getWorkspaceHomeUrl(role)}
           className="flex min-h-10 items-center gap-2.5 rounded-md px-1 outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
           aria-label="Textile Track dashboard"
         >
@@ -57,7 +58,8 @@ export function WorkspaceSidebar({ role, items }: WorkspaceSidebarProps) {
             <SidebarMenu className="gap-1">
               {navigationItems.map((item) => {
                 const url = getWorkspaceNavigationUrl(role, item.segment)
-                const isActive = location.pathname === url
+                const isActive =
+                  location.pathname === url || location.pathname.startsWith(`${url}/`)
 
                 return (
                   <SidebarMenuItem key={item.label}>

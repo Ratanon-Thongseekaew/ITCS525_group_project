@@ -113,17 +113,25 @@ Vite proxies `/api` requests to FastAPI during development. To point the fronten
 
 ## Frontend routes
 
-| Route                          | Purpose                          |
-| ------------------------------ | -------------------------------- |
-| `/`                            | Fullscreen responsive login page |
-| `/login`                       | Alternate URL for the login page |
-| `/manager`, `/staff`, `/admin` | Role workspace dashboard         |
-| `/:role/resale-bins`           | Resale bin records placeholder   |
-| `/:role/recycle-bins`          | Recycle bin records placeholder  |
+| Route                                                          | Purpose                                             |
+| -------------------------------------------------------------- | --------------------------------------------------- |
+| `/`                                                            | Fullscreen responsive login page                    |
+| `/login`                                                       | Alternate URL for the login page                    |
+| `/manager`                                                     | Redirects to the compliance dashboard               |
+| `/manager/compliance-dashboard`, `/admin/compliance-dashboard` | Compliance dashboard                                |
+| `/manager/resale-bins`                                         | Resale bin records placeholder                      |
+| `/manager/recycle-bins`                                        | Recycle bin records placeholder                     |
+| `/staff/sorting`                                               | Garment sorting workspace                           |
+| `/staff/direct-resale`                                         | Standalone direct resale workspace                  |
+| `/staff/recycle-bin-handoff`                                   | New bins for handoff (mock data)                    |
+| `/staff/recycle-bin-handoff/scheduled-pickup-dates`            | Scheduled pickup dates placeholder                  |
+| `/staff/recycle-bin-handoff/handoff-records`                   | Handoff records (mock data)                         |
+| `/admin/users`                                                 | User management, the admin landing page (mock data) |
 
 The login page currently runs in demo mode because the project does not have a
 user database or authentication API. Select a role, enter any non-empty
-credentials, and submit to open the corresponding workspace.
+credentials, and submit to open the corresponding workspace: `/manager` for
+managers, `/staff/sorting` for staff, and `/admin/users` for admins.
 
 The workspace routes are intentionally **not protected** yet, so they can also
 be opened directly during development.

@@ -1,14 +1,15 @@
 import { Route, Routes } from 'react-router'
 import { AppLayout } from './components/AppLayout'
-import { WorkspaceFeaturePage } from './components/WorkspaceFeaturePage'
+import { GarmentSortingWorkspace } from './components/GarmentSortingWorkspace'
+import { WorkspaceFeaturePlaceholderPage } from './components/WorkspaceFeaturePlaceholderPage'
 import { Toaster } from './components/ui/sonner'
-import { AdminPage } from './pages/AdminPage'
 import { ComplianceDashboardPage } from './pages/ComplianceDashboardPage'
 import { DirectResalePage } from './pages/DirectResalePage'
+import { HandoffRecordsPage } from './pages/HandoffRecordsPage'
 import { LoginPage } from './pages/LoginPage'
 import { ManagerPage } from './pages/ManagerPage'
+import { NewBinsForHandoffPage } from './pages/NewBinsForHandoffPage'
 import { NotFoundPage } from './pages/NotFoundPage'
-import { StaffPage } from './pages/StaffPage'
 import { UserManagementPage } from './pages/UserManagementPage'
 
 function App() {
@@ -23,7 +24,7 @@ function App() {
           <Route
             path="manager/resale-bins"
             element={
-              <WorkspaceFeaturePage
+              <WorkspaceFeaturePlaceholderPage
                 role="manager"
                 title="Resale Bin Records"
                 description="View and manage garments prepared for direct resale."
@@ -33,59 +34,32 @@ function App() {
           <Route
             path="manager/recycle-bins"
             element={
-              <WorkspaceFeaturePage
+              <WorkspaceFeaturePlaceholderPage
                 role="manager"
                 title="Recycle Bin Records"
                 description="Track recycling bins, contractor pickups, and reported outcomes."
               />
             }
           />
-          <Route path="staff" element={<StaffPage />} />
-          <Route path="staff/compliance-dashboard" element={<StaffPage />} />
+          <Route path="staff/sorting" element={<GarmentSortingWorkspace />} />
+          <Route path="staff/direct-resale" element={<DirectResalePage />} />
+          <Route path="staff/recycle-bin-handoff" element={<NewBinsForHandoffPage />} />
           <Route
-            path="staff/resale-bins"
+            path="staff/recycle-bin-handoff/scheduled-pickup-dates"
             element={
-              <WorkspaceFeaturePage
+              <WorkspaceFeaturePlaceholderPage
                 role="staff"
-                title="Resale Bin Records"
-                description="View and manage garments prepared for direct resale."
+                title="Scheduled Pickup Dates"
+                description="See upcoming contractor pickups for recycling bins."
               />
             }
           />
           <Route
-            path="staff/recycle-bins"
-            element={
-              <WorkspaceFeaturePage
-                role="staff"
-                title="Recycle Bin Records"
-                description="Track recycling bins, contractor pickups, and reported outcomes."
-              />
-            }
+            path="staff/recycle-bin-handoff/handoff-records"
+            element={<HandoffRecordsPage />}
           />
-          <Route path="direct-resale" element={<DirectResalePage />} />
-          <Route path="admin" element={<AdminPage />} />
-          <Route path="admin/compliance-dashboard" element={<AdminPage />} />
+          <Route path="admin/compliance-dashboard" element={<ComplianceDashboardPage />} />
           <Route path="admin/users" element={<UserManagementPage />} />
-          <Route
-            path="admin/resale-bins"
-            element={
-              <WorkspaceFeaturePage
-                role="admin"
-                title="Resale Bin Records"
-                description="View and manage garments prepared for direct resale."
-              />
-            }
-          />
-          <Route
-            path="admin/recycle-bins"
-            element={
-              <WorkspaceFeaturePage
-                role="admin"
-                title="Recycle Bin Records"
-                description="Track recycling bins, contractor pickups, and reported outcomes."
-              />
-            }
-          />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>

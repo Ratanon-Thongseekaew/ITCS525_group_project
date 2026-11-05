@@ -1,12 +1,16 @@
 import type { WorkspaceRole } from '@/types/workspace'
 
-interface WorkspaceFeaturePageProps {
+interface WorkspaceFeaturePlaceholderPageProps {
   role: WorkspaceRole
   title: string
   description: string
 }
 
-export function WorkspaceFeaturePage({ role, title, description }: WorkspaceFeaturePageProps) {
+export function WorkspaceFeaturePlaceholderPage({
+  role,
+  title,
+  description,
+}: WorkspaceFeaturePlaceholderPageProps) {
   return (
     <section className="dashboard">
       <header className="dashboard__header">

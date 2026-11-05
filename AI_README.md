@@ -28,15 +28,15 @@ This is a minimal full-stack monorepo:
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx          Client-side route definitions
-│   │   ├── components/      Shared layout and dashboard components
+│   │   ├── components/      Shared layout and workspace components
 │   │   │   └── ui/          Local shadcn/ui component primitives
 │   │   ├── config/          Role-aware workspace navigation configuration
-│   │   ├── pages/           Login, manager, staff, admin, and 404 pages
+│   │   ├── pages/           Login, workspace feature, and 404 pages
 │   │   ├── types/           Shared workspace role types and guards
 │   │   ├── App.test.tsx     Frontend component test
 │   │   ├── api.ts           Typed HTTP client functions
 │   │   ├── lib/utils.ts     Shared `cn` class-name utility
-│   │   ├── styles.css       Tailwind import and shared dashboard styles
+│   │   ├── styles.css       Tailwind import and shared workspace styles
 │   │   ├── main.tsx         React application entry point
 │   │   └── vite-env.d.ts    Vite TypeScript declarations
 │   ├── components.json      shadcn/ui CLI configuration
@@ -79,15 +79,18 @@ React Router owns client-side navigation. The current frontend routes are:
 
 - `/` and `/login` render the role-based demo login page.
 - `/manager` redirects to the manager compliance dashboard.
-- `/staff` renders the staff workspace.
-- `/direct-resale` renders the standalone Direct Resale workspace.
-- `/admin` renders the administrator workspace.
-- `/:role/compliance-dashboard` renders the compliance dashboard for each
-  explicit manager, staff, and admin route.
-- `/:role/resale-bins` renders the shared resale-bin placeholder for each
-  explicit manager, staff, and admin route.
-- `/:role/recycle-bins` renders the shared recycling-bin placeholder for each
-  explicit manager, staff, and admin route.
+- `/manager/compliance-dashboard` and `/admin/compliance-dashboard` render the
+  compliance dashboard.
+- `/manager/resale-bins` and `/manager/recycle-bins` render placeholder pages.
+- `/staff/sorting` renders the garment sorting workspace. `/staff` has no route;
+  the login page and sidebar logo send staff users to `/staff/sorting`.
+- `/staff/direct-resale` renders the standalone Direct Resale workspace.
+- `/staff/recycle-bin-handoff` renders New Bins for Handoff, using mock data.
+- `/staff/recycle-bin-handoff/scheduled-pickup-dates` renders a placeholder page.
+- `/staff/recycle-bin-handoff/handoff-records` renders Handoff Records, using
+  mock data.
+- `/admin/users` renders user management, using mock data. It is the admin
+  landing page after login; `/admin` has no route.
 - Unknown frontend paths render the local not-found page.
 
 Authentication is intentionally not enforced yet because the project has no
@@ -102,14 +105,17 @@ source is available or the user explicitly requests mocked protection.
 The login view is a fullscreen responsive page based on the provided Textile
 Track design. It defaults to the Admin role and exposes a role selector for the
 demo flow. Changing the role updates the suggested username and destination.
-The role-to-route mapping is maintained in `frontend/src/pages/LoginPage.tsx`.
+Each role's landing page comes from `getWorkspaceHomeUrl` in
+`frontend/src/config/workspace-navigation.ts`, which the login redirect and the
+sidebar logo both use: `/manager`, `/staff/sorting`, and `/admin/users`.
 
 Authenticated workspace screens share `WorkspaceSidebar`, composed from the
 local shadcn sidebar primitives. `frontend/src/config/workspace-navigation.ts`
-owns labels, icons, route segments, and the optional `roles` arrays used to
-filter menu visibility. Items currently omit `roles`, so all three roles see
-the same navigation until permissions are defined. `AppLayout` derives the demo
-role from the URL only for presentation; this is not authentication.
+owns labels, icons, route segments, and the `roles` arrays used to filter menu
+visibility. Managers see Compliance Dashboard, Resale Bin Records, and Recycle
+Bin Records. Staff see Sorting, Direct Resale, and Recycle Bin Handoff. Admins
+see Compliance Dashboard and User Management. `AppLayout` derives the demo role
+from the URL only for presentation; this is not authentication.
 
 The backend root path `/` intentionally has no route and returns `404`. Swagger
 UI is available at `/docs`. On application startup, the FastAPI lifespan handler
