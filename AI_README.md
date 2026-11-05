@@ -81,6 +81,9 @@ React Router owns client-side navigation. The current frontend routes are:
 - `/manager` renders the manager workspace.
 - `/staff` renders the staff workspace.
 - `/direct-resale` renders the standalone Direct Resale workspace.
+- `/staff/recycle-bin-handoff` renders New Bins for Handoff, using mock data.
+- `/staff/recycle-bin-handoff/pickup-dates` renders a placeholder page.
+- `/staff/recycle-bin-handoff/records` renders Handoff Records, using mock data.
 - `/admin` renders the administrator workspace.
 - `/:role/resale-bins` renders the shared resale-bin placeholder for each
   explicit manager, staff, and admin route.

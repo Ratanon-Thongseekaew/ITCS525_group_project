@@ -3,6 +3,7 @@ import { AppLayout } from './components/AppLayout'
 import { WorkspaceFeaturePage } from './components/WorkspaceFeaturePage'
 import { AdminPage } from './pages/AdminPage'
 import { DirectResalePage } from './pages/DirectResalePage'
+import { HandoffRecordsPage } from './pages/HandoffRecordsPage'
 import { LoginPage } from './pages/LoginPage'
 import { ManagerPage } from './pages/ManagerPage'
 import { NewBinsForHandoffPage } from './pages/NewBinsForHandoffPage'
@@ -72,16 +73,7 @@ function App() {
             />
           }
         />
-        <Route
-          path="staff/recycle-bin-handoff/records"
-          element={
-            <WorkspaceFeaturePage
-              role="staff"
-              title="Handoff Records"
-              description="Review contractor collections, recorded weights, and material outcomes."
-            />
-          }
-        />
+        <Route path="staff/recycle-bin-handoff/records" element={<HandoffRecordsPage />} />
 
         <Route path="admin" element={<AdminPage />} />
         <Route path="admin/users" element={<UserManagementPage />} />

@@ -1,6 +1,7 @@
 import { useRef, useState, type MouseEvent } from 'react'
 import { ArchiveRestore, CalendarDays, Recycle } from 'lucide-react'
 import { Link } from 'react-router'
+import { actionButtonClass, BinDetail, cardClass } from '@/components/staff/handoff-ui'
 import { NewHandoffRecordDialog } from '@/components/staff/NewHandoffRecordDialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -13,10 +14,6 @@ import {
   type NewHandoffRecord,
 } from '@/types/handoff'
 
-// Explicit colours because the outline Button's theme tokens are not defined in this repo.
-const actionButtonClass =
-  'h-10 gap-1.5 rounded-[10px] border-slate-200 bg-white px-2.5 text-slate-900 shadow-none hover:bg-slate-50 hover:text-slate-900'
-const cardClass = 'rounded-[14px] shadow-xs'
 const sectionHeadingClass = 'text-sm font-medium text-slate-900'
 
 interface SummaryMetricProps {
@@ -45,23 +42,6 @@ function HandoffStatusBadge({ status }: { status: HandoffBinStatus }) {
     <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-amber-600">
       {handoffStatusLabels[status]}
     </span>
-  )
-}
-
-interface BinDetailProps {
-  label: string
-  value: string
-  widthClass: string
-}
-
-function BinDetail({ label, value, widthClass }: BinDetailProps) {
-  return (
-    <div className={`flex flex-col gap-2 ${widthClass}`}>
-      <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className="text-lg leading-[21.6px] font-medium whitespace-nowrap text-slate-900">
-        {value}
-      </dd>
-    </div>
   )
 }
 

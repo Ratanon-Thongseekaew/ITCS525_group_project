@@ -165,6 +165,26 @@ test.each(['Scheduled Pickup Dates', 'Handoff Records'])(
   },
 )
 
+test('renders Handoff Records with the mock data', () => {
+  renderRoute('/staff/recycle-bin-handoff/records')
+
+  expect(screen.getByRole('heading', { name: 'Handoff Records' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: '#bin-id-001' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: '#bin-id-002' })).toBeInTheDocument()
+  expect(screen.getByText('Outcome report is still pending!')).toBeInTheDocument()
+  expect(screen.getByText('Total Reported').nextElementSibling).toHaveTextContent('39.0 kg')
+  expect(screen.getByText('Variance').nextElementSibling).toHaveTextContent('-1.0 kg')
+  expect(screen.getByText('Showing 2 of 2 records')).toBeInTheDocument()
+})
+
+test('returns to New Bins for Handoff from Handoff Records', async () => {
+  renderRoute('/staff/recycle-bin-handoff/records')
+
+  fireEvent.click(screen.getByRole('link', { name: 'Back to Handoff' }))
+
+  expect(await screen.findByRole('heading', { name: 'New Bins for Handoff' })).toBeInTheDocument()
+})
+
 test('keeps Recycle Bin Handoff active on its sub-routes', () => {
   renderRoute('/staff/recycle-bin-handoff/records')
 
