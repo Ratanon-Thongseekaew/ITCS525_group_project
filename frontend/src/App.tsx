@@ -62,6 +62,7 @@ function App() {
               />
             }
           />
+          <Route path="direct-resale" element={<DirectResalePage />} />
           <Route path="admin" element={<AdminPage />} />
           <Route path="admin/compliance-dashboard" element={<AdminPage />} />
           <Route path="admin/users" element={<UserManagementPage />} />
@@ -90,82 +91,6 @@ function App() {
       </Routes>
       <Toaster position="top-right" richColors closeButton />
     </>
-    <Routes>
-      <Route index element={<LoginPage />} />
-      <Route path="login" element={<LoginPage />} />
-
-      <Route element={<AppLayout />}>
-        <Route path="manager" element={<ManagerPage />} />
-        <Route
-          path="manager/resale-bins"
-          element={
-            <WorkspaceFeaturePage
-              role="manager"
-              title="Resale Bin Records"
-              description="View and manage garments prepared for direct resale."
-            />
-          }
-        />
-        <Route
-          path="manager/recycle-bins"
-          element={
-            <WorkspaceFeaturePage
-              role="manager"
-              title="Recycle Bin Records"
-              description="Track recycling bins, contractor pickups, and reported outcomes."
-            />
-          }
-        />
-
-        <Route path="staff" element={<StaffPage />} />
-        <Route path="direct-resale" element={<DirectResalePage />} />
-        <Route
-          path="staff/resale-bins"
-          element={
-            <WorkspaceFeaturePage
-              role="staff"
-              title="Resale Bin Records"
-              description="View and manage garments prepared for direct resale."
-            />
-          }
-        />
-        <Route
-          path="staff/recycle-bins"
-          element={
-            <WorkspaceFeaturePage
-              role="staff"
-              title="Recycle Bin Records"
-              description="Track recycling bins, contractor pickups, and reported outcomes."
-            />
-          }
-        />
-
-        <Route path="admin" element={<AdminPage />} />
-        <Route path="admin/users" element={<UserManagementPage />} />
-        <Route
-          path="admin/resale-bins"
-          element={
-            <WorkspaceFeaturePage
-              role="admin"
-              title="Resale Bin Records"
-              description="View and manage garments prepared for direct resale."
-            />
-          }
-        />
-        <Route
-          path="admin/recycle-bins"
-          element={
-            <WorkspaceFeaturePage
-              role="admin"
-              title="Recycle Bin Records"
-              description="Track recycling bins, contractor pickups, and reported outcomes."
-            />
-          }
-        />
-
-        <Route path="*" element={<NotFoundPage />} />
-      </Route>
-    </Routes>
   )
 }
 
