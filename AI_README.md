@@ -137,6 +137,30 @@ Used by the starter React page to demonstrate frontend/backend communication.
 }
 ```
 
+### `POST /api/garments/sort` (Feature 2)
+
+Used by the Store Staff counter intake interface to classify garments into `good_reusable` (direct resale) or `worn_recyclable` (recycling), automatically assigning them to active bins.
+
+### `GET /api/bins/active` (Feature 2)
+
+Returns the current active open resale and recycling bins ready to receive sorted garments.
+
+### `GET /api/bins` (Feature 2)
+
+Lists bin records with optional `bin_type` (`resale` / `recycle`) and `status` (`active` / `closed`) filters.
+
+### `POST /api/bins` (Feature 2)
+
+Registers a new bin record with custom or auto-generated bin code and maximum capacity.
+
+### `POST /api/bins/{bin_id}/close` (Feature 2)
+
+Marks a bin as closed/sealed, recording completion timestamp and locking it for downstream resale (Feature 3) or contractor handoff (Feature 4).
+
+### `GET /api/sorting/stats` (Feature 2)
+
+Returns shift intake metrics (total garments sorted today, resale count, recycle count, resale capture percentage).
+
 Keep response models in `backend/app/schemas.py`. When an API response changes,
 update all of the following together:
 

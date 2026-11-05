@@ -39,11 +39,13 @@ Object.defineProperty(globalThis, 'ResizeObserver', {
 })
 
 function renderRoute(route: string) {
-  vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-    new Response(JSON.stringify({ message: 'Hello from FastAPI!' }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    }),
+  vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+    Promise.resolve(
+      new Response(JSON.stringify({ message: 'Hello from FastAPI!' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    ),
   )
 
   render(
