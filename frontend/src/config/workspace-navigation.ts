@@ -1,4 +1,4 @@
-import { ChartNoAxesCombined, Recycle, Shirt, type LucideIcon } from 'lucide-react'
+import { ChartNoAxesCombined, Recycle, Shirt, UserPlus, type LucideIcon } from 'lucide-react'
 import type { WorkspaceRole } from '@/types/workspace'
 
 export interface WorkspaceNavigationItem {
@@ -23,6 +23,12 @@ export const workspaceNavigation: readonly WorkspaceNavigationItem[] = [
     label: 'Recycle Bin Records',
     segment: 'recycle-bins',
     icon: Recycle,
+  },
+  {
+    label: 'User Management',
+    segment: 'users',
+    icon: UserPlus,
+    roles: ['admin'],
   },
 ]
 

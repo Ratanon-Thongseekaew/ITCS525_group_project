@@ -2,16 +2,19 @@ import { Route, Routes } from 'react-router'
 import { AppLayout } from './components/AppLayout'
 import { WorkspaceFeaturePage } from './components/WorkspaceFeaturePage'
 import { AdminPage } from './pages/AdminPage'
+import { DirectResalePage } from './pages/DirectResalePage'
 import { LoginPage } from './pages/LoginPage'
 import { ManagerPage } from './pages/ManagerPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { StaffPage } from './pages/StaffPage'
+import { UserManagementPage } from './pages/UserManagementPage'
 
 function App() {
   return (
     <Routes>
       <Route index element={<LoginPage />} />
       <Route path="login" element={<LoginPage />} />
+
       <Route element={<AppLayout />}>
         <Route path="manager" element={<ManagerPage />} />
         <Route
@@ -34,7 +37,9 @@ function App() {
             />
           }
         />
+
         <Route path="staff" element={<StaffPage />} />
+        <Route path="direct-resale" element={<DirectResalePage />} />
         <Route
           path="staff/resale-bins"
           element={
@@ -55,7 +60,9 @@ function App() {
             />
           }
         />
+
         <Route path="admin" element={<AdminPage />} />
+        <Route path="admin/users" element={<UserManagementPage />} />
         <Route
           path="admin/resale-bins"
           element={
@@ -76,6 +83,7 @@ function App() {
             />
           }
         />
+
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
