@@ -56,8 +56,11 @@ export function WorkspaceSidebar({ role, items }: WorkspaceSidebarProps) {
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
               {navigationItems.map((item) => {
-                const url = getWorkspaceNavigationUrl(role, item.segment)
-                const isActive = location.pathname === url
+                const url = item.href ?? getWorkspaceNavigationUrl(role, item.segment)
+                // The workspace root has no segment, so it must not match every page below it.
+                const isActive =
+                  location.pathname === url ||
+                  (item.segment !== '' && location.pathname.startsWith(`${url}/`))
 
                 return (
                   <SidebarMenuItem key={item.label}>
