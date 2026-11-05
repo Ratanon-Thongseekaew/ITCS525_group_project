@@ -28,13 +28,15 @@ This is a minimal full-stack monorepo:
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx          Client-side route definitions
-│   │   ├── components/      Shared layout and dashboard components
+│   │   ├── components/      Shared layout and workspace components
 │   │   │   └── ui/          Local shadcn/ui component primitives
-│   │   ├── pages/           Login, manager, staff, admin, and 404 pages
+│   │   ├── config/          Role-aware workspace navigation configuration
+│   │   ├── pages/           Login, workspace feature, and 404 pages
+│   │   ├── types/           Shared workspace role types and guards
 │   │   ├── App.test.tsx     Frontend component test
 │   │   ├── api.ts           Typed HTTP client functions
 │   │   ├── lib/utils.ts     Shared `cn` class-name utility
-│   │   ├── styles.css       Tailwind import and shared dashboard styles
+│   │   ├── styles.css       Tailwind import and shared workspace styles
 │   │   ├── main.tsx         React application entry point
 │   │   └── vite-env.d.ts    Vite TypeScript declarations
 │   ├── components.json      shadcn/ui CLI configuration
@@ -76,21 +78,44 @@ During local development:
 React Router owns client-side navigation. The current frontend routes are:
 
 - `/` and `/login` render the role-based demo login page.
-- `/manager` renders the manager workspace.
-- `/staff` renders the staff workspace.
-- `/admin` renders the administrator workspace.
+- `/manager` redirects to the manager compliance dashboard.
+- `/manager/compliance-dashboard` and `/admin/compliance-dashboard` render the
+  compliance dashboard.
+- `/manager/resale-bins` and `/manager/recycle-bins` render placeholder pages.
+- `/staff/sorting` renders the garment sorting workspace. `/staff` has no route;
+  the login page and sidebar logo send staff users to `/staff/sorting`.
+- `/staff/direct-resale` renders the standalone Direct Resale workspace.
+- `/staff/recycle-bin-handoff` renders New Bins for Handoff, using mock data.
+- `/staff/recycle-bin-handoff/scheduled-pickup-dates` renders a placeholder page.
+- `/staff/recycle-bin-handoff/handoff-records` renders Handoff Records, using
+  mock data.
+- `/admin/users` renders user management, using mock data. It is the admin
+  landing page after login; `/admin` has no route.
 - Unknown frontend paths render the local not-found page.
 
 Authentication is intentionally not enforced yet because the project has no
-user database. The login form accepts any non-empty credentials and redirects
-to the workspace selected in the role field. All workspace URLs remain directly
-accessible. Do not add route guards until a real authentication source is
-available or the user explicitly requests mocked protection.
+user database. The demo login requires the suggested username for the selected
+role and any non-empty password. Successful submission shows a success toast
+and the shared loading screen for two seconds before redirecting to the selected
+workspace. A username mismatch keeps the form visible with an inline alert and
+an error toast. All workspace URLs remain directly accessible and render without
+that login transition. Do not add route guards until a real authentication
+source is available or the user explicitly requests mocked protection.
 
 The login view is a fullscreen responsive page based on the provided Textile
 Track design. It defaults to the Admin role and exposes a role selector for the
 demo flow. Changing the role updates the suggested username and destination.
-The role-to-route mapping is maintained in `frontend/src/pages/LoginPage.tsx`.
+Each role's landing page comes from `getWorkspaceHomeUrl` in
+`frontend/src/config/workspace-navigation.ts`, which the login redirect and the
+sidebar logo both use: `/manager`, `/staff/sorting`, and `/admin/users`.
+
+Authenticated workspace screens share `WorkspaceSidebar`, composed from the
+local shadcn sidebar primitives. `frontend/src/config/workspace-navigation.ts`
+owns labels, icons, route segments, and the `roles` arrays used to filter menu
+visibility. Managers see Compliance Dashboard, Resale Bin Records, and Recycle
+Bin Records. Staff see Sorting, Direct Resale, and Recycle Bin Handoff. Admins
+see Compliance Dashboard and User Management. `AppLayout` derives the demo role
+from the URL only for presentation; this is not authentication.
 
 The backend root path `/` intentionally has no route and returns `404`. Swagger
 UI is available at `/docs`. On application startup, the FastAPI lifespan handler
@@ -117,6 +142,30 @@ Used by the starter React page to demonstrate frontend/backend communication.
   "message": "Hello from FastAPI!"
 }
 ```
+
+### `POST /api/garments/sort` (Feature 2)
+
+Used by the Store Staff counter intake interface to classify garments into `good_reusable` (direct resale) or `worn_recyclable` (recycling), automatically assigning them to active bins.
+
+### `GET /api/bins/active` (Feature 2)
+
+Returns the current active open resale and recycling bins ready to receive sorted garments.
+
+### `GET /api/bins` (Feature 2)
+
+Lists bin records with optional `bin_type` (`resale` / `recycle`) and `status` (`active` / `closed`) filters.
+
+### `POST /api/bins` (Feature 2)
+
+Registers a new bin record with custom or auto-generated bin code and maximum capacity.
+
+### `POST /api/bins/{bin_id}/close` (Feature 2)
+
+Marks a bin as closed/sealed, recording completion timestamp and locking it for downstream resale (Feature 3) or contractor handoff (Feature 4).
+
+### `GET /api/sorting/stats` (Feature 2)
+
+Returns shift intake metrics (total garments sorted today, resale count, recycle count, resale capture percentage).
 
 Keep response models in `backend/app/schemas.py`. When an API response changes,
 update all of the following together:
@@ -205,6 +254,8 @@ python -m ruff check backend
   and must remain usable at widths down to 320px.
 - Keep reusable shadcn/ui primitives generic. Place application-specific login
   and workspace composition in `pages/` or non-`ui` components.
+- Keep workspace menu definitions in `config/workspace-navigation.ts` and use
+  each item's optional `roles` list instead of duplicating sidebars per role.
 - Preserve the current unprotected workspace routes until database-backed
   authentication is implemented or explicitly requested.
 - Keep backend calls and their response types in `frontend/src/api.ts` rather

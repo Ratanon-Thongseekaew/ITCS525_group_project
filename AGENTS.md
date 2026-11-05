@@ -12,8 +12,8 @@ Repository-wide requirements:
 - Keep backend Pydantic schemas and frontend TypeScript API types synchronized.
 - Use local shadcn/ui primitives and the established responsive Tailwind setup
   for new frontend forms and controls.
-- Keep `/manager`, `/staff`, and `/admin` unprotected until real authentication
-  is implemented or route protection is explicitly requested.
+- Keep the `/manager/*`, `/staff/*`, and `/admin/*` routes unprotected until real
+  authentication is implemented or route protection is explicitly requested.
 - Keep public API endpoints under `/api` and Swagger at `/docs`.
 - Use the `mysql` service in `compose.yaml` for local database development and
   never commit real database credentials or silently delete its named volume.

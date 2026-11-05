@@ -1,44 +1,40 @@
-import { NavLink, Outlet } from 'react-router'
+import { Outlet, useLocation } from 'react-router'
 import { ApiStatus } from './ApiStatus'
-
-const navigation = [
-  { to: '/manager', label: 'Manager' },
-  { to: '/staff', label: 'Staff' },
-  { to: '/admin', label: 'Admin' },
-]
+import { WorkspaceSidebar } from './WorkspaceSidebar'
+import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
+import { isWorkspaceRole } from '@/types/workspace'
 
 export function AppLayout() {
+  const { pathname } = useLocation()
+
+  if (pathname === '/staff/direct-resale') {
+    return <Outlet />
+  }
+
+  const pathRole = pathname.split('/')[1]
+  const role = isWorkspaceRole(pathRole) ? pathRole : 'staff'
+
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <NavLink className="brand" to="/" aria-label="Return to login">
-          <span className="brand__mark">W</span>
-          <span>
-            <strong>Workspace</strong>
-            <small>Operations portal</small>
-          </span>
-        </NavLink>
+    <SidebarProvider>
+      <WorkspaceSidebar role={role} />
 
-        <nav className="navigation" aria-label="Role navigation">
-          {navigation.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                `navigation__link${isActive ? ' navigation__link--active' : ''}`
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
+      <SidebarInset className="min-w-0 bg-slate-50">
+        <header className="sticky top-0 z-20 flex min-h-14 items-center gap-3 border-b border-slate-200 bg-white/90 px-4 backdrop-blur sm:px-6">
+          <SidebarTrigger className="-ml-1 text-slate-600" />
 
-        <ApiStatus />
-      </header>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-semibold text-slate-700 capitalize">
+              {role} workspace
+            </p>
+          </div>
 
-      <main className="page-container">
-        <Outlet />
-      </main>
-    </div>
+          <ApiStatus />
+        </header>
+
+        <main className="page-container">
+          <Outlet />
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
