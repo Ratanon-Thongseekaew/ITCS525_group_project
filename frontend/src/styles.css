@@ -1062,3 +1062,9 @@ p {
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 }
+
+@keyframes textile-track-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

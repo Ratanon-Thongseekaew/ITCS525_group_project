@@ -78,13 +78,15 @@ During local development:
 React Router owns client-side navigation. The current frontend routes are:
 
 - `/` and `/login` render the role-based demo login page.
-- `/manager` renders the manager workspace.
+- `/manager` redirects to the manager compliance dashboard.
 - `/staff` renders the staff workspace.
 - `/direct-resale` renders the standalone Direct Resale workspace.
 - `/staff/recycle-bin-handoff` renders New Bins for Handoff, using mock data.
 - `/staff/recycle-bin-handoff/pickup-dates` renders a placeholder page.
 - `/staff/recycle-bin-handoff/records` renders Handoff Records, using mock data.
 - `/admin` renders the administrator workspace.
+- `/:role/compliance-dashboard` renders the compliance dashboard for each
+  explicit manager, staff, and admin route.
 - `/:role/resale-bins` renders the shared resale-bin placeholder for each
   explicit manager, staff, and admin route.
 - `/:role/recycle-bins` renders the shared recycling-bin placeholder for each
@@ -92,10 +94,13 @@ React Router owns client-side navigation. The current frontend routes are:
 - Unknown frontend paths render the local not-found page.
 
 Authentication is intentionally not enforced yet because the project has no
-user database. The login form accepts any non-empty credentials and redirects
-to the workspace selected in the role field. All workspace URLs remain directly
-accessible. Do not add route guards until a real authentication source is
-available or the user explicitly requests mocked protection.
+user database. The demo login requires the suggested username for the selected
+role and any non-empty password. Successful submission shows a success toast
+and the shared loading screen for two seconds before redirecting to the selected
+workspace. A username mismatch keeps the form visible with an inline alert and
+an error toast. All workspace URLs remain directly accessible and render without
+that login transition. Do not add route guards until a real authentication
+source is available or the user explicitly requests mocked protection.
 
 The login view is a fullscreen responsive page based on the provided Textile
 Track design. It defaults to the Admin role and exposes a role selector for the
@@ -134,6 +139,30 @@ Used by the starter React page to demonstrate frontend/backend communication.
   "message": "Hello from FastAPI!"
 }
 ```
+
+### `POST /api/garments/sort` (Feature 2)
+
+Used by the Store Staff counter intake interface to classify garments into `good_reusable` (direct resale) or `worn_recyclable` (recycling), automatically assigning them to active bins.
+
+### `GET /api/bins/active` (Feature 2)
+
+Returns the current active open resale and recycling bins ready to receive sorted garments.
+
+### `GET /api/bins` (Feature 2)
+
+Lists bin records with optional `bin_type` (`resale` / `recycle`) and `status` (`active` / `closed`) filters.
+
+### `POST /api/bins` (Feature 2)
+
+Registers a new bin record with custom or auto-generated bin code and maximum capacity.
+
+### `POST /api/bins/{bin_id}/close` (Feature 2)
+
+Marks a bin as closed/sealed, recording completion timestamp and locking it for downstream resale (Feature 3) or contractor handoff (Feature 4).
+
+### `GET /api/sorting/stats` (Feature 2)
+
+Returns shift intake metrics (total garments sorted today, resale count, recycle count, resale capture percentage).
 
 Keep response models in `backend/app/schemas.py`. When an API response changes,
 update all of the following together:
