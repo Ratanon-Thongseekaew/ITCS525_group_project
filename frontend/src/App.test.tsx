@@ -91,6 +91,16 @@ test('navigates from the manager workspace to the compliance dashboard path', ()
   expect(screen.getByRole('table')).toBeInTheDocument()
 })
 
+test('renders and processes a direct resale bin on its own page', async () => {
+  renderRoute('/direct-resale')
+
+  expect(screen.getByRole('heading', { name: 'Direct Resale Bins' })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: /#bin-id-001/i }))
+  expect(screen.getByRole('dialog')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+  expect(await screen.findByText('Processed')).toBeInTheDocument()
+})
+
 test('renders the login page at the root route', () => {
   renderRoute('/')
 
