@@ -1,38 +1,23 @@
+import { useRef, useState, type MouseEvent } from 'react'
 import { ArchiveRestore, CalendarDays, Recycle } from 'lucide-react'
 import { Link } from 'react-router'
+import { NewHandoffRecordDialog } from '@/components/staff/NewHandoffRecordDialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { formatPackedAt, formatPickupDate } from '@/lib/handoff-format'
 import { newHandoffBins, nextScheduledPickup } from '@/lib/mock-handoff-bins'
-import { handoffStatusLabels, type HandoffBin, type HandoffBinStatus } from '@/types/handoff'
+import {
+  handoffStatusLabels,
+  type HandoffBin,
+  type HandoffBinStatus,
+  type NewHandoffRecord,
+} from '@/types/handoff'
 
 // Explicit colours because the outline Button's theme tokens are not defined in this repo.
 const actionButtonClass =
   'h-10 gap-1.5 rounded-[10px] border-slate-200 bg-white px-2.5 text-slate-900 shadow-none hover:bg-slate-50 hover:text-slate-900'
 const cardClass = 'rounded-[14px] shadow-xs'
 const sectionHeadingClass = 'text-sm font-medium text-slate-900'
-
-function getDateParts(value: string) {
-  const date = new Date(value)
-  return {
-    date,
-    day: date.getDate(),
-    month: date.toLocaleDateString('en-US', { month: 'short' }),
-    year: date.getFullYear(),
-  }
-}
-
-function formatPickupDate(value: string) {
-  const { day, month, year } = getDateParts(value)
-  return `${day} ${month} ${year}`
-}
-
-function formatPackedAt(value: string) {
-  const { date, day, month, year } = getDateParts(value)
-  const hours = date.getHours() % 12 || 12
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-  const period = date.getHours() < 12 ? 'AM' : 'PM'
-  return `${hours}:${minutes} ${period}, ${day} ${month.toUpperCase()} ${year}`
-}
 
 interface SummaryMetricProps {
   label: string
@@ -80,9 +65,14 @@ function BinDetail({ label, value, widthClass }: BinDetailProps) {
   )
 }
 
-function BinRecordCard({ bin }: { bin: HandoffBin }) {
+interface BinRecordCardProps {
+  bin: HandoffBin
+  onSelect: (event: MouseEvent<HTMLButtonElement>) => void
+}
+
+function BinRecordCard({ bin, onSelect }: BinRecordCardProps) {
   return (
-    <Card className={cardClass}>
+    <Card className={`relative transition-colors hover:bg-slate-50 ${cardClass}`}>
       <CardContent className="flex flex-col gap-4 p-6 xl:min-h-[144px] xl:flex-row xl:items-center xl:gap-6">
         <div className="flex min-w-0 flex-1 items-center gap-4">
           <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-slate-100">
@@ -90,7 +80,15 @@ function BinRecordCard({ bin }: { bin: HandoffBin }) {
           </span>
           <div className="flex min-w-0 flex-col gap-1.5">
             <h3 className="text-lg leading-[21.6px] font-medium break-words text-slate-900">
-              #{bin.bin_code}
+              {/* Stretched over the card so the card stays clickable without nesting its details in a button. */}
+              <button
+                type="button"
+                aria-haspopup="dialog"
+                className="cursor-pointer text-left outline-none after:absolute after:inset-0 after:rounded-[14px] focus-visible:after:ring-2 focus-visible:after:ring-teal-600"
+                onClick={onSelect}
+              >
+                #{bin.bin_code}
+              </button>
             </h3>
             <p className="text-sm font-medium text-amber-600">Recycling Bin</p>
             <p className="text-xs text-slate-500">Packed at {formatPackedAt(bin.packed_at)}</p>
@@ -121,9 +119,19 @@ function BinRecordCard({ bin }: { bin: HandoffBin }) {
 }
 
 export function NewBinsForHandoffPage() {
-  const bins = newHandoffBins
+  const [bins, setBins] = useState(newHandoffBins)
+  const [selectedBin, setSelectedBin] = useState<HandoffBin | null>(null)
+  const listHeadingRef = useRef<HTMLHeadingElement>(null)
+  const returnFocusRef = useRef<HTMLElement | null>(null)
   const itemsStaged = bins.reduce((sum, bin) => sum + bin.item_count, 0)
   const totalWeight = bins.reduce((sum, bin) => sum + bin.total_weight_kg, 0)
+
+  function handleConfirm(record: NewHandoffRecord) {
+    // The clicked card is removed, so focus moves to the list heading instead.
+    returnFocusRef.current = listHeadingRef.current
+    setBins((current) => current.filter((bin) => bin.id !== record.bin_id))
+    setSelectedBin(null)
+  }
 
   return (
     <section className="flex flex-col gap-7">
@@ -181,12 +189,20 @@ export function NewBinsForHandoffPage() {
       </section>
 
       <section className="flex flex-col gap-4">
-        <h2 className={sectionHeadingClass}>Bins awaiting handoff</h2>
+        <h2 ref={listHeadingRef} tabIndex={-1} className={`outline-none ${sectionHeadingClass}`}>
+          Bins awaiting handoff
+        </h2>
         {bins.length > 0 ? (
           <ul className="flex flex-col gap-4">
             {bins.map((bin) => (
               <li key={bin.id}>
-                <BinRecordCard bin={bin} />
+                <BinRecordCard
+                  bin={bin}
+                  onSelect={(event) => {
+                    returnFocusRef.current = event.currentTarget
+                    setSelectedBin(bin)
+                  }}
+                />
               </li>
             ))}
           </ul>
@@ -197,6 +213,20 @@ export function NewBinsForHandoffPage() {
           Showing {bins.length} of {bins.length} records
         </p>
       </section>
+
+      {selectedBin && (
+        <NewHandoffRecordDialog
+          bin={selectedBin}
+          defaultPickup={nextScheduledPickup}
+          onClose={() => setSelectedBin(null)}
+          onConfirm={handleConfirm}
+          onCloseAutoFocus={(event) => {
+            // Radix only restores focus to its own DialogTrigger, which this dialog doesn't use.
+            event.preventDefault()
+            returnFocusRef.current?.focus()
+          }}
+        />
+      )}
     </section>
   )
 }

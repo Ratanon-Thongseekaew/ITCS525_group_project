@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import type { HandoffBin } from '@/types/handoff'
@@ -20,6 +20,20 @@ vi.mock('@/lib/mock-handoff-bins', () => ({
     return mockData.pickup
   },
 }))
+
+// jsdom lacks these browser APIs, which Radix Select needs.
+Element.prototype.hasPointerCapture = () => false
+Element.prototype.setPointerCapture = () => {}
+Element.prototype.releasePointerCapture = () => {}
+Element.prototype.scrollIntoView = () => {}
+vi.stubGlobal(
+  'ResizeObserver',
+  class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  },
+)
 
 function createBin(overrides: Partial<HandoffBin> = {}): HandoffBin {
   return {
@@ -124,4 +138,51 @@ test.each([
   renderPage()
 
   expect(screen.getByRole('link', { name: label })).toHaveAttribute('href', href)
+})
+
+function openDialog(binCode: string) {
+  fireEvent.click(screen.getByRole('button', { name: `#${binCode}` }))
+  return screen.getByRole('dialog', { name: 'New Handoff Record' })
+}
+
+test('opens the dialog for the clicked bin', () => {
+  renderPage()
+
+  const dialog = openDialog('test-002')
+
+  expect(within(dialog).getByText('#test-002')).toBeInTheDocument()
+  expect(within(dialog).getByText('25 items')).toBeInTheDocument()
+  expect(within(dialog).getByText('0.1kg')).toBeInTheDocument()
+})
+
+test('returns focus to the bin when the dialog closes without saving', async () => {
+  renderPage()
+
+  const binButton = screen.getByRole('button', { name: '#test-002' })
+  binButton.focus()
+  fireEvent.click(binButton)
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(metricValue('Bins Awaiting')).toHaveTextContent('3')
+  await waitFor(() => expect(binButton).toHaveFocus())
+})
+
+test('removes the bin and updates the summary after confirming', async () => {
+  renderPage()
+
+  const dialog = openDialog('test-002')
+  fireEvent.keyDown(within(dialog).getByLabelText('Contractor'), { key: 'Enter' })
+  fireEvent.click(screen.getByRole('option', { name: 'Contractor 2' }))
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm Handoff' }))
+
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: '#test-002' })).not.toBeInTheDocument()
+  expect(metricValue('Bins Awaiting')).toHaveTextContent('2')
+  expect(metricValue('Items Staged')).toHaveTextContent('17')
+  expect(metricValue('Total Grossed Weight')).toHaveTextContent('1.7 kg')
+  expect(screen.getByText('Showing 2 of 2 records')).toBeInTheDocument()
+  await waitFor(() =>
+    expect(screen.getByRole('heading', { name: 'Bins awaiting handoff' })).toHaveFocus(),
+  )
 })
