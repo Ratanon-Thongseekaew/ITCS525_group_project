@@ -122,7 +122,9 @@ Vite proxies `/api` requests to FastAPI during development. To point the fronten
 | `/manager/resale-bins`                                         | Resale bin records placeholder                      |
 | `/manager/recycle-bins`                                        | Recycle bin records placeholder                     |
 | `/staff/sorting`                                               | Garment sorting workspace                           |
-| `/staff/direct-resale`                                         | Standalone direct resale workspace                  |
+| `/staff/direct-resale`                                         | Direct resale bins (mock data)                      |
+| `/staff/direct-resale/potential-revenue-analysis`              | Potential revenue analysis (mock data)              |
+| `/staff/direct-resale/processed-bins-record`                   | Processed resale bin records (mock data)            |
 | `/staff/recycle-bin-handoff`                                   | New bins for handoff (mock data)                    |
 | `/staff/recycle-bin-handoff/scheduled-pickup-dates`            | Scheduled pickup dates placeholder                  |
 | `/staff/recycle-bin-handoff/handoff-records`                   | Handoff records (mock data)                         |

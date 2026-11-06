@@ -1,40 +1,24 @@
 import { useState } from 'react'
-import { Archive, ArrowDownUp, Calculator, Check, ClipboardList, Shirt, X } from 'lucide-react'
+import { Archive, Calculator, Check, ClipboardList, Shirt, X } from 'lucide-react'
+import { Link } from 'react-router'
+import { DirectResaleBinRow } from '@/components/staff/DirectResaleBinRow'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-
-type Bin = {
-  id: string
-  count: number
-  weight: number
-  packed: string
-  status: 'Awaiting Process' | 'Processed'
-}
-
-const initialBins: Bin[] = [
-  {
-    id: 'bin-id-001',
-    count: 100,
-    weight: 40,
-    packed: '3:31 PM, 1 OCT 2026',
-    status: 'Awaiting Process',
-  },
-]
+import { directResaleBins, type DirectResaleBin } from '@/lib/mock-direct-resale-bins'
 
 export function DirectResalePage() {
-  const [bins, setBins] = useState(initialBins)
-  const [activeBin, setActiveBin] = useState<Bin | null>(null)
+  const [bins, setBins] = useState(directResaleBins)
+  const [activeBin, setActiveBin] = useState<DirectResaleBin | null>(null)
   const [accepted, setAccepted] = useState('98')
   const [rejected, setRejected] = useState('2')
   const [revenue, setRevenue] = useState('15000')
   const [notes, setNotes] = useState('')
-  const [view, setView] = useState<'awaiting' | 'processed' | 'analysis'>('awaiting')
   const [keypadOpen, setKeypadOpen] = useState(false)
 
   const awaiting = bins.filter((bin) => bin.status === 'Awaiting Process')
   const processed = bins.filter((bin) => bin.status === 'Processed')
 
-  function openProcess(bin: Bin) {
+  function openProcess(bin: DirectResaleBin) {
     setActiveBin(bin)
     setAccepted(String(bin.count - 2))
     setRejected('2')
@@ -45,52 +29,22 @@ export function DirectResalePage() {
   function confirmProcess() {
     if (!activeBin) return
     setBins((current) =>
-      current.map((bin) => (bin.id === activeBin.id ? { ...bin, status: 'Processed' } : bin)),
+      current.map((bin) =>
+        bin.id === activeBin.id ? { ...bin, status: 'Processed', revenue: Number(revenue) } : bin,
+      ),
     )
     setActiveBin(null)
-    setView('processed')
   }
-
-  const displayedBins = view === 'processed' ? processed : awaiting
 
   return (
     <div className="resale-workspace">
-      <aside className="resale-sidebar">
-        <a className="resale-brand" href="/staff/direct-resale">
-          <span className="resale-brand__icon">
-            <Shirt />
-          </span>
-          <strong>Textile Track</strong>
-        </a>
-        <span className="resale-sidebar__label">WORKSPACE</span>
-        <nav aria-label="Workspace">
-          <button type="button" className="resale-nav">
-            <ArrowDownUp /> Sorting
-          </button>
-          <button
-            type="button"
-            className="resale-nav resale-nav--active"
-            onClick={() => setView('awaiting')}
-          >
-            <Shirt /> Direct Resale
-          </button>
-          <button type="button" className="resale-nav" onClick={() => setView('processed')}>
-            <Archive /> Recycle Bin Handoff
-          </button>
-        </nav>
-        <a className="resale-signout" href="/">
-          ↪&nbsp; Sign Out
-        </a>
-      </aside>
-
-      <main className="resale-main">
+      <div className="resale-main">
         <div className="resale-topline">
           <div>
             <span>Operations</span>
             <span className="resale-slash">/</span>
             <strong>Direct Resale</strong>
           </div>
-          <span className="resale-workspace-status">Store Staff workspace</span>
         </div>
         <header className="resale-heading">
           <div>
@@ -98,92 +52,54 @@ export function DirectResalePage() {
             <p>Tap to process resale bin and record potential revenue</p>
           </div>
           <div className="resale-heading__actions">
-            <Button variant="outline" onClick={() => setView('analysis')}>
-              <ClipboardList /> Potential Revenue Analysis
+            <Button asChild variant="outline">
+              <Link to="/staff/direct-resale/potential-revenue-analysis">
+                <ClipboardList /> Potential Revenue Analysis
+              </Link>
             </Button>
-            <Button variant="outline" onClick={() => setView('processed')}>
-              <Archive /> Processed Bin Records
+            <Button asChild variant="outline">
+              <Link to="/staff/direct-resale/processed-bins-record">
+                <Archive /> Processed Bin Records
+              </Link>
             </Button>
           </div>
         </header>
 
-        {view === 'analysis' ? (
-          <section className="resale-content-panel">
-            <h2>Potential Revenue Analysis</h2>
-            <p className="resale-muted">Revenue recorded from processed direct resale bins.</p>
-            <div className="resale-analysis-total">฿{processed.length ? '15,000' : '0'}</div>
-            <p>{processed.length} processed bins</p>
-            <Button variant="outline" onClick={() => setView('awaiting')}>
-              Back to bins
-            </Button>
-          </section>
-        ) : (
-          <>
-            <section className="resale-summary">
-              <h2>Summary</h2>
-              <div className="resale-metrics">
-                <article>
-                  <span>Bins Awaiting</span>
-                  <strong>{awaiting.length}</strong>
-                </article>
-                <article>
-                  <span>Items Staged</span>
-                  <strong>{awaiting.reduce((sum, bin) => sum + bin.count, 0)}</strong>
-                </article>
-                <article>
-                  <span>Total Grossed Weight</span>
-                  <strong>{awaiting.reduce((sum, bin) => sum + bin.weight, 0)} kg</strong>
-                </article>
-                <article>
-                  <span>Bins Processed Today</span>
-                  <strong>{processed.length + 3}</strong>
-                </article>
-              </div>
-            </section>
-            <section className="resale-bins">
-              <h2>{view === 'processed' ? 'Processed bin records' : 'Bins awaiting process'}</h2>
-              {displayedBins.length ? (
-                displayedBins.map((bin) => (
-                  <button
-                    className="resale-bin"
-                    key={bin.id}
-                    onClick={() => bin.status === 'Awaiting Process' && openProcess(bin)}
-                    type="button"
-                  >
-                    <span className="resale-bin__icon">
-                      <Shirt />
-                    </span>
-                    <span className="resale-bin__identity">
-                      <strong>#{bin.id}</strong>
-                      <b>Direct Resale Bin</b>
-                      <small>Packed at&nbsp; {bin.packed}</small>
-                    </span>
-                    <span className="resale-bin__stat">
-                      <small>Item count</small>
-                      <strong>{bin.count} items</strong>
-                    </span>
-                    <span className="resale-bin__stat">
-                      <small>Grossed Weight</small>
-                      <strong>{bin.weight}kg</strong>
-                    </span>
-                    <span className="resale-bin__stat">
-                      <small>Status</small>
-                      <em className={bin.status === 'Processed' ? 'is-processed' : ''}>
-                        {bin.status}
-                      </em>
-                    </span>
-                  </button>
-                ))
-              ) : (
-                <div className="resale-empty">No bins in this list.</div>
-              )}
-              <p className="resale-record-count">
-                Showing {displayedBins.length} of {displayedBins.length} records
-              </p>
-            </section>
-          </>
-        )}
-      </main>
+        <section className="resale-summary">
+          <h2>Summary</h2>
+          <div className="resale-metrics">
+            <article>
+              <span>Bins Awaiting</span>
+              <strong>{awaiting.length}</strong>
+            </article>
+            <article>
+              <span>Items Staged</span>
+              <strong>{awaiting.reduce((sum, bin) => sum + bin.count, 0)}</strong>
+            </article>
+            <article>
+              <span>Total Grossed Weight</span>
+              <strong>{awaiting.reduce((sum, bin) => sum + bin.weight, 0)} kg</strong>
+            </article>
+            <article>
+              <span>Bins Processed Today</span>
+              <strong>{processed.length + 3}</strong>
+            </article>
+          </div>
+        </section>
+        <section className="resale-bins">
+          <h2>Bins awaiting process</h2>
+          {awaiting.length ? (
+            awaiting.map((bin) => (
+              <DirectResaleBinRow bin={bin} key={bin.id} onSelect={() => openProcess(bin)} />
+            ))
+          ) : (
+            <div className="resale-empty">No bins in this list.</div>
+          )}
+          <p className="resale-record-count">
+            Showing {awaiting.length} of {awaiting.length} records
+          </p>
+        </section>
+      </div>
 
       {activeBin && (
         <div

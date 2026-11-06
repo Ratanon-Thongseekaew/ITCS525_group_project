@@ -84,7 +84,13 @@ React Router owns client-side navigation. The current frontend routes are:
 - `/manager/resale-bins` and `/manager/recycle-bins` render placeholder pages.
 - `/staff/sorting` renders the garment sorting workspace. `/staff` has no route;
   the login page and sidebar logo send staff users to `/staff/sorting`.
-- `/staff/direct-resale` renders the standalone Direct Resale workspace.
+- `/staff/direct-resale` renders the Direct Resale bins awaiting process, using
+  mock data. Processing a bin removes it from the list.
+- `/staff/direct-resale/potential-revenue-analysis` renders Potential Revenue
+  Analysis, totalled from mock processed bins.
+- `/staff/direct-resale/processed-bins-record` renders Processed Bin Records,
+  using the same mock data. Bins processed during a session do not carry over
+  to either page yet.
 - `/staff/recycle-bin-handoff` renders New Bins for Handoff, using mock data.
 - `/staff/recycle-bin-handoff/scheduled-pickup-dates` renders a placeholder page.
 - `/staff/recycle-bin-handoff/handoff-records` renders Handoff Records, using

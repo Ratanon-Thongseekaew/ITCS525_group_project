@@ -93,14 +93,60 @@ test('navigates from the manager workspace to the compliance dashboard path', ()
   expect(screen.getByRole('table')).toBeInTheDocument()
 })
 
-test('renders and processes a direct resale bin on its own page', async () => {
+test('renders and processes a direct resale bin', async () => {
   renderRoute('/staff/direct-resale')
 
   expect(screen.getByRole('heading', { name: 'Direct Resale Bins' })).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: /#bin-id-001/i }))
   expect(screen.getByRole('dialog')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
-  expect(await screen.findByText('Processed')).toBeInTheDocument()
+  expect(await screen.findByText('No bins in this list.')).toBeInTheDocument()
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /#bin-id-001/i })).not.toBeInTheDocument()
+})
+
+test('links Direct Resale to the potential revenue analysis page', () => {
+  renderRoute('/staff/direct-resale')
+
+  expect(screen.getByRole('link', { name: 'Potential Revenue Analysis' })).toHaveAttribute(
+    'href',
+    '/staff/direct-resale/potential-revenue-analysis',
+  )
+  expect(screen.getByRole('link', { name: 'Processed Bin Records' })).toHaveAttribute(
+    'href',
+    '/staff/direct-resale/processed-bins-record',
+  )
+})
+
+test('lists processed resale bins on their own page', () => {
+  renderRoute('/staff/direct-resale/processed-bins-record')
+
+  expect(screen.getByRole('heading', { name: 'Processed Bin Records' })).toBeInTheDocument()
+  expect(screen.getByText('#bin-id-002')).toBeInTheDocument()
+  expect(screen.getByText('#bin-id-003')).toBeInTheDocument()
+  expect(screen.queryByText('#bin-id-001')).not.toBeInTheDocument()
+  expect(screen.getByText('Showing 2 of 2 records')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /#bin-id-002/i })).not.toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Back to bins' })).toHaveAttribute(
+    'href',
+    '/staff/direct-resale',
+  )
+  const directResaleLinks = screen.getAllByRole('link', { name: 'Direct Resale' })
+  expect(directResaleLinks.some((link) => link.getAttribute('data-active') === 'true')).toBe(true)
+})
+
+test('renders potential revenue analysis from processed resale bins', () => {
+  renderRoute('/staff/direct-resale/potential-revenue-analysis')
+
+  expect(screen.getByRole('heading', { name: 'Potential Revenue Analysis' })).toBeInTheDocument()
+  expect(screen.getByText('฿30,500')).toBeInTheDocument()
+  expect(screen.getByText('2 processed bins')).toBeInTheDocument()
+  const directResaleLinks = screen.getAllByRole('link', { name: 'Direct Resale' })
+  expect(directResaleLinks.some((link) => link.getAttribute('data-active') === 'true')).toBe(true)
+  expect(screen.getByRole('link', { name: 'Back to bins' })).toHaveAttribute(
+    'href',
+    '/staff/direct-resale',
+  )
 })
 
 test('renders the login page at the root route', () => {
@@ -321,10 +367,12 @@ test.each([
   )
 })
 
-test('renders Direct Resale without the workspace sidebar', () => {
+test('renders Direct Resale inside the shared workspace sidebar', () => {
   renderRoute('/staff/direct-resale')
 
-  expect(screen.queryByRole('link', { name: 'Sorting' })).not.toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Sorting' })).toHaveAttribute('href', '/staff/sorting')
+  expect(screen.getByRole('link', { name: 'Direct Resale' })).toHaveAttribute('data-active', 'true')
+  expect(screen.getByRole('heading', { name: 'Direct Resale Bins' })).toBeInTheDocument()
 })
 
 test('shows the compliance dashboard to admins and keeps them in their workspace', () => {
