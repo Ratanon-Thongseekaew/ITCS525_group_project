@@ -11,6 +11,7 @@ import { ManagerPage } from './pages/ManagerPage'
 import { NewBinsForHandoffPage } from './pages/NewBinsForHandoffPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { UserManagementPage } from './pages/UserManagementPage'
+import ContractorReportImportPage from './pages/ContractorReportImportPage'
 
 function App() {
   return (
@@ -19,6 +20,10 @@ function App() {
         <Route index element={<LoginPage />} />
         <Route path="login" element={<LoginPage />} />
         <Route element={<AppLayout />}>
+          <Route
+            path="manager/contractor-reports/import"
+            element={<ContractorReportImportPage />}
+          />
           <Route path="manager" element={<ManagerPage />} />
           <Route path="manager/compliance-dashboard" element={<ComplianceDashboardPage />} />
           <Route
