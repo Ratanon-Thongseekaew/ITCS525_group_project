@@ -10,6 +10,8 @@ import { LoginPage } from './pages/LoginPage'
 import { ManagerPage } from './pages/ManagerPage'
 import { NewBinsForHandoffPage } from './pages/NewBinsForHandoffPage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { PotentialRevenueAnalysisPage } from './pages/PotentialRevenueAnalysisPage'
+import { ProcessedBinsRecordPage } from './pages/ProcessedBinsRecordPage'
 import { UserManagementPage } from './pages/UserManagementPage'
 import ContractorReportImportPage from './pages/ContractorReportImportPage'
 
@@ -48,6 +50,14 @@ function App() {
           />
           <Route path="staff/sorting" element={<GarmentSortingWorkspace />} />
           <Route path="staff/direct-resale" element={<DirectResalePage />} />
+          <Route
+            path="staff/direct-resale/potential-revenue-analysis"
+            element={<PotentialRevenueAnalysisPage />}
+          />
+          <Route
+            path="staff/direct-resale/processed-bins-record"
+            element={<ProcessedBinsRecordPage />}
+          />
           <Route path="staff/recycle-bin-handoff" element={<NewBinsForHandoffPage />} />
           <Route
             path="staff/recycle-bin-handoff/scheduled-pickup-dates"

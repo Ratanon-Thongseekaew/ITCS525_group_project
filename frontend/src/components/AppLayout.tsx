@@ -6,11 +6,6 @@ import { isWorkspaceRole } from '@/types/workspace'
 
 export function AppLayout() {
   const { pathname } = useLocation()
-
-  if (pathname === '/staff/direct-resale') {
-    return <Outlet />
-  }
-
   const pathRole = pathname.split('/')[1]
   const role = isWorkspaceRole(pathRole) ? pathRole : 'staff'
 
