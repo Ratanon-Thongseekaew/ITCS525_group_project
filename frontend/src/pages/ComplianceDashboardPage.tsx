@@ -1,4 +1,4 @@
-import { Download, TrendingDown, TrendingUp } from 'lucide-react'
+import { Download, TrendingDown, TrendingUp, Upload } from 'lucide-react'
 import { Link } from 'react-router'
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from 'recharts'
 
@@ -285,7 +285,16 @@ export function ComplianceDashboardPage() {
             Outcome report files uploaded and analysis dashboard
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-3">
+          <Button
+            asChild
+            className="h-10 gap-1.5 rounded-md bg-teal-700 px-2.5 text-white hover:bg-teal-800"
+          >
+            <Link to="/manager/compliance-dashboard/import">
+              <Upload aria-hidden="true" />
+              <span className="text-sm leading-5 font-medium">Import Monthly Files</span>
+            </Link>
+          </Button>
           <Button asChild size="sm" className="bg-teal-700 text-white hover:bg-teal-800">
             <Link to=".">
               <Download aria-hidden="true" />

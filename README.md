@@ -119,6 +119,7 @@ Vite proxies `/api` requests to FastAPI during development. To point the fronten
 | `/login`                                                       | Alternate URL for the login page                    |
 | `/manager`                                                     | Redirects to the compliance dashboard               |
 | `/manager/compliance-dashboard`, `/admin/compliance-dashboard` | Compliance dashboard                                |
+| `/manager/compliance-dashboard/import`                         | Contractor monthly outcome report import            |
 | `/manager/resale-bins`                                         | Resale bin records placeholder                      |
 | `/manager/recycle-bins`                                        | Recycle bin records placeholder                     |
 | `/staff/sorting`                                               | Garment sorting workspace                           |
