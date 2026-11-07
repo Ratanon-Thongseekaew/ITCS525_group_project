@@ -413,3 +413,14 @@ test('redirects the demo staff login to the sorting workspace', () => {
   expect(screen.getByRole('link', { name: 'Sorting' })).toHaveAttribute('data-active', 'true')
   expect(screen.getByText('Your work, clearly organized.')).toBeInTheDocument()
 })
+
+test('opens the contractor report import page from the compliance dashboard', () => {
+  renderRoute('/manager/compliance-dashboard')
+
+  fireEvent.click(screen.getByRole('link', { name: 'Import Monthly Files' }))
+
+  expect(
+    screen.getByRole('heading', { name: 'Import Monthly Outcome Report File' }),
+  ).toBeInTheDocument()
+  expect(screen.getAllByRole('link', { name: 'Sign Out' })).toHaveLength(1)
+})

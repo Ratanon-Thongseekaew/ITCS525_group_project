@@ -23,7 +23,7 @@ function App() {
         <Route path="login" element={<LoginPage />} />
         <Route element={<AppLayout />}>
           <Route
-            path="manager/contractor-reports/import"
+            path="manager/compliance-dashboard/import"
             element={<ContractorReportImportPage />}
           />
           <Route path="manager" element={<ManagerPage />} />
