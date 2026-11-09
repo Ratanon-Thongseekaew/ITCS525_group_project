@@ -235,3 +235,23 @@ environment must still be created and have `backend[dev]` installed as described
 in the installation section.
 
 # ITCS525_group_project
+
+## AI Usage Declaration
+
+The following AI tools were used as coding assistants during development:
+
+- **Claude Opus 5.5 (Anthropic):** Used with the Figma MCP server to work with
+  Figma designs and build complex interfaces. It also assisted with reviewing
+  teammates' code for integration, debugging errors, and generating Markdown
+  documents and commit messages. Plan mode was used to review, understand, and
+  approve each plan before changes were made. All AI-generated output was
+  reviewed and edited to align with the developer's directions.
+- **Gemini 3.8 (Google):** Assisted with development in the app directory,
+  including structuring files, resolving integration bugs, and writing clear
+  code comments.
+- **Codex with GPT 6.1 sol (OpenAI):** Used as a coding assistant during
+  development and to draft and update project documentation.
+
+AI was used strictly as a coding assistant. All generated code was personally
+reviewed, manually tested, and adjusted by the developer to meet the project
+requirements and run stably.
