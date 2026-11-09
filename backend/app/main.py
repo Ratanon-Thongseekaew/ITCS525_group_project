@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+from .database import create_db_and_tables
 from .schemas import (
     ActiveBinsResponse,
     BinCloseRequest,
@@ -20,12 +21,14 @@ from .schemas import (
     SortingStatsResponse,
 )
 from .sorting_service import sorting_service
+from .users import router as users_router
 
 logger = logging.getLogger("uvicorn.error")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    create_db_and_tables()
     logger.info("Swagger docs available at http://127.0.0.1:8000/docs")
     yield
 
@@ -36,6 +39,8 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+app.include_router(users_router)
 
 app.add_middleware(
     CORSMiddleware,

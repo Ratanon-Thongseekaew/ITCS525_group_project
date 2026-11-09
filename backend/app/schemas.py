@@ -1,7 +1,32 @@
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+
+class UserRole(StrEnum):
+    ADMIN = "admin"
+    MANAGER = "manager"
+    STAFF = "staff"
+
+
+class UserCreate(BaseModel):
+    username: EmailStr = Field(max_length=254)
+    password: str = Field(min_length=8, max_length=128, repr=False)
+    role: UserRole
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value: str) -> str:
+        return value.lower()
+
+
+class UserRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    username: EmailStr
+    role: UserRole
 
 
 class HealthCheck(BaseModel):
