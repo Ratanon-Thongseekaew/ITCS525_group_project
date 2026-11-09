@@ -81,6 +81,8 @@ React Router owns client-side navigation. The current frontend routes are:
 - `/manager` redirects to the manager compliance dashboard.
 - `/manager/compliance-dashboard` and `/admin/compliance-dashboard` render the
   compliance dashboard.
+- `/manager/compliance-dashboard/import` renders the contractor monthly outcome
+  report import page, opened from the dashboard's Import Monthly Files button.
 - `/manager/resale-bins` and `/manager/recycle-bins` render placeholder pages.
 - `/staff/sorting` renders the garment sorting workspace. `/staff` has no route;
   the login page and sidebar logo send staff users to `/staff/sorting`.
