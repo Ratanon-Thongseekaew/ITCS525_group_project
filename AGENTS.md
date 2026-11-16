@@ -4,6 +4,11 @@ Read [`AI_README.md`](./AI_README.md) before editing this repository. It is the
 source of truth for architecture, API contracts, commands, conventions, and the
 completion checklist.
 
+Use the repository skill at
+[`textile-track-development`](./.agents/skills/textile-track-development/SKILL.md)
+for implementation and code-review work. Run `npm run guardrails` before
+finishing; the same executable policies run in the commit workflow and CI.
+
 Repository-wide requirements:
 
 - Preserve the React/Vite frontend and FastAPI backend monorepo structure.

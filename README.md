@@ -110,7 +110,7 @@ development:
 
 ```bash
 npm run db:revision -- -m "describe the schema change"
-python -m alembic -c backend/alembic.ini check
+npm run db:check
 npm run db:rollback
 ```
 
@@ -198,6 +198,8 @@ npm run build
 npm run test
 npm run lint
 npm run format:check
+npm run guardrails
+npm run test:guardrails
 ```
 
 You can run each side independently with `npm run dev:frontend` and `npm run dev:backend`.
@@ -209,10 +211,11 @@ GitHub Actions runs `.github/workflows/ci.yaml` for pull requests targeting
 three independent checks:
 
 - **Backend checks:** start MySQL 8.4, install `backend[dev]` on Python 3.12,
-  apply every Alembic migration, run Ruff lint and formatting checks, then run
-  Pytest.
+  apply every Alembic migration, verify SQLModel metadata with `alembic check`,
+  run Ruff lint and formatting checks, then run Pytest.
 - **Frontend checks:** install the locked npm dependencies on Node.js 24, check
-  Prettier and ESLint, run Vitest, then create a production build.
+  and test the executable project guardrails, check Prettier and ESLint, run
+  Vitest, then create a production build.
 - **Compose validation:** resolve `compose.yaml` with non-production CI values
   and validate its syntax without starting MySQL.
 
@@ -251,8 +254,9 @@ and the backend test suite pass before Commitizen creates the commit.
 
 The interactive command performs these steps in order:
 
-1. Confirm that at least one file has been staged with `git add`.
-2. Run lint-staged against the staged files.
+1. Run and test the executable project guardrails.
+2. Confirm that at least one file has been staged with `git add` and run
+   lint-staged against the staged files.
 3. Run the complete backend Pytest suite.
 4. Stop immediately if lint, formatting, or tests fail.
 5. After all checks pass, open the Commitizen prompts configured in
