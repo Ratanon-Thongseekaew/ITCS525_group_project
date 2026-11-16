@@ -2,6 +2,16 @@ export interface Greeting {
   message: string
 }
 
+export interface ResaleStoreSummary {
+  id: string
+  name: string
+  actual_value: number
+}
+
+export interface ResaleStoreSummaryResponse {
+  stores: ResaleStoreSummary[]
+}
+
 export type BinType = 'resale' | 'recycle'
 export type BinStatus = 'active' | 'closed'
 export type GarmentCondition = 'good_reusable' | 'worn_recyclable'
@@ -80,6 +90,13 @@ async function handleResponse<T>(response: Response): Promise<T> {
 export async function getGreeting(): Promise<Greeting> {
   const response = await fetch(`${API_URL}/api/greeting`)
   return handleResponse<Greeting>(response)
+}
+
+export async function getResaleStoreSummary(
+  signal?: AbortSignal,
+): Promise<ResaleStoreSummaryResponse> {
+  const response = await fetch(`${API_URL}/api/resale-bins/summary`, { signal })
+  return handleResponse<ResaleStoreSummaryResponse>(response)
 }
 
 export async function getSortingStats(): Promise<SortingStatsResponse> {

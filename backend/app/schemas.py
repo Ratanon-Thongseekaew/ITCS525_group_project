@@ -37,6 +37,16 @@ class Greeting(BaseModel):
     message: str
 
 
+class ResaleStoreSummary(BaseModel):
+    id: str
+    name: str
+    actual_value: float = Field(ge=0)
+
+
+class ResaleStoreSummaryResponse(BaseModel):
+    stores: list[ResaleStoreSummary]
+
+
 class BinType(StrEnum):
     RESALE = "resale"
     RECYCLE = "recycle"

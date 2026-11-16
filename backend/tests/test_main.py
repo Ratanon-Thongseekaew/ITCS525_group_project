@@ -17,6 +17,20 @@ def test_greeting() -> None:
     assert response.json() == {"message": "Hello from FastAPI!"}
 
 
+def test_get_resale_bin_summary() -> None:
+    response = client.get("/api/resale-bins/summary")
+
+    assert response.status_code == 200
+    stores = response.json()["stores"]
+    assert len(stores) == 5
+    assert stores[0] == {
+        "id": "store-001",
+        "name": "Bangkok Central",
+        "actual_value": 125000.0,
+    }
+    assert sum(store["actual_value"] for store in stores[:5]) == 552500.0
+
+
 def test_get_bins() -> None:
     response = client.get("/api/bins")
     assert response.status_code == 200

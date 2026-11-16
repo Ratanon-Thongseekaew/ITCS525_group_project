@@ -14,6 +14,7 @@ import { PotentialRevenueAnalysisPage } from './pages/PotentialRevenueAnalysisPa
 import { ProcessedBinsRecordPage } from './pages/ProcessedBinsRecordPage'
 import { UserManagementPage } from './pages/UserManagementPage'
 import ContractorReportImportPage from './pages/ContractorReportImportPage'
+import ResaleBinRecords from './components/ResaleBinRecords'
 
 function App() {
   return (
@@ -28,16 +29,7 @@ function App() {
           />
           <Route path="manager" element={<ManagerPage />} />
           <Route path="manager/compliance-dashboard" element={<ComplianceDashboardPage />} />
-          <Route
-            path="manager/resale-bins"
-            element={
-              <WorkspaceFeaturePlaceholderPage
-                role="manager"
-                title="Resale Bin Records"
-                description="View and manage garments prepared for direct resale."
-              />
-            }
-          />
+          <Route path="manager/resale-bins" element={<ResaleBinRecords />} />
           <Route
             path="manager/recycle-bins"
             element={
