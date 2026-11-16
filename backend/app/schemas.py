@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -38,7 +39,7 @@ class Greeting(BaseModel):
 
 
 class ResaleStoreSummary(BaseModel):
-    id: str
+    id: int
     name: str
     actual_value: float = Field(ge=0)
 
@@ -125,3 +126,119 @@ class SortGarmentResponse(BaseModel):
     garment: GarmentItem
     bin: BinRecord
     message: str
+
+
+class ContractorDispositionWeights(BaseModel):
+    """The six mutually exclusive contractor disposition categories."""
+
+    upcycled_kg: Decimal = Field(ge=0)
+    fibre_to_fibre_kg: Decimal = Field(ge=0)
+    downcycled_kg: Decimal = Field(ge=0)
+    exported_kg: Decimal = Field(ge=0)
+    landfilled_kg: Decimal = Field(ge=0)
+    incinerated_energy_recovery_kg: Decimal = Field(ge=0)
+
+
+class ContractorReportValidationRowRequest(BaseModel):
+    row: int = Field(ge=1)
+    received_kg: Decimal = Field(ge=0)
+    dispositions: ContractorDispositionWeights
+
+
+class ContractorReportValidationRequest(BaseModel):
+    rows: list[ContractorReportValidationRowRequest] = Field(min_length=1)
+
+
+class ContractorReportValidationRowResult(BaseModel):
+    row: int
+    categorized_weight_kg: float = Field(ge=0)
+    uncategorized_weight_kg: float = Field(ge=0)
+    is_valid: bool
+    errors: list[str]
+
+
+class ContractorReportValidationResponse(BaseModel):
+    rows: list[ContractorReportValidationRowResult]
+
+
+class DashboardFrequency(StrEnum):
+    MONTHLY = "monthly"
+    QUARTERLY = "quarterly"
+    ANNUAL = "annual"
+
+
+class DashboardExceptionStatus(StrEnum):
+    PENDING = "pending"
+    DISPUTED = "disputed"
+
+
+class DashboardSiteOption(BaseModel):
+    id: int
+    code: str
+    name: str
+
+
+class DashboardContractorOption(BaseModel):
+    id: int
+    name: str
+
+
+class DashboardFilterOptions(BaseModel):
+    sites: list[DashboardSiteOption]
+    contractors: list[DashboardContractorOption]
+    available_years: list[int]
+
+
+class DashboardSummary(BaseModel):
+    recycling_bins_collected: int = Field(ge=0)
+    recycling_bins_reported: int = Field(ge=0)
+    pending_bins: int = Field(ge=0)
+    disputed_handoffs: int = Field(ge=0)
+    recovery_rate: float = Field(ge=0, le=100)
+    diverted_weight_kg: float = Field(ge=0)
+    total_recorded_weight_kg: float = Field(ge=0)
+    total_reported_weight_kg: float = Field(ge=0)
+    weight_variance_kg: float
+
+
+class DashboardOutcome(BaseModel):
+    category: str
+    weight_kg: float = Field(ge=0)
+    percentage: float = Field(ge=0, le=100)
+
+
+class DashboardMonthlyOutcome(BaseModel):
+    month: int = Field(ge=1, le=12)
+    month_label: str
+    upcycled: float = Field(ge=0)
+    fibre_to_fibre: float = Field(ge=0)
+    downcycled: float = Field(ge=0)
+    exported: float = Field(ge=0)
+    landfilled: float = Field(ge=0)
+    incinerated_energy_recovery: float = Field(ge=0)
+
+
+class DashboardException(BaseModel):
+    handoff_id: int
+    bin_code: str
+    contractor_name: str
+    handoff_date: datetime
+    item_count: int = Field(ge=0)
+    staff_weight_kg: float
+    driver_weight_kg: float
+    variance_percent: float
+    has_contractor_report: bool
+    status: DashboardExceptionStatus
+
+
+class DashboardResponse(BaseModel):
+    frequency: DashboardFrequency
+    year: int
+    month: int | None = None
+    quarter: int | None = None
+    period_label: str
+    summary: DashboardSummary
+    outcomes: list[DashboardOutcome]
+    monthly_outcomes: list[DashboardMonthlyOutcome]
+    exceptions: list[DashboardException]
+    filters: DashboardFilterOptions

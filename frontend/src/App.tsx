@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router'
 import { AppLayout } from './components/AppLayout'
 import { GarmentSortingWorkspace } from './components/GarmentSortingWorkspace'
+import ResaleBinRecords from './components/ResaleBinRecords'
 import { WorkspaceFeaturePlaceholderPage } from './components/WorkspaceFeaturePlaceholderPage'
 import { Toaster } from './components/ui/sonner'
 import { ComplianceDashboardPage } from './pages/ComplianceDashboardPage'
@@ -14,7 +15,6 @@ import { PotentialRevenueAnalysisPage } from './pages/PotentialRevenueAnalysisPa
 import { ProcessedBinsRecordPage } from './pages/ProcessedBinsRecordPage'
 import { UserManagementPage } from './pages/UserManagementPage'
 import ContractorReportImportPage from './pages/ContractorReportImportPage'
-import ResaleBinRecords from './components/ResaleBinRecords'
 
 function App() {
   return (
@@ -23,12 +23,9 @@ function App() {
         <Route index element={<LoginPage />} />
         <Route path="login" element={<LoginPage />} />
         <Route element={<AppLayout />}>
-          <Route
-            path="manager/compliance-dashboard/import"
-            element={<ContractorReportImportPage />}
-          />
           <Route path="manager" element={<ManagerPage />} />
           <Route path="manager/compliance-dashboard" element={<ComplianceDashboardPage />} />
+          <Route path="manager/import" element={<ContractorReportImportPage />} />
           <Route path="manager/resale-bins" element={<ResaleBinRecords />} />
           <Route
             path="manager/recycle-bins"
@@ -40,6 +37,7 @@ function App() {
               />
             }
           />
+          <Route path="manager/recycle-bin-handoff" element={<NewBinsForHandoffPage />} />
           <Route path="staff/sorting" element={<GarmentSortingWorkspace />} />
           <Route path="staff/direct-resale" element={<DirectResalePage />} />
           <Route

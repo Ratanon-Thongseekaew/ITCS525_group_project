@@ -3,7 +3,7 @@ export interface Greeting {
 }
 
 export interface ResaleStoreSummary {
-  id: string
+  id: number
   name: string
   actual_value: number
 }
@@ -77,6 +77,121 @@ export interface SortGarmentResponse {
   message: string
 }
 
+export interface ContractorDispositionWeights {
+  upcycled_kg: number
+  fibre_to_fibre_kg: number
+  downcycled_kg: number
+  exported_kg: number
+  landfilled_kg: number
+  incinerated_energy_recovery_kg: number
+}
+
+export interface ContractorReportValidationRowRequest {
+  row: number
+  received_kg: number
+  dispositions: ContractorDispositionWeights
+}
+
+export interface ContractorReportValidationRowResult {
+  row: number
+  categorized_weight_kg: number
+  uncategorized_weight_kg: number
+  is_valid: boolean
+  errors: string[]
+}
+
+export interface ContractorReportValidationResponse {
+  rows: ContractorReportValidationRowResult[]
+}
+
+export type DashboardFrequency = 'monthly' | 'quarterly' | 'annual'
+export type DashboardExceptionStatus = 'pending' | 'disputed'
+
+export interface DashboardFilters {
+  frequency: DashboardFrequency
+  year: number
+  month?: number
+  quarter?: number
+  site_id?: number
+  contractor_id?: number
+}
+
+export interface DashboardSiteOption {
+  id: number
+  code: string
+  name: string
+}
+
+export interface DashboardContractorOption {
+  id: number
+  name: string
+}
+
+export interface DashboardSummary {
+  recycling_bins_collected: number
+  recycling_bins_reported: number
+  pending_bins: number
+  disputed_handoffs: number
+  recovery_rate: number
+  diverted_weight_kg: number
+  total_recorded_weight_kg: number
+  total_reported_weight_kg: number
+  weight_variance_kg: number
+}
+
+export interface DashboardOutcome {
+  category:
+    | 'upcycled'
+    | 'fibre_to_fibre'
+    | 'downcycled'
+    | 'exported'
+    | 'landfilled'
+    | 'incinerated_energy_recovery'
+  weight_kg: number
+  percentage: number
+}
+
+export interface DashboardMonthlyOutcome {
+  month: number
+  month_label: string
+  upcycled: number
+  fibre_to_fibre: number
+  downcycled: number
+  exported: number
+  landfilled: number
+  incinerated_energy_recovery: number
+}
+
+export interface DashboardException {
+  handoff_id: number
+  bin_code: string
+  contractor_name: string
+  handoff_date: string
+  item_count: number
+  staff_weight_kg: number
+  driver_weight_kg: number
+  variance_percent: number
+  has_contractor_report: boolean
+  status: DashboardExceptionStatus
+}
+
+export interface DashboardResponse {
+  frequency: DashboardFrequency
+  year: number
+  month: number | null
+  quarter: number | null
+  period_label: string
+  summary: DashboardSummary
+  outcomes: DashboardOutcome[]
+  monthly_outcomes: DashboardMonthlyOutcome[]
+  exceptions: DashboardException[]
+  filters: {
+    sites: DashboardSiteOption[]
+    contractors: DashboardContractorOption[]
+    available_years: number[]
+  }
+}
+
 const API_URL = import.meta.env.VITE_API_URL ?? ''
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -97,6 +212,42 @@ export async function getResaleStoreSummary(
 ): Promise<ResaleStoreSummaryResponse> {
   const response = await fetch(`${API_URL}/api/resale-bins/summary`, { signal })
   return handleResponse<ResaleStoreSummaryResponse>(response)
+}
+
+export async function getDashboard(
+  filters: DashboardFilters,
+  signal?: AbortSignal,
+): Promise<DashboardResponse> {
+  const params = new URLSearchParams({
+    frequency: filters.frequency,
+    year: String(filters.year),
+  })
+  if (filters.month !== undefined) {
+    params.set('month', String(filters.month))
+  }
+  if (filters.quarter !== undefined) {
+    params.set('quarter', String(filters.quarter))
+  }
+  if (filters.site_id !== undefined) {
+    params.set('site_id', String(filters.site_id))
+  }
+  if (filters.contractor_id !== undefined) {
+    params.set('contractor_id', String(filters.contractor_id))
+  }
+
+  const response = await fetch(`${API_URL}/api/dashboard?${params.toString()}`, { signal })
+  return handleResponse<DashboardResponse>(response)
+}
+
+export async function validateContractorReport(
+  rows: ContractorReportValidationRowRequest[],
+): Promise<ContractorReportValidationResponse> {
+  const response = await fetch(`${API_URL}/api/contractor-reports/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows }),
+  })
+  return handleResponse<ContractorReportValidationResponse>(response)
 }
 
 export async function getSortingStats(): Promise<SortingStatsResponse> {

@@ -4,6 +4,7 @@ import {
   Recycle,
   Shirt,
   UserPlus,
+  FileSpreadsheet,
   type LucideIcon,
 } from 'lucide-react'
 import type { WorkspaceRole } from '@/types/workspace'
@@ -38,6 +39,12 @@ export const workspaceNavigation: readonly WorkspaceNavigationItem[] = [
     label: 'Recycle Bin Records',
     segment: 'recycle-bins',
     icon: Recycle,
+    roles: ['manager'],
+  },
+  {
+    label: 'Import Data',
+    segment: 'import',
+    icon: FileSpreadsheet,
     roles: ['manager'],
   },
   {

@@ -2,7 +2,7 @@ import hashlib
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session, create_engine, select
+from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
 
 from app import database
@@ -16,6 +16,7 @@ def client(monkeypatch):
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
     monkeypatch.setattr(database, "get_engine", lambda: engine)
+    SQLModel.metadata.create_all(engine)
     with TestClient(app) as test_client:
         yield test_client, engine
     engine.dispose()
@@ -84,6 +85,7 @@ def test_missing_user_and_empty_list(client):
 
 def test_mysql_configuration(monkeypatch):
     monkeypatch.setattr(database, "load_dotenv", lambda _: None)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("MYSQL_PASSWORD", "test-only@:/password")
     monkeypatch.setenv("MYSQL_USER", "test_user")
     monkeypatch.setenv("MYSQL_DATABASE", "test_db")
@@ -103,6 +105,7 @@ def test_mysql_configuration(monkeypatch):
 
 def test_missing_database_password(monkeypatch):
     monkeypatch.setattr(database, "load_dotenv", lambda _: None)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("MYSQL_PASSWORD", raising=False)
     database.get_engine.cache_clear()
     with pytest.raises(RuntimeError, match="MYSQL_PASSWORD"):

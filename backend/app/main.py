@@ -5,7 +5,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from .database import create_db_and_tables
+from .contractor_reports import router as contractor_reports_router
+from .dashboard import router as dashboard_router
+from .resale import router as resale_router
 from .schemas import (
     ActiveBinsResponse,
     BinCloseRequest,
@@ -17,8 +19,6 @@ from .schemas import (
     GarmentSortRequest,
     Greeting,
     HealthCheck,
-    ResaleStoreSummary,
-    ResaleStoreSummaryResponse,
     SortGarmentResponse,
     SortingStatsResponse,
 )
@@ -30,7 +30,6 @@ logger = logging.getLogger("uvicorn.error")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    create_db_and_tables()
     logger.info("Swagger docs available at http://127.0.0.1:8000/docs")
     yield
 
@@ -43,6 +42,9 @@ app = FastAPI(
 )
 
 app.include_router(users_router)
+app.include_router(dashboard_router)
+app.include_router(contractor_reports_router)
+app.include_router(resale_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -61,25 +63,6 @@ async def health_check() -> HealthCheck:
 @app.get("/api/greeting", response_model=Greeting, tags=["example"])
 async def greeting() -> Greeting:
     return Greeting(message="Hello from FastAPI!")
-
-
-@app.get(
-    "/api/resale-bins/summary",
-    response_model=ResaleStoreSummaryResponse,
-    tags=["resale bins"],
-)
-async def get_resale_bin_summary() -> ResaleStoreSummaryResponse:
-    """Return demo resale values until store and resale tables are available."""
-
-    return ResaleStoreSummaryResponse(
-        stores=[
-            ResaleStoreSummary(id="store-001", name="Bangkok Central", actual_value=125000),
-            ResaleStoreSummary(id="store-002", name="Siam Square", actual_value=98000),
-            ResaleStoreSummary(id="store-003", name="Chiang Mai", actual_value=85500),
-            ResaleStoreSummary(id="store-004", name="Phuket", actual_value=142000),
-            ResaleStoreSummary(id="store-005", name="Khon Kaen", actual_value=102000),
-        ]
-    )
 
 
 # -------------------------------------------------------------------------

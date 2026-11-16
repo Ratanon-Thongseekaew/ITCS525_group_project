@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 
 export interface DataSourceItem {
-  id: string
+  id: string | number
   name: string
   actualValue: number
   color: string
