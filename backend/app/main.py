@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from .database import create_db_and_tables
 from .schemas import (
     ActiveBinsResponse,
     BinCloseRequest,
@@ -28,7 +27,6 @@ logger = logging.getLogger("uvicorn.error")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    create_db_and_tables()
     logger.info("Swagger docs available at http://127.0.0.1:8000/docs")
     yield
 

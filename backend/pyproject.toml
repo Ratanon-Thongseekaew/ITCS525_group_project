@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "FastAPI backend for the React monorepo starter"
 requires-python = ">=3.11"
 dependencies = [
+  "alembic>=1.14,<2",
   "email-validator>=2.2,<3",
   "fastapi>=0.115,<0.116",
   "pymysql[rsa]>=1.1,<2",

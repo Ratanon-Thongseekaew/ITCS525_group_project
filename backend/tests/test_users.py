@@ -2,7 +2,7 @@ import hashlib
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session, create_engine, select
+from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
 
 from app import database
@@ -16,6 +16,7 @@ def client(monkeypatch):
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
     monkeypatch.setattr(database, "get_engine", lambda: engine)
+    SQLModel.metadata.create_all(engine)
     with TestClient(app) as test_client:
         yield test_client, engine
     engine.dispose()
