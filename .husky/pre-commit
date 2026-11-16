@@ -1,3 +1,8 @@
+if [ "$ALLOW_NPM_COMMIT" != "1" ]; then
+  echo "Direct commits are disabled. Use: npm run commit"
+  exit 1
+fi
+
 if [ "$SKIP_LINT_STAGED" = "1" ]; then
   exit 0
 fi

@@ -245,35 +245,32 @@ git add .
 npm run commit
 ```
 
+Direct `git commit` and commits from editor Source Control are intentionally
+blocked by the Husky pre-commit hook. Use `npm run commit` so staged-file checks
+and the backend test suite pass before Commitizen creates the commit.
+
 The interactive command performs these steps in order:
 
 1. Confirm that at least one file has been staged with `git add`.
 2. Run lint-staged against the staged files.
-3. Stop immediately if ESLint, Prettier, or Ruff fails.
-4. After all checks pass, open the Commitizen prompts configured in
+3. Run the complete backend Pytest suite.
+4. Stop immediately if lint, formatting, or tests fail.
+5. After all checks pass, open the Commitizen prompts configured in
    `cz.config.cjs` to select the change type and scope, then enter the subject,
    optional body, breaking changes, and related issues. Available scopes are
    `api`, `admin`, `web`, `database`, `ci`, `cd`, `docker`, and `general`.
-5. Create the commit and validate the final message through the `commit-msg`
+6. Create the commit and validate the final message through the `commit-msg`
    hook.
 
-The pre-commit hook is not run twice by the interactive command. Direct commits
-from Git or VS Code still run lint-staged normally.
-
-Manual commits and commits created through VS Code are also supported:
-
-```bash
-git commit -m ":sparkles: feat(web): Add role-based login"
-git commit -m ":bug: fix(api): Fix role redirect"
-git commit -m ":memo: docs(general): Update project documentation"
-```
+The interactive command marks only its internal Commitizen commit as approved,
+so the pre-commit hook does not repeat checks that already passed.
 
 See the complete Gitmoji list at https://gitmoji.dev.
 
-The Python hook uses the project-local `.venv` automatically when available,
-so commits created from VS Code do not require an activated terminal. The
-environment must still be created and have `backend[dev]` installed as described
-in the installation section.
+The Pytest wrapper uses `uv` with `backend/uv.lock` when available, then falls
+back to the project-local `.venv`. `npm run commit` therefore does not require
+an activated terminal. Without `uv`, the virtual environment must contain
+`backend[dev]` as described in the installation section.
 
 # ITCS525_group_project
 

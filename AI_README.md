@@ -241,7 +241,7 @@ npm run test            # Run frontend tests, then backend tests
 npm run lint            # Run ESLint, then Ruff
 npm run format          # Format frontend/docs and Python files
 npm run format:check    # Check formatting without modifying files
-npm run commit          # Create a Commitizen/Gitmoji commit
+npm run commit          # Lint, test backend, then create a Commitizen commit
 ```
 
 ## Continuous integration
@@ -280,10 +280,15 @@ python -m ruff check backend
   emoji and GitHub-style shortcodes are accepted by the validator.
 - Use `npm run commit` to run lint-staged and then open the Commitizen prompt
   backed by `cz-customizable` and `cz.config.cjs`. A valid message may also be
-  entered manually in VS Code's Source Control commit field.
+  entered through the Commitizen prompt.
+- Direct `git commit` and editor Source Control commits are blocked by the
+  Husky pre-commit hook. All normal commits must use `npm run commit`, which
+  runs lint-staged and the full backend Pytest suite before opening Commitizen.
+- The Pytest wrapper prefers an isolated `uv` environment locked by
+  `backend/uv.lock` and falls back to the project-local `.venv` when `uv` is not
+  installed.
 - The Commitizen npm script sets `SKIP_LINT_STAGED=1` after its initial checks,
-  preventing the resulting `git commit` from running lint-staged twice. Direct
-  Git and VS Code commits still use the normal pre-commit hook.
+  preventing its approved internal `git commit` from running lint-staged twice.
 - Commitizen scopes are selected from `api`, `admin`, `web`,
   `database`, `ci`, `cd`, `docker`, or `general`. A no-scope option is also
   available; update the `scopes` array in `cz.config.cjs` when the
