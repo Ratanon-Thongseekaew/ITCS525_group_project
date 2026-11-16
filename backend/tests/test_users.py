@@ -85,6 +85,7 @@ def test_missing_user_and_empty_list(client):
 
 def test_mysql_configuration(monkeypatch):
     monkeypatch.setattr(database, "load_dotenv", lambda _: None)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("MYSQL_PASSWORD", "test-only@:/password")
     monkeypatch.setenv("MYSQL_USER", "test_user")
     monkeypatch.setenv("MYSQL_DATABASE", "test_db")
@@ -104,6 +105,7 @@ def test_mysql_configuration(monkeypatch):
 
 def test_missing_database_password(monkeypatch):
     monkeypatch.setattr(database, "load_dotenv", lambda _: None)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("MYSQL_PASSWORD", raising=False)
     database.get_engine.cache_clear()
     with pytest.raises(RuntimeError, match="MYSQL_PASSWORD"):
