@@ -22,12 +22,9 @@ function App() {
         <Route index element={<LoginPage />} />
         <Route path="login" element={<LoginPage />} />
         <Route element={<AppLayout />}>
-          <Route
-            path="manager/compliance-dashboard/import"
-            element={<ContractorReportImportPage />}
-          />
           <Route path="manager" element={<ManagerPage />} />
           <Route path="manager/compliance-dashboard" element={<ComplianceDashboardPage />} />
+          <Route path="manager/import" element={<ContractorReportImportPage />} />
           <Route
             path="manager/resale-bins"
             element={
@@ -48,6 +45,7 @@ function App() {
               />
             }
           />
+          <Route path="manager/recycle-bin-handoff" element={<NewBinsForHandoffPage />} />
           <Route path="staff/sorting" element={<GarmentSortingWorkspace />} />
           <Route path="staff/direct-resale" element={<DirectResalePage />} />
           <Route
