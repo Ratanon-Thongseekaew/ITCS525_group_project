@@ -27,7 +27,7 @@ function App() {
           <Route path="manager/compliance-dashboard" element={<ComplianceDashboardPage />} />
           <Route path="manager/import" element={<ContractorReportImportPage />} />
           <Route path="manager/resale-bins" element={<ResaleBinRecords />} />
-          <Route
+          {/* <Route
             path="manager/recycle-bins"
             element={
               <WorkspaceFeaturePlaceholderPage
@@ -36,7 +36,7 @@ function App() {
                 description="Track recycling bins, contractor pickups, and reported outcomes."
               />
             }
-          />
+          /> */}
           <Route path="manager/recycle-bin-handoff" element={<NewBinsForHandoffPage />} />
           <Route path="staff/sorting" element={<GarmentSortingWorkspace />} />
           <Route path="staff/direct-resale" element={<DirectResalePage />} />

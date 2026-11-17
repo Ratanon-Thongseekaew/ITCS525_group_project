@@ -5,7 +5,7 @@ import { getResaleStoreSummary, type ResaleStoreSummary } from '@/api'
 import Converge, { type DataSourceItem } from '@/lib/react-vibe/Converage'
 
 const STORE_COLORS = ['#10a37f', '#d97757', '#8ab4f8', '#4d6bfe', '#999784']
-const STORE_POSITIONS = [100, 180, 260, 340, 420]
+const STORE_POSITIONS = [120, 210, 300, 390, 480]
 
 function toDataSources(stores: ResaleStoreSummary[]): DataSourceItem[] {
   return stores.slice(0, 5).map((store, index) => ({

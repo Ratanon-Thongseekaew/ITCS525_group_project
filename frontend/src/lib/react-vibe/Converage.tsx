@@ -41,17 +41,19 @@ export default function Converge({
   dataSources = [],
 }: ConvergeProps) {
   // Canvas layout coordinates
-  const startX = 260
-  const endX = 600
-  const endY = 220 // Adjusted slightly up to center between the 4 items
+  const startX = 300
+  const endX = 780
+  const endY = 300
   const visibleSources = dataSources.slice(0, 5)
   const totalActualValue = visibleSources.reduce((total, source) => total + source.actualValue, 0)
-  const formatActualValue = (value: number) =>
-    new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'THB',
-      maximumFractionDigits: 0,
-    }).format(value)
+  const formatActualValue = (value: number) => {
+    const displayValue =
+      value >= 1000
+        ? `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(value / 1000)}K`
+        : new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value)
+
+    return `${displayValue}฿`
+  }
 
   // Generate smooth bezier curves for each source based on CurveRadius
   const generatePath = (startY: number) => {
@@ -61,23 +63,24 @@ export default function Converge({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[#050505] flex items-center justify-center p-4 font-sans transition-colors duration-300">
+    <div className="flex w-full items-center justify-center bg-gray-50 font-sans transition-colors duration-300 dark:bg-[#050505]">
       <div className="w-full overflow-x-auto custom-scrollbar flex justify-start md:justify-center">
         {/* Main Container */}
-        <div className="w-[850px] h-[500px] relative shrink-0 bg-white dark:bg-[#0a0a0a] border border-gray-200 dark:border-[#1a1a1a] rounded-xl overflow-hidden shadow-xl dark:shadow-2xl transition-colors duration-300">
+        <div className="relative h-[600px] w-[1050px] shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl transition-colors duration-300 dark:border-[#1a1a1a] dark:bg-[#0a0a0a] dark:shadow-2xl">
           {/* Top Header */}
           <div className="absolute top-6 left-8 right-8 flex justify-between items-center z-20 font-mono text-sm tracking-wider">
             <div className="text-gray-500 font-semibold transition-colors duration-300">
               {headerText}
             </div>
-            <div className="font-bold flex items-center gap-2" style={{ color: CurcePillColor }}>
-              <span className="text-lg">⚡</span> ACTIVE
-            </div>
+            <div
+              className="font-bold flex items-center gap-2"
+              style={{ color: CurcePillColor }}
+            ></div>
           </div>
 
           {/* SVG Connecting Lines & Particles */}
           <svg
-            viewBox="0 0 850 500"
+            viewBox="0 0 1050 600"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
             className="absolute inset-0 w-full h-full pointer-events-none z-10"
