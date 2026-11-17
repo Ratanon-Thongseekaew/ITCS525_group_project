@@ -16,9 +16,9 @@ This is a minimal full-stack monorepo:
 - `compose.yaml` provides the MySQL 8.4 LTS service used for local development.
 - The root `package.json` coordinates both applications. The frontend is an npm
   workspace; the Python backend is managed through `backend/pyproject.toml`.
-- MySQL infrastructure exists, but the backend does not yet have an ORM,
-  migrations, a database driver, or application-level database integration.
-  SQLModel is the planned ORM, but it has not been installed or configured.
+- The backend uses SQLModel as its ORM, PyMySQL as the MySQL driver, and Alembic
+  for versioned schema migrations. Database settings are loaded from the root
+  `.env`, with an optional `DATABASE_URL` override.
   Authentication and deployment configuration also remain unimplemented.
 
 ## Repository map
@@ -45,10 +45,17 @@ This is a minimal full-stack monorepo:
 │   └── package.json
 ├── backend/
 │   ├── app/
+│   │   ├── database.py      Settings, engine, and session dependency
 │   │   ├── main.py          FastAPI app, middleware, routes, and lifespan
+│   │   ├── models.py        SQLModel tables and database enums
 │   │   └── schemas.py       Pydantic response models
+│   ├── alembic/             Migration environment and versioned revisions
+│   ├── alembic.ini          Alembic configuration
 │   ├── tests/
-│   │   └── test_main.py     API tests using FastAPI TestClient
+│   │   ├── test_database.py SQLModel and migration tests
+│   │   ├── test_main.py     API and sorting tests
+│   │   └── test_users.py    User API and database tests
+│   ├── uv.lock              Locked Python dependency graph
 │   └── pyproject.toml       Python package and tool configuration
 ├── .github/
 │   └── workflows/
@@ -74,6 +81,34 @@ During local development:
 5. FastAPI permits requests from `http://localhost:5173` through CORS.
 6. Docker Compose exposes MySQL only at `127.0.0.1:${MYSQL_PORT:-3307}`. Other
    containers in the Compose project use `mysql:3306`.
+7. SQLModel connects through `backend/app/database.py`; Alembic is the only
+   supported way to create or update persistent schema. Application startup
+   does not call `SQLModel.metadata.create_all()`.
+
+## Database schema
+
+The schema preserves the merged `User(username, password_hash, role)` model and
+adds the original project scope plus the four change requests:
+
+- `sites`, `users`, and `user_sites` provide multi-site ownership and allow a
+  manager to hold multiple site memberships.
+- `bins` supports resale, recycle, and repair bins. `garment_records` supports
+  resale, recycle, and repair/upcycle outcomes.
+- `handoffs` stores both pickup weights, scale-photo reference, driver details,
+  variance, dispute state, and manager approval.
+- `contractor_reports` and `contractor_report_entries` preserve six disposition
+  categories, including energy-recovery incineration separately from landfill.
+- `epr_quarter_reports` and `epr_quarter_site_snapshots` preserve submitted
+  quarterly values. `epr_adjustments` records append-only dated corrections.
+
+The initial migration detects and adopts a compatible `users` table created by
+the SQLModel `create_all()` behavior previously merged into `main`. It fails
+with a clear error if that table is missing required user API columns.
+
+Database constraints cover foreign keys, unique identifiers, nonnegative
+weights, pickup evidence, and disputed-handoff approval. Future API write paths
+must additionally enforce site permissions, exactly one site membership for
+Staff, and source-record locking after EPR submission.
 
 React Router owns client-side navigation. The current frontend routes are:
 
@@ -101,9 +136,10 @@ React Router owns client-side navigation. The current frontend routes are:
   landing page after login; `/admin` has no route.
 - Unknown frontend paths render the local not-found page.
 
-Authentication is intentionally not enforced yet because the project has no
-user database. The demo login requires the suggested username for the selected
-role and any non-empty password. Successful submission shows a success toast
+Authentication is intentionally not enforced yet. The database and `/api/users`
+CRUD routes exist, but the demo login is not connected to password verification
+or sessions. It requires the suggested username for the selected role and any
+non-empty password. Successful submission shows a success toast
 and the shared loading screen for two seconds before redirecting to the selected
 workspace. A username mismatch keeps the form visible with an inline alert and
 an error toast. All workspace URLs remain directly accessible and render without
@@ -197,12 +233,15 @@ npm run db:up           # Start the local MySQL service
 npm run db:down         # Stop Compose services without deleting data
 npm run db:status       # Show MySQL container and health status
 npm run db:logs         # Follow MySQL container logs
+npm run db:migrate      # Apply all committed Alembic migrations
+npm run db:rollback     # Roll back one Alembic revision
+npm run db:revision -- -m "message"  # Autogenerate a new revision
 npm run build           # Type-check and build the frontend
 npm run test            # Run frontend tests, then backend tests
 npm run lint            # Run ESLint, then Ruff
 npm run format          # Format frontend/docs and Python files
 npm run format:check    # Check formatting without modifying files
-npm run commit          # Create a Commitizen/Gitmoji commit
+npm run commit          # Lint, test backend, then create a Commitizen commit
 ```
 
 ## Continuous integration
@@ -210,8 +249,8 @@ npm run commit          # Create a Commitizen/Gitmoji commit
 `.github/workflows/ci.yaml` runs on pull requests targeting `main`, pushes to
 `main`, and manual dispatches. It provides these independent status checks:
 
-- `Backend checks`: Python 3.12, editable `backend[dev]` installation, Ruff
-  lint, Ruff format check, and Pytest.
+- `Backend checks`: Python 3.12, disposable MySQL 8.4, editable `backend[dev]`
+  installation, Alembic migration, Ruff lint, Ruff format check, and Pytest.
 - `Frontend checks`: Node.js 24, `npm ci`, Prettier, ESLint, Vitest, and the
   production Vite build.
 - `Compose validation`: validates the resolved Compose configuration with
@@ -219,9 +258,8 @@ npm run commit          # Create a Commitizen/Gitmoji commit
 
 CI dependency caches are keyed from `backend/pyproject.toml` and the root
 `package-lock.json`. Superseded runs for the same pull request are cancelled.
-MySQL is intentionally absent from CI until SQLModel, migrations, and database
-integration tests exist. When those are added, use a MySQL service container
-and non-production credentials rather than the repository's local `.env`.
+Backend CI starts a disposable MySQL 8.4 service with non-production
+credentials and applies Alembic migrations before running the checks.
 
 Targeted checks:
 
@@ -242,10 +280,15 @@ python -m ruff check backend
   emoji and GitHub-style shortcodes are accepted by the validator.
 - Use `npm run commit` to run lint-staged and then open the Commitizen prompt
   backed by `cz-customizable` and `cz.config.cjs`. A valid message may also be
-  entered manually in VS Code's Source Control commit field.
+  entered through the Commitizen prompt.
+- Direct `git commit` and editor Source Control commits are blocked by the
+  Husky pre-commit hook. All normal commits must use `npm run commit`, which
+  runs lint-staged and the full backend Pytest suite before opening Commitizen.
+- The Pytest wrapper prefers an isolated `uv` environment locked by
+  `backend/uv.lock` and falls back to the project-local `.venv` when `uv` is not
+  installed.
 - The Commitizen npm script sets `SKIP_LINT_STAGED=1` after its initial checks,
-  preventing the resulting `git commit` from running lint-staged twice. Direct
-  Git and VS Code commits still use the normal pre-commit hook.
+  preventing its approved internal `git commit` from running lint-staged twice.
 - Commitizen scopes are selected from `api`, `admin`, `web`,
   `database`, `ci`, `cd`, `docker`, or `general`. A no-scope option is also
   available; update the `scopes` array in `cz.config.cjs` when the
@@ -288,6 +331,15 @@ python -m ruff check backend
 - Follow Ruff's configured 100-character line length and Python 3.11 target.
 - Use the existing `mysql` Compose service for local database work. Do not
   hardcode credentials; read them from `.env` or future application settings.
+- Define persistent models in `backend/app/models.py` and evolve the database
+  only through reviewed Alembic revisions. Do not restore `create_all()` in the
+  application lifespan.
+- Run `alembic check` against an upgraded MySQL database before considering a
+  model change complete.
+- Scope future Staff queries to the user's site; Managers may query one
+  permitted site or all sites in their memberships.
+- Treat submitted EPR snapshots as immutable and record corrections as new
+  dated `epr_adjustments` rows.
 - Preserve the named volume unless the user explicitly requests a database
   reset. `docker compose down -v` deletes local database data and is destructive.
 

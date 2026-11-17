@@ -13,12 +13,16 @@
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f mysql",
     "db:status": "docker compose ps mysql",
+    "db:migrate": "python -m alembic -c backend/alembic.ini upgrade head",
+    "db:rollback": "python -m alembic -c backend/alembic.ini downgrade -1",
+    "db:revision": "python -m alembic -c backend/alembic.ini revision --autogenerate",
     "build": "npm run build --workspace frontend",
     "test": "npm run test --workspace frontend && python -m pytest backend",
+    "test:backend": "node scripts/run-pytest.mjs",
     "lint": "npm run lint --workspace frontend && node scripts/run-ruff.mjs check backend",
     "format": "prettier --write \"**/*.{js,cjs,mjs,jsx,ts,tsx,json,css,md,yml,yaml}\" && node scripts/run-ruff.mjs format backend",
     "format:check": "prettier --check \"**/*.{js,cjs,mjs,jsx,ts,tsx,json,css,md,yml,yaml}\" && node scripts/run-ruff.mjs format --check backend",
-    "commit": "lint-staged && cross-env SKIP_LINT_STAGED=1 cz",
+    "commit": "lint-staged && npm run test:backend && cross-env ALLOW_NPM_COMMIT=1 SKIP_LINT_STAGED=1 cz",
     "prepare": "husky"
   },
   "devDependencies": {
