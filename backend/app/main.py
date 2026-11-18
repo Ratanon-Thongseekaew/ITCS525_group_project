@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+from .auth import router as auth_router
 from .schemas import (
     ActiveBinsResponse,
     BinCloseRequest,
@@ -38,6 +39,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.include_router(auth_router)
 app.include_router(users_router)
 
 app.add_middleware(

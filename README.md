@@ -135,6 +135,22 @@ nonnegative-weight checks, required pickup evidence, and approval before a
 disputed handoff can close. Site-scoped authorization and submitted-quarter
 write blocking must also be enforced by future service/API code.
 
+## Authentication
+
+Set `JWT_SECRET` in the root `.env` (see `.env.example`; at least 32 random
+characters). After the database is migrated, create the first administrator
+with the virtual environment active:
+
+```bash
+python -m app.create_admin admin@example.com
+```
+
+The command prompts for the password. Add `--reset-password` to change the
+password of an existing account. The API then offers `POST /api/auth/login`,
+`GET /api/auth/me`, and administrator-only user management under
+`/api/users` (see Swagger at `http://127.0.0.1:8000/docs`; use **Authorize**
+with the token returned by login).
+
 ## Develop
 
 With the virtual environment active, start both applications:
