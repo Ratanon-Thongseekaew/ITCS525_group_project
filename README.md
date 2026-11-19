@@ -104,6 +104,16 @@ Apply the committed schema after MySQL is healthy:
 npm run db:migrate
 ```
 
+To populate deterministic local data for the compliance dashboard, run:
+
+```bash
+uv run --project backend --locked python backend/seed.py
+```
+
+The dashboard seed is additive and idempotent. It creates two sites and
+January–October 2026 handoff, contractor-report, disposition, and EPR examples
+without deleting existing records.
+
 Create a migration after changing `backend/app/models.py`, verify that the
 metadata matches the migrated database, or roll back one revision during local
 development:
@@ -156,8 +166,8 @@ Vite proxies `/api` requests to FastAPI during development. To point the fronten
 | `/`                                                            | Fullscreen responsive login page                    |
 | `/login`                                                       | Alternate URL for the login page                    |
 | `/manager`                                                     | Redirects to the compliance dashboard               |
-| `/manager/compliance-dashboard`, `/admin/compliance-dashboard` | Compliance dashboard                                |
-| `/manager/compliance-dashboard/import`                         | Contractor monthly outcome report import            |
+| `/manager/compliance-dashboard`, `/admin/compliance-dashboard` | Database-backed compliance dashboard                |
+| `/manager/import`                                              | Contractor monthly outcome report import            |
 | `/manager/resale-bins`                                         | Resale bin records placeholder                      |
 | `/manager/recycle-bins`                                        | Recycle bin records placeholder                     |
 | `/staff/sorting`                                               | Garment sorting workspace                           |
@@ -177,6 +187,21 @@ and `/admin/users` for admins.
 
 The workspace routes are intentionally **not protected** yet, so they can also
 be opened directly during development.
+
+## Dashboard API
+
+`GET /api/dashboard` returns summary metrics, six contractor disposition
+categories, monthly trends, pending/disputed handoffs, and filter options from
+MySQL. It accepts `frequency`, `year`, `month`, `quarter`, `site_id`, and
+`contractor_id` query parameters. Until real authentication is implemented,
+site selection filters data but does not enforce manager membership.
+
+## Contractor report validation
+
+`POST /api/contractor-reports/validate` checks monthly report rows before they
+are saved. `Landfilled` and `Incinerated with energy recovery` remain separate
+categories, categorized weight cannot exceed received weight, and any remaining
+weight is returned as `uncategorized_weight_kg` for review on the import page.
 
 ## Frontend UI
 

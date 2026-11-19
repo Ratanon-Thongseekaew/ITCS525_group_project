@@ -1,0 +1,144 @@
+erDiagram
+    direction LR
+
+    SITE ||--o{ USER_SITE : grants_access
+    USER ||--o{ USER_SITE : belongs_to
+    SITE ||--o{ BIN : owns
+    SITE ||--o{ GARMENT_RECORD : receives
+    USER ||--o{ GARMENT_RECORD : records
+    BIN ||--o{ GARMENT_RECORD : contains
+    SITE ||--o{ HANDOFF : owns
+    BIN ||--o| HANDOFF : handed_off_as
+    CONTRACTOR ||--o{ HANDOFF : collects
+    USER ||--o{ HANDOFF : creates
+    USER ||--o{ HANDOFF : approves
+    SITE ||--o{ CONTRACTOR_REPORT : receives
+    CONTRACTOR ||--o{ CONTRACTOR_REPORT : submits
+    USER ||--o{ CONTRACTOR_REPORT : uploads
+    CONTRACTOR_REPORT ||--o{ CONTRACTOR_REPORT_ENTRY : contains
+    HANDOFF ||--o{ CONTRACTOR_REPORT_ENTRY : reconciled_by
+    USER ||--o{ EPR_QUARTER_REPORT : submits
+    EPR_QUARTER_REPORT ||--o{ EPR_QUARTER_SITE_SNAPSHOT : snapshots
+    SITE ||--o{ EPR_QUARTER_SITE_SNAPSHOT : summarized_in
+    EPR_QUARTER_REPORT ||--o{ EPR_ADJUSTMENT : corrected_by
+    SITE ||--o{ EPR_ADJUSTMENT : applies_to
+    USER ||--o{ EPR_ADJUSTMENT : creates
+
+    SITE {
+        int id PK
+        string code UK
+        string name
+        string timezone_name
+        bool is_active
+    }
+    USER {
+        int id PK
+        string username UK
+        string password_hash
+        enum role
+    }
+    USER_SITE {
+        int id PK
+        int user_id FK
+        int site_id FK
+        bool is_default
+    }
+    CONTRACTOR {
+        int id PK
+        string name UK
+        string contact_name
+        string contact_email
+        bool is_active
+    }
+    BIN {
+        int id PK
+        int site_id FK
+        string code UK
+        enum bin_type
+        enum status
+        int item_count
+        decimal total_weight_kg
+        decimal estimated_value
+        decimal actual_value
+    }
+    GARMENT_RECORD {
+        int id PK
+        int site_id FK
+        int recorded_by_user_id FK
+        int bin_id FK
+        string external_reference UK
+        string category
+        enum outcome
+        decimal weight_kg
+        datetime received_at
+    }
+    HANDOFF {
+        int id PK
+        int site_id FK
+        int bin_id FK, UK
+        int contractor_id FK
+        int created_by_user_id FK
+        int approved_by_user_id FK
+        decimal staff_weight_kg
+        decimal driver_weight_kg
+        decimal weight_variance_percent
+        string scale_photo_url
+        string driver_name
+        string vehicle_plate_number
+        enum status
+    }
+    CONTRACTOR_REPORT {
+        int id PK
+        int site_id FK
+        int contractor_id FK
+        int uploaded_by_user_id FK
+        date report_month UK
+        string source_filename
+        enum status
+        datetime validated_at
+    }
+    CONTRACTOR_REPORT_ENTRY {
+        int id PK
+        int contractor_report_id FK
+        int handoff_id FK
+        enum disposition UK
+        decimal weight_kg
+        enum evidence_status
+        string destination
+        string evidence_reference
+    }
+    EPR_QUARTER_REPORT {
+        int id PK
+        int report_year UK
+        int quarter UK
+        enum status
+        int submitted_by_user_id FK
+        datetime submitted_at
+        datetime locked_at
+    }
+    EPR_QUARTER_SITE_SNAPSHOT {
+        int id PK
+        int epr_quarter_report_id FK
+        int site_id FK
+        decimal total_weight_received_kg
+        decimal resold_weight_kg
+        decimal repaired_weight_kg
+        decimal upcycled_weight_kg
+        decimal fibre_to_fibre_weight_kg
+        decimal downcycled_weight_kg
+        decimal exported_weight_kg
+        decimal landfilled_weight_kg
+        decimal incinerated_energy_recovery_weight_kg
+        decimal recovery_rate
+    }
+    EPR_ADJUSTMENT {
+        int id PK
+        int epr_quarter_report_id FK
+        int site_id FK
+        int created_by_user_id FK
+        enum metric
+        decimal weight_delta_kg
+        string reason
+        date effective_date
+        datetime created_at
+    }
