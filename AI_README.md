@@ -236,12 +236,15 @@ npm run db:logs         # Follow MySQL container logs
 npm run db:migrate      # Apply all committed Alembic migrations
 npm run db:rollback     # Roll back one Alembic revision
 npm run db:revision -- -m "message"  # Autogenerate a new revision
+npm run db:check        # Compare SQLModel metadata with upgraded MySQL
+npm run guardrails      # Enforce repository architecture policies
+npm run test:guardrails # Test the executable policy checker
 npm run build           # Type-check and build the frontend
 npm run test            # Run frontend tests, then backend tests
 npm run lint            # Run ESLint, then Ruff
 npm run format          # Format frontend/docs and Python files
 npm run format:check    # Check formatting without modifying files
-npm run commit          # Lint, test backend, then create a Commitizen commit
+npm run commit          # Guardrails, lint, backend tests, then Commitizen
 ```
 
 ## Continuous integration
@@ -250,9 +253,11 @@ npm run commit          # Lint, test backend, then create a Commitizen commit
 `main`, and manual dispatches. It provides these independent status checks:
 
 - `Backend checks`: Python 3.12, disposable MySQL 8.4, editable `backend[dev]`
-  installation, Alembic migration, Ruff lint, Ruff format check, and Pytest.
+  installation, Alembic migration and metadata check, Ruff lint, Ruff format
+  check, and Pytest.
 - `Frontend checks`: Node.js 24, `npm ci`, Prettier, ESLint, Vitest, and the
-  production Vite build.
+  production Vite build. It also runs and tests the executable project
+  guardrails.
 - `Compose validation`: validates the resolved Compose configuration with
   disposable CI environment values and does not start containers.
 
