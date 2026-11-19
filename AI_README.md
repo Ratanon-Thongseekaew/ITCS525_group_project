@@ -120,7 +120,7 @@ React Router owns client-side navigation. The current frontend routes are:
 - `/manager/import` renders the contractor monthly outcome report import page
   and is available from the manager workspace navigation.
 - `/manager/resale-bins` renders the database-backed top-five store resale
-  summary. `/manager/recycle-bins` remains a placeholder page.
+  summary.
 - `/staff/sorting` renders the garment sorting workspace. `/staff` has no route;
   the login page and sidebar logo send staff users to `/staff/sorting`.
 - `/staff/direct-resale` renders the Direct Resale bins awaiting process, using
@@ -158,8 +158,8 @@ sidebar logo both use: `/manager`, `/staff/sorting`, and `/admin/users`.
 Authenticated workspace screens share `WorkspaceSidebar`, composed from the
 local shadcn sidebar primitives. `frontend/src/config/workspace-navigation.ts`
 owns labels, icons, route segments, and the `roles` arrays used to filter menu
-visibility. Managers see Compliance Dashboard, Resale Bin Records, and Recycle
-Bin Records. Staff see Sorting, Direct Resale, and Recycle Bin Handoff. Admins
+visibility. Managers see Compliance Dashboard, Resale Bin Records, and Import
+Data. Staff see Sorting, Direct Resale, and Recycle Bin Handoff. Admins
 see Compliance Dashboard and User Management. `AppLayout` derives the demo role
 from the URL only for presentation; this is not authentication.
 

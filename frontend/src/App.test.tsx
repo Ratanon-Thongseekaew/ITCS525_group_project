@@ -244,7 +244,7 @@ const staffNavigation = [
   ['Recycle Bin Handoff', '/staff/recycle-bin-handoff'],
 ] as const
 
-const sharedNavigation = ['Compliance Dashboard', 'Resale Bin Records', 'Recycle Bin Records']
+const managerNavigation = ['Compliance Dashboard', 'Resale Bin Records', 'Import Data']
 
 test('shows the Figma navigation in the staff sidebar', () => {
   renderRoute('/staff/sorting')
@@ -253,13 +253,13 @@ test('shows the Figma navigation in the staff sidebar', () => {
   for (const [label, href] of staffNavigation) {
     expect(screen.getByRole('link', { name: label })).toHaveAttribute('href', href)
   }
-  for (const label of [...sharedNavigation, 'User Management']) {
+  for (const label of [...managerNavigation, 'Recycle Bin Records', 'User Management']) {
     expect(screen.queryByRole('link', { name: label })).not.toBeInTheDocument()
   }
 })
 
 test.each([
-  ['/manager', sharedNavigation, false],
+  ['/manager', managerNavigation, false],
   ['/admin/users', ['Compliance Dashboard'], true],
 ])('shows the role sidebar items at %s', (route, visibleNavigation, hasUserManagement) => {
   renderRoute(route)
@@ -270,6 +270,7 @@ test.each([
   for (const [label] of staffNavigation) {
     expect(screen.queryByRole('link', { name: label })).not.toBeInTheDocument()
   }
+  expect(screen.queryByRole('link', { name: 'Recycle Bin Records' })).not.toBeInTheDocument()
   expect(screen.queryByRole('link', { name: 'User Management' }) !== null).toBe(hasUserManagement)
 })
 

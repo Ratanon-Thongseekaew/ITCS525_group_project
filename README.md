@@ -169,7 +169,6 @@ Vite proxies `/api` requests to FastAPI during development. To point the fronten
 | `/manager/compliance-dashboard`, `/admin/compliance-dashboard` | Database-backed compliance dashboard                |
 | `/manager/import`                                              | Contractor monthly outcome report import            |
 | `/manager/resale-bins`                                         | Top-five store resale value summary                 |
-| `/manager/recycle-bins`                                        | Recycle bin records placeholder                     |
 | `/staff/sorting`                                               | Garment sorting workspace                           |
 | `/staff/direct-resale`                                         | Direct resale bins (mock data)                      |
 | `/staff/direct-resale/potential-revenue-analysis`              | Potential revenue analysis (mock data)              |
