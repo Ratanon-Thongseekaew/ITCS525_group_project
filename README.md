@@ -187,6 +187,28 @@ and `/admin/users` for admins.
 The workspace routes are intentionally **not protected** yet, so they can also
 be opened directly during development.
 
+## Quarterly EPR report
+
+On the Compliance Dashboard, select **Export EPR Report**, choose a year and
+quarter, then select **Download CSV** or **Open printable report**. Use
+**Print report** on the printable page to print or save as PDF.
+
+The report covers all sites. The dashboard's site and contractor filters
+apply to the dashboard only. Open quarters use database records, and
+submitted quarters use their saved snapshots. The live report uses recorded
+garment intake weights, resale weights for bins with a recorded sale value,
+garments classified as repair/upcycle, and imported contractor report
+dispositions. Garment weights use the intake quarter and contractor outcomes
+use the report month. Missing garment weights and weight discrepancies are
+shown when present.
+
+Use **Manage EPR Report** to review the all-site draft and confirm **Submit &
+Lock**. For a submitted quarter, use **Add Adjustment** to enter a site, date,
+reason, and one or more signed weight changes. Management shows the original
+and adjusted totals, and CSV and print use the original submitted snapshot.
+Until authentication is connected, select an existing manager or admin account
+to record demo changes.
+
 ## Dashboard API
 
 `GET /api/dashboard` returns summary metrics, six contractor disposition

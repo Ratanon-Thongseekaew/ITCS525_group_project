@@ -117,6 +117,8 @@ React Router owns client-side navigation. The current frontend routes are:
 - `/manager` redirects to the manager compliance dashboard.
 - `/manager/compliance-dashboard` and `/admin/compliance-dashboard` render the
   database-backed compliance dashboard.
+- `/manager/epr-report/print` and `/admin/epr-report/print` render the standalone
+  printable EPR report for the requested `year` and `quarter`.
 - `/manager/import` renders the contractor monthly outcome report import page
   and is available from the manager workspace navigation.
 - `/manager/resale-bins` renders the database-backed top-five store resale
@@ -230,6 +232,33 @@ the backend when real authentication is added.
 Returns the five sites with the highest summed `actual_value` across resale
 bins. The manager resale page displays each site and calculates the combined
 actual value of the returned sites.
+
+### `GET /api/epr/quarterly-report` (EPR change request)
+
+Requires `year` and `quarter` (1–4). Returns one all-site aggregate for both CSV
+download and the printable view. Open quarters group garment weights by
+`received_at` and imported contractor dispositions by `report_month`. A
+recorded resale-bin sale value is the available evidence for resale, and the
+stored repair/upcycle classification is used for repaired weight. Submitted
+quarters use saved site snapshots.
+
+Recovery is the combined weight of resale, repair and the five non-landfill
+dispositions, divided by total weight received. Uncategorized weight and any
+excess categorized weight are shown separately.
+
+Use `GET /api/epr/quarterly-report/management` for draft or submitted totals,
+the adjustment history, and the available demo recording accounts.
+`POST /api/epr/quarterly-report/submit` saves all site snapshots and locks the
+quarter in one transaction. `POST /api/epr/quarterly-report/adjustments` appends
+the selected site's dated changes in one transaction. Both write endpoints take
+the same period query parameters and a demo `actor_id`. The adjustment request
+includes the latest adjustment ID seen by the caller, or null for empty history.
+The export endpoint continues to return the original snapshot after submission.
+
+Future writes to persisted report inputs, including contractor import, must
+call `lock_open_epr_quarter(session, report_date)` before reading or changing
+quarter data, in the same transaction. The helper coordinates with submission
+and returns HTTP 409 for locked periods. The current import validates only.
 
 ### `POST /api/contractor-reports/validate` (EPR change request)
 

@@ -392,9 +392,9 @@ test('shows the compliance dashboard to admins and keeps them in their workspace
     'data-active',
     'true',
   )
-  expect(screen.getByRole('link', { name: 'Export Report' })).toHaveAttribute(
-    'href',
-    '/admin/compliance-dashboard',
+  expect(screen.getByRole('button', { name: 'Export EPR Report' })).toHaveAttribute(
+    'aria-haspopup',
+    'dialog',
   )
 })
 

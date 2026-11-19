@@ -17,6 +17,7 @@ from sqlalchemy import (
 from sqlalchemy import Enum as SAEnum
 from sqlmodel import Field, SQLModel
 
+from .schemas import EprAdjustmentMetric as EprAdjustmentMetric
 from .schemas import UserRole
 
 
@@ -90,18 +91,6 @@ class DispositionCategory(StrEnum):
 class EprReportStatus(StrEnum):
     DRAFT = "draft"
     SUBMITTED = "submitted"
-
-
-class EprAdjustmentMetric(StrEnum):
-    TOTAL_RECEIVED = "total_received"
-    RESOLD = "resold"
-    REPAIRED = "repaired"
-    UPCYCLED = "upcycled"
-    FIBRE_TO_FIBRE = "fibre_to_fibre"
-    DOWNCYCLED = "downcycled"
-    EXPORTED = "exported"
-    LANDFILLED = "landfilled"
-    INCINERATED_ENERGY_RECOVERY = "incinerated_energy_recovery"
 
 
 class TimestampMixin(SQLModel):

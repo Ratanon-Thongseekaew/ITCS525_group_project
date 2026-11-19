@@ -6,6 +6,7 @@ import { WorkspaceFeaturePlaceholderPage } from './components/WorkspaceFeaturePl
 import { Toaster } from './components/ui/sonner'
 import { ComplianceDashboardPage } from './pages/ComplianceDashboardPage'
 import { DirectResalePage } from './pages/DirectResalePage'
+import { EprReportPrintPage } from './pages/EprReportPrintPage'
 import { HandoffRecordsPage } from './pages/HandoffRecordsPage'
 import { LoginPage } from './pages/LoginPage'
 import { ManagerPage } from './pages/ManagerPage'
@@ -22,6 +23,8 @@ function App() {
       <Routes>
         <Route index element={<LoginPage />} />
         <Route path="login" element={<LoginPage />} />
+        <Route path="manager/epr-report/print" element={<EprReportPrintPage />} />
+        <Route path="admin/epr-report/print" element={<EprReportPrintPage />} />
         <Route element={<AppLayout />}>
           <Route path="manager" element={<ManagerPage />} />
           <Route path="manager/compliance-dashboard" element={<ComplianceDashboardPage />} />
