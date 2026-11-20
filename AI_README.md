@@ -45,13 +45,19 @@ This is a minimal full-stack monorepo:
 │   └── package.json
 ├── backend/
 │   ├── app/
+│   │   ├── auth.py          Login/me routes, current-user and admin dependencies
+│   │   ├── create_admin.py  CLI to create the first administrator
 │   │   ├── database.py      Settings, engine, and session dependency
 │   │   ├── main.py          FastAPI app, middleware, routes, and lifespan
 │   │   ├── models.py        SQLModel tables and database enums
-│   │   └── schemas.py       Pydantic response models
+│   │   ├── schemas.py       Pydantic response models
+│   │   ├── security.py      Password hashing and JWT helpers
+│   │   └── users.py         Admin-only user management routes
 │   ├── alembic/             Migration environment and versioned revisions
 │   ├── alembic.ini          Alembic configuration
 │   ├── tests/
+│   │   ├── test_auth.py     Login, token, role-guard and user-management tests
+│   │   ├── test_create_admin.py Administrator CLI tests
 │   │   ├── test_database.py SQLModel and migration tests
 │   │   ├── test_main.py     API and sorting tests
 │   │   └── test_users.py    User API and database tests
@@ -137,8 +143,9 @@ React Router owns client-side navigation. The current frontend routes are:
   landing page after login; `/admin` has no route.
 - Unknown frontend paths render the local not-found page.
 
-Authentication is intentionally not enforced yet. The database and `/api/users`
-CRUD routes exist, but the demo login is not connected to password verification
+The backend provides real authentication (`POST /api/auth/login` issues a JWT and
+all `/api/users` routes require an administrator), but the frontend is not yet
+connected to it: the demo login is not connected to password verification
 or sessions. It requires the suggested username for the selected role and any
 non-empty password. Successful submission shows a success toast
 and the shared loading screen for two seconds before redirecting to the selected
@@ -212,6 +219,28 @@ Marks a bin as closed/sealed, recording completion timestamp and locking it for 
 
 Returns shift intake metrics (total garments sorted today, resale count, recycle count, resale capture percentage).
 
+### Authentication and user management
+
+Passwords are stored as salted scrypt hashes (`scrypt$n$r$p$salt$digest`) and are
+never returned. Tokens are HS256 JWTs signed with `JWT_SECRET` (at least 32
+characters, from the root `.env`) and expire after `ACCESS_TOKEN_MINUTES`
+(default 60). Clients send `Authorization: Bearer <token>`. The user's role is
+read from the database on every request, so role changes and deletions take
+effect immediately. Create the first administrator with
+`python -m app.create_admin <email>` after `npm run db:migrate`.
+
+- `POST /api/auth/login` takes `{username, password}` and returns
+  `{access_token, token_type, user: {id, username, role}}`. Unknown users and wrong
+  passwords both return `401 Invalid username or password`.
+- `GET /api/auth/me` returns the current `UserRead`; `401` without a valid token.
+- `GET /api/users`, `POST /api/users`, `GET /api/users/{id}`,
+  `PATCH /api/users/{id}` (any of `username`, `password`, `role`) and
+  `DELETE /api/users/{id}` require the `admin` role (`401` unauthenticated, `403`
+  otherwise). Usernames are lowercase emails; duplicates return `409`. An admin
+  cannot delete their own account, the last administrator cannot be demoted, and a
+  user referenced by bins, garment records, handoffs, or reports cannot be deleted
+  (`409`) because those foreign keys use `ON DELETE RESTRICT`.
+
 ### `GET /api/dashboard` (Feature 6 and change requests)
 
 Returns the database-backed compliance dashboard in one response: summary
@@ -220,9 +249,9 @@ pending/disputed handoffs, and the available site/contractor/year filter
 options. Query parameters support `frequency` (`monthly`, `quarterly`, or
 `annual`), `year`, `month`, `quarter`, `site_id`, and `contractor_id`.
 
-Authentication is still unimplemented, so the current site selector is a demo
-filter rather than an authorization boundary. Enforce manager memberships in
-the backend when real authentication is added.
+Authentication is now implemented (see above), but the site selector is still a
+demo filter rather than an authorization boundary. Enforce manager memberships in
+the backend before relying on it for access control.
 
 ### `POST /api/contractor-reports/validate` (EPR change request)
 

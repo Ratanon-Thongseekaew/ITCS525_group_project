@@ -290,3 +290,89 @@ export async function getRecentGarments(limit = 15): Promise<GarmentItem[]> {
   const response = await fetch(`${API_URL}/api/garments/recent?limit=${limit}`)
   return handleResponse<GarmentItem[]>(response)
 }
+
+export type UserRole = 'admin' | 'manager' | 'staff'
+
+export interface User {
+  id: number
+  username: string
+  role: UserRole
+}
+
+export interface LoginResponse {
+  access_token: string
+  token_type: string
+  user: User
+}
+
+export interface UserCreateRequest {
+  username: string
+  password: string
+  role: UserRole
+}
+
+export interface UserUpdateRequest {
+  username?: string
+  password?: string
+  role?: UserRole
+}
+
+function authHeaders(token: string, json = false): HeadersInit {
+  return json
+    ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+    : { Authorization: `Bearer ${token}` }
+}
+
+export async function login(username: string, password: string): Promise<LoginResponse> {
+  const response = await fetch(`${API_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+  return handleResponse<LoginResponse>(response)
+}
+
+export async function getCurrentUser(token: string): Promise<User> {
+  const response = await fetch(`${API_URL}/api/auth/me`, { headers: authHeaders(token) })
+  return handleResponse<User>(response)
+}
+
+export async function listUsers(token: string, offset = 0, limit = 100): Promise<User[]> {
+  const response = await fetch(`${API_URL}/api/users?offset=${offset}&limit=${limit}`, {
+    headers: authHeaders(token),
+  })
+  return handleResponse<User[]>(response)
+}
+
+export async function createUser(token: string, payload: UserCreateRequest): Promise<User> {
+  const response = await fetch(`${API_URL}/api/users`, {
+    method: 'POST',
+    headers: authHeaders(token, true),
+    body: JSON.stringify(payload),
+  })
+  return handleResponse<User>(response)
+}
+
+export async function updateUser(
+  token: string,
+  userId: number,
+  payload: UserUpdateRequest,
+): Promise<User> {
+  const response = await fetch(`${API_URL}/api/users/${userId}`, {
+    method: 'PATCH',
+    headers: authHeaders(token, true),
+    body: JSON.stringify(payload),
+  })
+  return handleResponse<User>(response)
+}
+
+export async function deleteUser(token: string, userId: number): Promise<void> {
+  const response = await fetch(`${API_URL}/api/users/${userId}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  })
+  if (!response.ok) {
+    const errorBody = await response.text()
+    throw new Error(`API request failed (${response.status}): ${errorBody || response.statusText}`)
+  }
+}

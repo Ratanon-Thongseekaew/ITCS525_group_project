@@ -6,6 +6,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
 
 from app import database
+from app.auth import require_admin
 from app.main import app
 from app.models import User
 
@@ -17,8 +18,13 @@ def client(monkeypatch):
     )
     monkeypatch.setattr(database, "get_engine", lambda: engine)
     SQLModel.metadata.create_all(engine)
+    # These tests cover CRUD behaviour; authentication is covered in test_auth.py.
+    app.dependency_overrides[require_admin] = lambda: User(
+        id=-1, username="x", password_hash="x", role="admin"
+    )
     with TestClient(app) as test_client:
         yield test_client, engine
+    app.dependency_overrides.clear()
     engine.dispose()
 
 
