@@ -123,9 +123,12 @@ React Router owns client-side navigation. The current frontend routes are:
 - `/manager` redirects to the manager compliance dashboard.
 - `/manager/compliance-dashboard` and `/admin/compliance-dashboard` render the
   database-backed compliance dashboard.
+- `/manager/epr-report/print` and `/admin/epr-report/print` render the standalone
+  printable EPR report for the requested `year` and `quarter`.
 - `/manager/import` renders the contractor monthly outcome report import page
   and is available from the manager workspace navigation.
-- `/manager/resale-bins` and `/manager/recycle-bins` render placeholder pages.
+- `/manager/resale-bins` renders the database-backed top-five store resale
+  summary.
 - `/staff/sorting` renders the garment sorting workspace. `/staff` has no route;
   the login page and sidebar logo send staff users to `/staff/sorting`.
 - `/staff/direct-resale` renders the Direct Resale bins awaiting process, using
@@ -164,8 +167,8 @@ sidebar logo both use: `/manager`, `/staff/sorting`, and `/admin/users`.
 Authenticated workspace screens share `WorkspaceSidebar`, composed from the
 local shadcn sidebar primitives. `frontend/src/config/workspace-navigation.ts`
 owns labels, icons, route segments, and the `roles` arrays used to filter menu
-visibility. Managers see Compliance Dashboard, Resale Bin Records, and Recycle
-Bin Records. Staff see Sorting, Direct Resale, and Recycle Bin Handoff. Admins
+visibility. Managers see Compliance Dashboard, Resale Bin Records, and Import
+Data. Staff see Sorting, Direct Resale, and Recycle Bin Handoff. Admins
 see Compliance Dashboard and User Management. `AppLayout` derives the demo role
 from the URL only for presentation; this is not authentication.
 
@@ -252,6 +255,39 @@ options. Query parameters support `frequency` (`monthly`, `quarterly`, or
 Authentication is now implemented (see above), but the site selector is still a
 demo filter rather than an authorization boundary. Enforce manager memberships in
 the backend before relying on it for access control.
+
+### `GET /api/resale-bins/summary` (Feature 3)
+
+Returns the five sites with the highest summed `actual_value` across resale
+bins. The manager resale page displays each site and calculates the combined
+actual value of the returned sites.
+
+### `GET /api/epr/quarterly-report` (EPR change request)
+
+Requires `year` and `quarter` (1–4). Returns one all-site aggregate for both CSV
+download and the printable view. Open quarters group garment weights by
+`received_at` and imported contractor dispositions by `report_month`. A
+recorded resale-bin sale value is the available evidence for resale, and the
+stored repair/upcycle classification is used for repaired weight. Submitted
+quarters use saved site snapshots.
+
+Recovery is the combined weight of resale, repair and the five non-landfill
+dispositions, divided by total weight received. Uncategorized weight and any
+excess categorized weight are shown separately.
+
+Use `GET /api/epr/quarterly-report/management` for draft or submitted totals,
+the adjustment history, and the available demo recording accounts.
+`POST /api/epr/quarterly-report/submit` saves all site snapshots and locks the
+quarter in one transaction. `POST /api/epr/quarterly-report/adjustments` appends
+the selected site's dated changes in one transaction. Both write endpoints take
+the same period query parameters and a demo `actor_id`. The adjustment request
+includes the latest adjustment ID seen by the caller, or null for empty history.
+The export endpoint continues to return the original snapshot after submission.
+
+Future writes to persisted report inputs, including contractor import, must
+call `lock_open_epr_quarter(session, report_date)` before reading or changing
+quarter data, in the same transaction. The helper coordinates with submission
+and returns HTTP 409 for locked periods. The current import validates only.
 
 ### `POST /api/contractor-reports/validate` (EPR change request)
 

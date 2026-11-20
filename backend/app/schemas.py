@@ -1,8 +1,9 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, field_validator
 
 
 class UserRole(StrEnum):
@@ -60,6 +61,16 @@ class HealthCheck(BaseModel):
 
 class Greeting(BaseModel):
     message: str
+
+
+class ResaleStoreSummary(BaseModel):
+    id: int
+    name: str
+    actual_value: float = Field(ge=0)
+
+
+class ResaleStoreSummaryResponse(BaseModel):
+    stores: list[ResaleStoreSummary]
 
 
 class BinType(StrEnum):
@@ -173,6 +184,95 @@ class ContractorReportValidationRowResult(BaseModel):
 
 class ContractorReportValidationResponse(BaseModel):
     rows: list[ContractorReportValidationRowResult]
+
+
+class EprQuarterReportResponse(BaseModel):
+    year: int
+    quarter: int
+    source: Literal["live_records", "submitted_snapshot"]
+    total_weight_received_kg: float
+    resold_weight_kg: float
+    repaired_weight_kg: float
+    upcycled_weight_kg: float
+    fibre_to_fibre_weight_kg: float
+    downcycled_weight_kg: float
+    exported_weight_kg: float
+    landfilled_weight_kg: float
+    incinerated_energy_recovery_weight_kg: float
+    uncategorized_weight_kg: float
+    excess_weight_kg: float
+    recovery_rate_percent: float
+    garments_missing_weight: int | None
+
+
+class EprAdjustmentMetric(StrEnum):
+    TOTAL_RECEIVED = "total_received"
+    RESOLD = "resold"
+    REPAIRED = "repaired"
+    UPCYCLED = "upcycled"
+    FIBRE_TO_FIBRE = "fibre_to_fibre"
+    DOWNCYCLED = "downcycled"
+    EXPORTED = "exported"
+    LANDFILLED = "landfilled"
+    INCINERATED_ENERGY_RECOVERY = "incinerated_energy_recovery"
+
+
+class EprSubmitRequest(BaseModel):
+    actor_id: int = Field(gt=0)
+
+
+class EprAdjustmentLine(BaseModel):
+    metric: EprAdjustmentMetric
+    weight_delta_kg: Decimal = Field(max_digits=14, decimal_places=3)
+
+    @field_validator("weight_delta_kg")
+    @classmethod
+    def require_nonzero_weight(cls, value: Decimal) -> Decimal:
+        if not value:
+            raise ValueError("Adjustment weight must be nonzero")
+        return value
+
+
+class EprAdjustmentRequest(EprSubmitRequest):
+    site_id: int = Field(gt=0)
+    expected_latest_adjustment_id: int | None = Field(ge=1)
+    effective_date: date
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+    lines: list[EprAdjustmentLine] = Field(min_length=1, max_length=len(EprAdjustmentMetric))
+
+    @field_validator("lines")
+    @classmethod
+    def require_distinct_metrics(cls, lines: list[EprAdjustmentLine]) -> list[EprAdjustmentLine]:
+        if len({line.metric for line in lines}) != len(lines):
+            raise ValueError("Choose a different metric for each adjustment line")
+        return lines
+
+
+class EprManagementOption(BaseModel):
+    id: int
+    label: str
+
+
+class EprAdjustmentResponse(BaseModel):
+    id: int
+    site_id: int
+    metric: EprAdjustmentMetric
+    weight_delta_kg: float
+    effective_date: date
+    reason: str
+    created_at: datetime
+    recorded_by: str
+
+
+class EprManagementResponse(BaseModel):
+    report: EprQuarterReportResponse
+    status: Literal["draft", "submitted"]
+    submitted_at: datetime | None
+    submitted_by: str | None
+    adjusted_report: EprQuarterReportResponse | None
+    adjustments: list[EprAdjustmentResponse]
+    sites: list[EprManagementOption]
+    actors: list[EprManagementOption]
 
 
 class DashboardFrequency(StrEnum):

@@ -1,10 +1,12 @@
 import { Route, Routes } from 'react-router'
 import { AppLayout } from './components/AppLayout'
 import { GarmentSortingWorkspace } from './components/GarmentSortingWorkspace'
+import ResaleBinRecords from './components/ResaleBinRecords'
 import { WorkspaceFeaturePlaceholderPage } from './components/WorkspaceFeaturePlaceholderPage'
 import { Toaster } from './components/ui/sonner'
 import { ComplianceDashboardPage } from './pages/ComplianceDashboardPage'
 import { DirectResalePage } from './pages/DirectResalePage'
+import { EprReportPrintPage } from './pages/EprReportPrintPage'
 import { HandoffRecordsPage } from './pages/HandoffRecordsPage'
 import { LoginPage } from './pages/LoginPage'
 import { ManagerPage } from './pages/ManagerPage'
@@ -21,21 +23,14 @@ function App() {
       <Routes>
         <Route index element={<LoginPage />} />
         <Route path="login" element={<LoginPage />} />
+        <Route path="manager/epr-report/print" element={<EprReportPrintPage />} />
+        <Route path="admin/epr-report/print" element={<EprReportPrintPage />} />
         <Route element={<AppLayout />}>
           <Route path="manager" element={<ManagerPage />} />
           <Route path="manager/compliance-dashboard" element={<ComplianceDashboardPage />} />
           <Route path="manager/import" element={<ContractorReportImportPage />} />
-          <Route
-            path="manager/resale-bins"
-            element={
-              <WorkspaceFeaturePlaceholderPage
-                role="manager"
-                title="Resale Bin Records"
-                description="View and manage garments prepared for direct resale."
-              />
-            }
-          />
-          <Route
+          <Route path="manager/resale-bins" element={<ResaleBinRecords />} />
+          {/* <Route
             path="manager/recycle-bins"
             element={
               <WorkspaceFeaturePlaceholderPage
@@ -44,7 +39,7 @@ function App() {
                 description="Track recycling bins, contractor pickups, and reported outcomes."
               />
             }
-          />
+          /> */}
           <Route path="manager/recycle-bin-handoff" element={<NewBinsForHandoffPage />} />
           <Route path="staff/sorting" element={<GarmentSortingWorkspace />} />
           <Route path="staff/direct-resale" element={<DirectResalePage />} />

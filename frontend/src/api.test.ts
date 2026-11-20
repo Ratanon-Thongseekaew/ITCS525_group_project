@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest'
 
-import { getDashboard, validateContractorReport } from './api'
+import { getDashboard, getResaleStoreSummary, validateContractorReport } from './api'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -57,4 +57,17 @@ test('sends all six disposition categories for contractor report validation', as
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ rows }),
   })
+})
+
+test('requests the persisted resale summary', async () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    new Response(JSON.stringify({ stores: [] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  )
+
+  await getResaleStoreSummary()
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/resale-bins/summary', { signal: undefined })
 })
