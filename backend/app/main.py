@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+from .auth import router as auth_router
 from .contractor_reports import router as contractor_reports_router
 from .dashboard import router as dashboard_router
 from .epr import router as epr_router
@@ -42,6 +43,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(dashboard_router)
 app.include_router(epr_router)

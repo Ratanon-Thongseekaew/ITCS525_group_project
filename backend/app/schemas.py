@@ -23,12 +23,36 @@ class UserCreate(BaseModel):
         return value.lower()
 
 
+class UserUpdate(BaseModel):
+    """Partial update; omitted or null fields are left unchanged."""
+
+    username: EmailStr | None = Field(default=None, max_length=254)
+    password: str | None = Field(default=None, min_length=8, max_length=128, repr=False)
+    role: UserRole | None = None
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value: str | None) -> str | None:
+        return value.lower() if value is not None else None
+
+
 class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     username: EmailStr
     role: UserRole
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=254)
+    password: str = Field(min_length=1, max_length=128, repr=False)
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserRead
 
 
 class HealthCheck(BaseModel):
