@@ -1,7 +1,15 @@
-import { Download, TrendingDown, TrendingUp, Upload } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { AlertCircle, Database, Download, RefreshCw, TrendingDown } from 'lucide-react'
 import { Link } from 'react-router'
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from 'recharts'
 
+import {
+  getDashboard,
+  type DashboardException,
+  type DashboardFrequency,
+  type DashboardOutcome,
+  type DashboardResponse,
+} from '@/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -20,6 +28,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 
 interface SummaryMetric {
@@ -30,79 +39,99 @@ interface SummaryMetric {
   trend?: 'down'
 }
 
-const summaryMetrics = [
-  { label: 'Recycling Bins Collected', value: '120', detail: 'Across 6 contractors' },
-  { label: 'Recycling Bins Reported', value: '119', detail: '1 bin still pending' },
-  {
-    label: 'Bins with Discrepancies',
-    value: '1',
-    detail: 'Requiring investigation',
-    tone: 'warning',
-  },
-  {
-    label: 'Diverted from Landfill',
-    value: '95%',
-    detail: '4,560 kg diverted',
-    tone: 'success',
-  },
-  { label: 'Total Weight Recorded', value: '4,800.0 kg', detail: 'Contractor source data' },
-  {
-    label: 'Total Weight Reported',
-    value: '4,790.0 kg',
-    detail: '-10.0 kg variance',
-    trend: 'down',
-  },
-] satisfies readonly SummaryMetric[]
+interface SelectOption {
+  value: string
+  label: string
+}
 
-const outcomeData = [
-  { category: 'upcycled', value: 35, fill: 'var(--color-upcycled)' },
-  { category: 'recycled', value: 40, fill: 'var(--color-recycled)' },
-  { category: 'downcycled', value: 20, fill: 'var(--color-downcycled)' },
-  { category: 'exported', value: 4, fill: 'var(--color-exported)' },
-  { category: 'landfill', value: 1, fill: 'var(--color-landfill)' },
-]
+const monthOptions = Array.from({ length: 12 }, (_, index) => ({
+  value: String(index + 1),
+  label: new Intl.DateTimeFormat('en', { month: 'long' }).format(new Date(2026, index, 1)),
+}))
 
-const monthlyOutcomes = [
-  { month: 'Mar', upcycled: 310, recycled: 380, downcycled: 200, exported: 50, landfill: 30 },
-  { month: 'Apr', upcycled: 280, recycled: 370, downcycled: 220, exported: 40, landfill: 30 },
-  { month: 'May', upcycled: 270, recycled: 380, downcycled: 200, exported: 40, landfill: 20 },
-  { month: 'Jun', upcycled: 300, recycled: 400, downcycled: 190, exported: 50, landfill: 30 },
-  { month: 'Jul', upcycled: 240, recycled: 350, downcycled: 170, exported: 40, landfill: 20 },
-  { month: 'Aug', upcycled: 340, recycled: 410, downcycled: 210, exported: 50, landfill: 30 },
-  { month: 'Sep', upcycled: 300, recycled: 390, downcycled: 180, exported: 40, landfill: 20 },
-  { month: 'Oct', upcycled: 380, recycled: 430, downcycled: 220, exported: 60, landfill: 30 },
-  { month: 'Nov', upcycled: 260, recycled: 370, downcycled: 170, exported: 40, landfill: 20 },
-  { month: 'Dec', upcycled: 350, recycled: 420, downcycled: 200, exported: 50, landfill: 30 },
+const quarterOptions = [1, 2, 3, 4].map((quarter) => ({
+  value: String(quarter),
+  label: `Quarter ${quarter}`,
+}))
+
+const frequencyOptions: SelectOption[] = [
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'quarterly', label: 'Quarterly' },
+  { value: 'annual', label: 'Annual' },
 ]
 
 const chartConfig = {
   upcycled: { label: 'Upcycled', color: '#0f8f83' },
-  recycled: { label: 'Recycled to fiber', color: '#3b82f6' },
+  fibre_to_fibre: { label: 'Fibre-to-fibre', color: '#3b82f6' },
   downcycled: { label: 'Downcycled', color: '#1e3a8a' },
-  exported: { label: 'Exported overseas', color: '#f59e0b' },
-  landfill: { label: 'Sent to landfill', color: '#64748b' },
+  exported: { label: 'Exported', color: '#f59e0b' },
+  landfilled: { label: 'Landfilled', color: '#64748b' },
+  incinerated_energy_recovery: {
+    label: 'Incinerated with energy recovery',
+    color: '#e11d48',
+  },
 } satisfies ChartConfig
 
-const flaggedBins = [
-  {
-    id: 'tt-bin-16-001',
-    contractor: 'Contractor 1',
-    date: '14 Oct 2026',
-    totalItems: '300',
-    recordedWeight: '450 kg',
-    reportedWeight: '—',
-    status: 'Pending',
-  },
-  {
-    id: 'tt-bin-16-002',
-    contractor: 'Contractor 2',
-    date: '15 Oct 2026',
-    totalItems: '500',
-    recordedWeight: '400 kg',
-    reportedWeight: '390 kg (-10.0 kg)',
-    status: 'Flagged',
-  },
-] as const
+const numberFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 })
+const dateFormatter = new Intl.DateTimeFormat('en-GB', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+})
+
+function getInitialPeriod() {
+  const now = new Date()
+  const lastCompletedMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  return {
+    year: lastCompletedMonth.getFullYear(),
+    month: lastCompletedMonth.getMonth() + 1,
+    quarter: Math.floor(lastCompletedMonth.getMonth() / 3) + 1,
+  }
+}
+
+function formatWeight(value: number) {
+  return `${numberFormatter.format(value)} kg`
+}
+
+function buildSummaryMetrics(data: DashboardResponse): SummaryMetric[] {
+  const { summary } = data
+  const variancePrefix = summary.weight_variance_kg > 0 ? '+' : ''
+  return [
+    {
+      label: 'Recycling Bins Collected',
+      value: numberFormatter.format(summary.recycling_bins_collected),
+      detail: `${data.filters.contractors.length} active contractors`,
+    },
+    {
+      label: 'Recycling Bins Reported',
+      value: numberFormatter.format(summary.recycling_bins_reported),
+      detail: `${summary.pending_bins} bin${summary.pending_bins === 1 ? '' : 's'} pending`,
+    },
+    {
+      label: 'Disputed Handoffs',
+      value: numberFormatter.format(summary.disputed_handoffs),
+      detail: 'Requiring manager review',
+      tone: summary.disputed_handoffs ? 'warning' : 'default',
+    },
+    {
+      label: 'Diverted from Landfill',
+      value: `${numberFormatter.format(summary.recovery_rate)}%`,
+      detail: `${formatWeight(summary.diverted_weight_kg)} diverted`,
+      tone: 'success',
+    },
+    {
+      label: 'Total Weight Recorded',
+      value: formatWeight(summary.total_recorded_weight_kg),
+      detail: 'Center staff pickup weight',
+    },
+    {
+      label: 'Total Weight Reported',
+      value: formatWeight(summary.total_reported_weight_kg),
+      detail: `${variancePrefix}${formatWeight(summary.weight_variance_kg)} variance`,
+      trend: summary.weight_variance_kg < 0 ? 'down' : undefined,
+    },
+  ]
+}
 
 function MetricCard({ metric }: { metric: SummaryMetric }) {
   return (
@@ -136,143 +165,281 @@ function MetricCard({ metric }: { metric: SummaryMetric }) {
   )
 }
 
-function OutcomeDonut() {
+function OutcomeDonut({
+  outcomes,
+  recoveryRate,
+}: {
+  outcomes: DashboardOutcome[]
+  recoveryRate: number
+}) {
+  const chartData = outcomes.map((outcome) => ({
+    ...outcome,
+    fill: `var(--color-${outcome.category})`,
+  }))
+  const hasOutcomes = outcomes.some((outcome) => outcome.weight_kg > 0)
+
   return (
     <Card className="h-full rounded-lg shadow-none">
       <CardHeader className="p-4 pb-0">
-        <CardTitle className="text-sm">End-of-life Breakdown by Outcome Categories</CardTitle>
+        <CardTitle className="text-sm">End-of-life Breakdown by Outcome Category</CardTitle>
       </CardHeader>
       <CardContent className="p-2 sm:p-4">
-        <div className="relative mx-auto w-full max-w-[480px]">
-          <ChartContainer config={chartConfig} className="h-[280px] w-full">
-            <PieChart accessibilityLayer>
-              <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
-              <Pie
-                data={outcomeData}
-                dataKey="value"
-                nameKey="category"
-                innerRadius={62}
-                outerRadius={92}
-                paddingAngle={1}
-                strokeWidth={0}
-              >
-                {outcomeData.map((entry) => (
-                  <Cell key={entry.category} fill={entry.fill} />
-                ))}
-              </Pie>
-              <ChartLegend
-                content={<ChartLegendContent className="flex-wrap gap-x-4 gap-y-2 text-[10px]" />}
-              />
-            </PieChart>
-          </ChartContainer>
-          <div className="pointer-events-none absolute inset-x-0 top-[94px] text-center">
-            <strong className="block text-2xl tracking-tight text-slate-950">100%</strong>
-            <span className="text-[10px] text-slate-500">Outcomes</span>
+        {hasOutcomes ? (
+          <div className="relative mx-auto w-full max-w-[480px]">
+            <ChartContainer config={chartConfig} className="h-[280px] w-full">
+              <PieChart accessibilityLayer>
+                <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
+                <Pie
+                  data={chartData}
+                  dataKey="weight_kg"
+                  nameKey="category"
+                  innerRadius={62}
+                  outerRadius={92}
+                  paddingAngle={1}
+                  strokeWidth={0}
+                >
+                  {chartData.map((entry) => (
+                    <Cell key={entry.category} fill={entry.fill} />
+                  ))}
+                </Pie>
+                <ChartLegend
+                  content={<ChartLegendContent className="flex-wrap gap-x-4 gap-y-2 text-[10px]" />}
+                />
+              </PieChart>
+            </ChartContainer>
+            <div className="pointer-events-none absolute inset-x-0 top-[94px] text-center">
+              <strong className="block text-2xl tracking-tight text-slate-950">
+                {numberFormatter.format(recoveryRate)}%
+              </strong>
+              <span className="text-[10px] text-slate-500">Recovery</span>
+            </div>
           </div>
-        </div>
+        ) : (
+          <p className="flex h-[280px] items-center justify-center text-sm text-slate-500">
+            No contractor outcomes for this period.
+          </p>
+        )}
       </CardContent>
     </Card>
   )
 }
 
-function MonthlyOutcomeChart() {
+function MonthlyOutcomeChart({
+  data,
+  year,
+}: {
+  data: DashboardResponse['monthly_outcomes']
+  year: number
+}) {
   return (
     <Card className="rounded-lg shadow-none">
       <CardHeader className="flex-row items-start justify-between gap-4 p-4 pb-1">
-        <CardTitle className="text-sm">Bin Outcomes in 2026</CardTitle>
-        <p className="mb-0 text-right text-[10px] text-slate-400">
-          Annual view · Sample category splits
-        </p>
+        <CardTitle className="text-sm">Contractor Outcomes in {year}</CardTitle>
+        <p className="mb-0 text-right text-[10px] text-slate-400">Annual monthly trend</p>
       </CardHeader>
       <CardContent className="p-2 sm:p-4 sm:pt-2">
-        <div className="overflow-x-auto">
-          <ChartContainer config={chartConfig} className="h-[320px] min-w-[700px] w-full">
-            <BarChart
-              accessibilityLayer
-              data={monthlyOutcomes}
-              margin={{ top: 12, right: 8, left: -12 }}
-            >
-              <CartesianGrid vertical={false} strokeDasharray="3 3" />
-              <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={10} />
-              <YAxis tickLine={false} axisLine={false} tickMargin={8} width={44} />
-              <ChartTooltip content={<ChartTooltipContent indicator="dot" />} />
-              <ChartLegend
-                content={<ChartLegendContent className="flex-wrap gap-x-4 gap-y-2 text-[10px]" />}
-              />
-              <Bar dataKey="upcycled" stackId="outcome" fill="var(--color-upcycled)" />
-              <Bar dataKey="recycled" stackId="outcome" fill="var(--color-recycled)" />
-              <Bar dataKey="downcycled" stackId="outcome" fill="var(--color-downcycled)" />
-              <Bar dataKey="exported" stackId="outcome" fill="var(--color-exported)" />
-              <Bar
-                dataKey="landfill"
-                stackId="outcome"
-                fill="var(--color-landfill)"
-                radius={[3, 3, 0, 0]}
-              />
-            </BarChart>
-          </ChartContainer>
-        </div>
+        {data.length ? (
+          <div className="overflow-x-auto">
+            <ChartContainer config={chartConfig} className="h-[320px] min-w-[700px] w-full">
+              <BarChart accessibilityLayer data={data} margin={{ top: 12, right: 8, left: -12 }}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                <XAxis dataKey="month_label" tickLine={false} axisLine={false} tickMargin={10} />
+                <YAxis tickLine={false} axisLine={false} tickMargin={8} width={44} />
+                <ChartTooltip content={<ChartTooltipContent indicator="dot" />} />
+                <ChartLegend
+                  content={<ChartLegendContent className="flex-wrap gap-x-4 gap-y-2 text-[10px]" />}
+                />
+                <Bar dataKey="upcycled" stackId="outcome" fill="var(--color-upcycled)" />
+                <Bar
+                  dataKey="fibre_to_fibre"
+                  stackId="outcome"
+                  fill="var(--color-fibre_to_fibre)"
+                />
+                <Bar dataKey="downcycled" stackId="outcome" fill="var(--color-downcycled)" />
+                <Bar dataKey="exported" stackId="outcome" fill="var(--color-exported)" />
+                <Bar dataKey="landfilled" stackId="outcome" fill="var(--color-landfilled)" />
+                <Bar
+                  dataKey="incinerated_energy_recovery"
+                  stackId="outcome"
+                  fill="var(--color-incinerated_energy_recovery)"
+                  radius={[3, 3, 0, 0]}
+                />
+              </BarChart>
+            </ChartContainer>
+          </div>
+        ) : (
+          <p className="py-16 text-center text-sm text-slate-500">
+            No monthly outcome data is available for {year}.
+          </p>
+        )}
       </CardContent>
     </Card>
   )
 }
 
-function FlaggedBinsTable() {
+function ExceptionTable({ exceptions }: { exceptions: DashboardException[] }) {
   return (
     <Card className="rounded-lg shadow-none">
       <CardHeader className="flex-row items-center justify-between gap-4 p-4 pb-2">
-        <CardTitle className="text-sm">Pending and Flagged Bins</CardTitle>
+        <CardTitle className="text-sm">Pending and Disputed Handoffs</CardTitle>
         <span className="text-[10px] text-slate-400">Exceptions</span>
       </CardHeader>
       <CardContent className="p-0 pb-3">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse text-left text-xs">
-            <thead className="bg-slate-50 text-[10px] font-medium text-slate-500">
-              <tr>
-                <th className="px-4 py-2">Bin ID</th>
-                <th className="px-4 py-2">Contractor</th>
-                <th className="px-4 py-2">Handoff Date</th>
-                <th className="px-4 py-2">Total Items</th>
-                <th className="px-4 py-2">Recorded Weight</th>
-                <th className="px-4 py-2">Reported Weight</th>
-                <th className="px-4 py-2">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {flaggedBins.map((bin) => (
-                <tr key={bin.id} className="border-t border-slate-100 text-slate-600">
-                  <td className="px-4 py-3 font-medium text-slate-900">{bin.id}</td>
-                  <td className="px-4 py-3">{bin.contractor}</td>
-                  <td className="px-4 py-3">{bin.date}</td>
-                  <td className="px-4 py-3">{bin.totalItems}</td>
-                  <td className="px-4 py-3">{bin.recordedWeight}</td>
-                  <td className={cn('px-4 py-3', bin.status === 'Flagged' && 'text-rose-500')}>
-                    {bin.reportedWeight}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={cn(
-                        'inline-flex rounded-full px-2 py-1 text-[10px] font-medium',
-                        bin.status === 'Pending'
-                          ? 'bg-amber-50 text-amber-700'
-                          : 'bg-rose-50 text-rose-600',
-                      )}
+        {exceptions.length ? (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px] border-collapse text-left text-xs">
+                <thead className="bg-slate-50 text-[10px] font-medium text-slate-500">
+                  <tr>
+                    <th className="px-4 py-2">Bin ID</th>
+                    <th className="px-4 py-2">Contractor</th>
+                    <th className="px-4 py-2">Handoff Date</th>
+                    <th className="px-4 py-2">Items</th>
+                    <th className="px-4 py-2">Staff Weight</th>
+                    <th className="px-4 py-2">Driver Weight</th>
+                    <th className="px-4 py-2">Variance</th>
+                    <th className="px-4 py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {exceptions.map((exception) => (
+                    <tr
+                      key={exception.handoff_id}
+                      className="border-t border-slate-100 text-slate-600"
                     >
-                      {bin.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="mt-3 mb-0 px-4 text-[10px] text-slate-400">Showing 2 of 2 bins</p>
+                      <td className="px-4 py-3 font-medium text-slate-900">{exception.bin_code}</td>
+                      <td className="px-4 py-3">{exception.contractor_name}</td>
+                      <td className="px-4 py-3">
+                        {dateFormatter.format(new Date(exception.handoff_date))}
+                      </td>
+                      <td className="px-4 py-3">{numberFormatter.format(exception.item_count)}</td>
+                      <td className="px-4 py-3">{formatWeight(exception.staff_weight_kg)}</td>
+                      <td className="px-4 py-3">{formatWeight(exception.driver_weight_kg)}</td>
+                      <td
+                        className={cn(
+                          'px-4 py-3',
+                          exception.status === 'disputed' && 'text-rose-600',
+                        )}
+                      >
+                        {numberFormatter.format(exception.variance_percent)}%
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={cn(
+                            'inline-flex rounded-full px-2 py-1 text-[10px] font-medium',
+                            exception.status === 'pending'
+                              ? 'bg-amber-50 text-amber-700'
+                              : 'bg-rose-50 text-rose-600',
+                          )}
+                        >
+                          {exception.status === 'pending' ? 'Pending report' : 'Disputed'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-3 mb-0 px-4 text-[10px] text-slate-400">
+              Showing {exceptions.length} exception{exceptions.length === 1 ? '' : 's'}
+            </p>
+          </>
+        ) : (
+          <p className="py-10 text-center text-sm text-slate-500">
+            No pending or disputed handoffs for this period.
+          </p>
+        )}
       </CardContent>
     </Card>
+  )
+}
+
+function DashboardLoading() {
+  return (
+    <div aria-label="Loading dashboard" role="status" className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 6 }, (_, index) => (
+          <Skeleton key={index} className="h-28" />
+        ))}
+      </div>
+      <Skeleton className="h-80" />
+      <Skeleton className="h-52" />
+    </div>
   )
 }
 
 export function ComplianceDashboardPage() {
+  const [initialPeriod] = useState(getInitialPeriod)
+  const [frequency, setFrequency] = useState<DashboardFrequency>('monthly')
+  const [year, setYear] = useState(initialPeriod.year)
+  const [month, setMonth] = useState(initialPeriod.month)
+  const [quarter, setQuarter] = useState(initialPeriod.quarter)
+  const [siteId, setSiteId] = useState('all')
+  const [contractorId, setContractorId] = useState('all')
+  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [retryCount, setRetryCount] = useState(0)
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    void getDashboard(
+      {
+        frequency,
+        year,
+        month: frequency === 'monthly' ? month : undefined,
+        quarter: frequency === 'quarterly' ? quarter : undefined,
+        site_id: siteId === 'all' ? undefined : Number(siteId),
+        contractor_id: contractorId === 'all' ? undefined : Number(contractorId),
+      },
+      controller.signal,
+    )
+      .then((response) => {
+        setDashboard(response)
+        setError(null)
+      })
+      .catch((requestError: unknown) => {
+        if (requestError instanceof DOMException && requestError.name === 'AbortError') return
+        setError(requestError instanceof Error ? requestError.message : 'Unable to load dashboard.')
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoading(false)
+      })
+
+    return () => controller.abort()
+  }, [contractorId, frequency, month, quarter, retryCount, siteId, year])
+
+  function updateFilter(update: () => void) {
+    setIsLoading(true)
+    setError(null)
+    update()
+  }
+
+  function retryDashboard() {
+    setIsLoading(true)
+    setError(null)
+    setRetryCount((count) => count + 1)
+  }
+
+  const summaryMetrics = dashboard ? buildSummaryMetrics(dashboard) : []
+  const yearOptions = (dashboard?.filters.available_years ?? [year]).map((availableYear) => ({
+    value: String(availableYear),
+    label: String(availableYear),
+  }))
+  const siteOptions = [
+    { value: 'all', label: 'All Sites' },
+    ...(dashboard?.filters.sites.map((site) => ({ value: String(site.id), label: site.name })) ??
+      []),
+  ]
+  const contractorOptions = [
+    { value: 'all', label: 'All Contractors' },
+    ...(dashboard?.filters.contractors.map((contractor) => ({
+      value: String(contractor.id),
+      label: contractor.name,
+    })) ?? []),
+  ]
+
   return (
     <div className="space-y-5">
       <section className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -282,26 +449,15 @@ export function ComplianceDashboardPage() {
             Compliance Dashboard
           </h1>
           <p className="mb-0 text-sm text-slate-500">
-            Outcome report files uploaded and analysis dashboard
+            Live handoff and contractor outcome data from Textile Track
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <Button
-            asChild
-            className="h-10 gap-1.5 rounded-md bg-teal-700 px-2.5 text-white hover:bg-teal-800"
-          >
-            <Link to="/manager/compliance-dashboard/import">
-              <Upload aria-hidden="true" />
-              <span className="text-sm leading-5 font-medium">Import Monthly Files</span>
-            </Link>
-          </Button>
-          <Button asChild size="sm" className="bg-teal-700 text-white hover:bg-teal-800">
-            <Link to=".">
-              <Download aria-hidden="true" />
-              Export Report
-            </Link>
-          </Button>
-        </div>
+        <Button asChild size="sm" className="bg-teal-700 text-white hover:bg-teal-800">
+          <Link to=".">
+            <Download aria-hidden="true" />
+            Export Report
+          </Link>
+        </Button>
       </section>
 
       <Separator />
@@ -313,62 +469,113 @@ export function ComplianceDashboardPage() {
               Dashboard Filters
             </h2>
             <p className="mb-0 text-xs text-slate-500">
-              Adjust the reporting period and contractor.
+              Adjust the site, reporting period, and contractor.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             <DashboardSelect
+              label="Site"
+              value={siteId}
+              width="sm:w-48"
+              items={siteOptions}
+              onValueChange={(value) => updateFilter(() => setSiteId(value))}
+            />
+            <DashboardSelect
               label="Reporting frequency"
-              value="monthly"
+              value={frequency}
               width="sm:w-32"
-              items={['Monthly', 'Quarterly', 'Annual']}
+              items={frequencyOptions}
+              onValueChange={(value) =>
+                updateFilter(() => setFrequency(value as DashboardFrequency))
+              }
             />
             <DashboardSelect
               label="Reporting year"
-              value="2026"
+              value={String(year)}
               width="sm:w-24"
-              items={['2026', '2025']}
+              items={yearOptions}
+              onValueChange={(value) => updateFilter(() => setYear(Number(value)))}
             />
-            <DashboardSelect
-              label="Reporting month"
-              value="october"
-              width="sm:w-28"
-              items={['October', 'September', 'August']}
-            />
+            {frequency === 'monthly' ? (
+              <DashboardSelect
+                label="Reporting month"
+                value={String(month)}
+                width="sm:w-28"
+                items={monthOptions}
+                onValueChange={(value) => updateFilter(() => setMonth(Number(value)))}
+              />
+            ) : null}
+            {frequency === 'quarterly' ? (
+              <DashboardSelect
+                label="Reporting quarter"
+                value={String(quarter)}
+                width="sm:w-32"
+                items={quarterOptions}
+                onValueChange={(value) => updateFilter(() => setQuarter(Number(value)))}
+              />
+            ) : null}
             <DashboardSelect
               label="Contractor"
-              value="all-contractors"
-              width="sm:w-40"
-              items={['All Contractors', 'Contractor 1', 'Contractor 2']}
+              value={contractorId}
+              width="sm:w-52"
+              items={contractorOptions}
+              onValueChange={(value) => updateFilter(() => setContractorId(value))}
             />
           </div>
         </div>
       </section>
 
-      <section aria-labelledby="monthly-overview" className="space-y-3">
-        <div className="flex items-center justify-between gap-4">
-          <h2 id="monthly-overview" className="mb-0 text-sm font-semibold text-slate-900">
-            Monthly overview
-          </h2>
-          <span className="text-[10px] text-slate-400">October 2026</span>
-        </div>
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.08fr)_minmax(300px,0.92fr)]">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {summaryMetrics.map((metric) => (
-              <MetricCard key={metric.label} metric={metric} />
-            ))}
+      {error ? (
+        <Card role="alert" className="border-rose-200 bg-rose-50 shadow-none">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3 text-sm text-rose-800">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <div>
+                <p className="mb-1 font-medium">Dashboard data could not be loaded.</p>
+                <p className="mb-0 text-xs text-rose-700">{error}</p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={retryDashboard}>
+              <RefreshCw aria-hidden="true" />
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {isLoading && !dashboard ? <DashboardLoading /> : null}
+
+      {dashboard ? (
+        <div className={cn('space-y-5 transition-opacity', isLoading && 'opacity-60')}>
+          <section aria-labelledby="period-overview" className="space-y-3">
+            <div className="flex items-center justify-between gap-4">
+              <h2 id="period-overview" className="mb-0 text-sm font-semibold text-slate-900">
+                Period overview
+              </h2>
+              <span className="text-[10px] text-slate-400">{dashboard.period_label}</span>
+            </div>
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.08fr)_minmax(300px,0.92fr)]">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {summaryMetrics.map((metric) => (
+                  <MetricCard key={metric.label} metric={metric} />
+                ))}
+              </div>
+              <OutcomeDonut
+                outcomes={dashboard.outcomes}
+                recoveryRate={dashboard.summary.recovery_rate}
+              />
+            </div>
+          </section>
+
+          <MonthlyOutcomeChart data={dashboard.monthly_outcomes} year={dashboard.year} />
+          <ExceptionTable exceptions={dashboard.exceptions} />
+
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <Database className="size-4 text-teal-600" aria-hidden="true" />
+            <span>Live data from the Textile Track database.</span>
           </div>
-          <OutcomeDonut />
         </div>
-      </section>
-
-      <MonthlyOutcomeChart />
-      <FlaggedBinsTable />
-
-      <div className="flex items-center gap-2 text-xs text-slate-400">
-        <TrendingUp className="size-4 text-teal-600" aria-hidden="true" />
-        <span>Mock dashboard data for interface preview only.</span>
-      </div>
+      ) : null}
     </div>
   )
 }
@@ -378,21 +585,37 @@ function DashboardSelect({
   value,
   width,
   items,
+  onValueChange,
 }: {
   label: string
   value: string
   width: string
-  items: readonly string[]
+  items: SelectOption[]
+  onValueChange: (value: string) => void
 }) {
+  const selectedLabel = items.find((item) => item.value === value)?.label
+
   return (
-    <Select defaultValue={value}>
-      <SelectTrigger className={cn('h-9 min-w-0 text-xs', width)} aria-label={label}>
+    <Select value={value} onValueChange={onValueChange}>
+      <SelectTrigger
+        className={cn(
+          'h-9 min-w-0 max-w-full gap-2 overflow-hidden text-xs [&>svg]:shrink-0 [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate [&>span]:text-left',
+          width,
+        )}
+        aria-label={label}
+        title={selectedLabel}
+      >
         <SelectValue />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-96">
         {items.map((item) => (
-          <SelectItem key={item} value={item.toLowerCase().replaceAll(' ', '-')}>
-            {item}
+          <SelectItem
+            key={item.value}
+            value={item.value}
+            title={item.label}
+            className="min-w-0 max-w-full whitespace-normal"
+          >
+            {item.label}
           </SelectItem>
         ))}
       </SelectContent>

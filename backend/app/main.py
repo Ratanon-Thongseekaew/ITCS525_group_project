@@ -6,6 +6,8 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from .auth import router as auth_router
+from .contractor_reports import router as contractor_reports_router
+from .dashboard import router as dashboard_router
 from .schemas import (
     ActiveBinsResponse,
     BinCloseRequest,
@@ -41,6 +43,8 @@ app = FastAPI(
 
 app.include_router(auth_router)
 app.include_router(users_router)
+app.include_router(dashboard_router)
+app.include_router(contractor_reports_router)
 
 app.add_middleware(
     CORSMiddleware,

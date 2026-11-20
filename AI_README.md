@@ -103,7 +103,8 @@ adds the original project scope plus the four change requests:
 - `handoffs` stores both pickup weights, scale-photo reference, driver details,
   variance, dispute state, and manager approval.
 - `contractor_reports` and `contractor_report_entries` preserve six disposition
-  categories, including energy-recovery incineration separately from landfill.
+  categories, including `Incinerated with energy recovery` separately from
+  `Landfilled`.
 - `epr_quarter_reports` and `epr_quarter_site_snapshots` preserve submitted
   quarterly values. `epr_adjustments` records append-only dated corrections.
 
@@ -121,9 +122,9 @@ React Router owns client-side navigation. The current frontend routes are:
 - `/` and `/login` render the role-based demo login page.
 - `/manager` redirects to the manager compliance dashboard.
 - `/manager/compliance-dashboard` and `/admin/compliance-dashboard` render the
-  compliance dashboard.
-- `/manager/compliance-dashboard/import` renders the contractor monthly outcome
-  report import page, opened from the dashboard's Import Monthly Files button.
+  database-backed compliance dashboard.
+- `/manager/import` renders the contractor monthly outcome report import page
+  and is available from the manager workspace navigation.
 - `/manager/resale-bins` and `/manager/recycle-bins` render placeholder pages.
 - `/staff/sorting` renders the garment sorting workspace. `/staff` has no route;
   the login page and sidebar logo send staff users to `/staff/sorting`.
@@ -240,6 +241,26 @@ effect immediately. Create the first administrator with
   user referenced by bins, garment records, handoffs, or reports cannot be deleted
   (`409`) because those foreign keys use `ON DELETE RESTRICT`.
 
+### `GET /api/dashboard` (Feature 6 and change requests)
+
+Returns the database-backed compliance dashboard in one response: summary
+metrics, all six contractor disposition categories, annual monthly trends,
+pending/disputed handoffs, and the available site/contractor/year filter
+options. Query parameters support `frequency` (`monthly`, `quarterly`, or
+`annual`), `year`, `month`, `quarter`, `site_id`, and `contractor_id`.
+
+Authentication is now implemented (see above), but the site selector is still a
+demo filter rather than an authorization boundary. Enforce manager memberships in
+the backend before relying on it for access control.
+
+### `POST /api/contractor-reports/validate` (EPR change request)
+
+Validates monthly contractor rows before import. Each row carries six separate
+disposition weights, including distinct `landfilled_kg` and
+`incinerated_energy_recovery_kg` fields. The endpoint rejects rows whose
+categorized total exceeds received weight and returns the remaining
+`uncategorized_weight_kg` explicitly.
+
 Keep response models in `backend/app/schemas.py`. When an API response changes,
 update all of the following together:
 
@@ -265,12 +286,15 @@ npm run db:logs         # Follow MySQL container logs
 npm run db:migrate      # Apply all committed Alembic migrations
 npm run db:rollback     # Roll back one Alembic revision
 npm run db:revision -- -m "message"  # Autogenerate a new revision
+npm run db:check        # Compare SQLModel metadata with upgraded MySQL
+npm run guardrails      # Enforce repository architecture policies
+npm run test:guardrails # Test the executable policy checker
 npm run build           # Type-check and build the frontend
 npm run test            # Run frontend tests, then backend tests
 npm run lint            # Run ESLint, then Ruff
 npm run format          # Format frontend/docs and Python files
 npm run format:check    # Check formatting without modifying files
-npm run commit          # Lint, test backend, then create a Commitizen commit
+npm run commit          # Guardrails, lint, backend tests, then Commitizen
 ```
 
 ## Continuous integration
@@ -279,9 +303,11 @@ npm run commit          # Lint, test backend, then create a Commitizen commit
 `main`, and manual dispatches. It provides these independent status checks:
 
 - `Backend checks`: Python 3.12, disposable MySQL 8.4, editable `backend[dev]`
-  installation, Alembic migration, Ruff lint, Ruff format check, and Pytest.
+  installation, Alembic migration and metadata check, Ruff lint, Ruff format
+  check, and Pytest.
 - `Frontend checks`: Node.js 24, `npm ci`, Prettier, ESLint, Vitest, and the
-  production Vite build.
+  production Vite build. It also runs and tests the executable project
+  guardrails.
 - `Compose validation`: validates the resolved Compose configuration with
   disposable CI environment values and does not start containers.
 

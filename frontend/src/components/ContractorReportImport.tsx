@@ -12,17 +12,20 @@ import {
   RefreshCw,
 } from 'lucide-react'
 
+import { validateContractorReport, type ContractorReportValidationRowResult } from '@/api'
+
 interface ReportRow {
   row: number
   binId: string
   contractor: string
   storeWeight: number
   reportedWeight: number
-  resoldKg: number
-  recycledFiberKg: number
+  upcycledKg: number
+  fibreToFibreKg: number
   downcycledKg: number
   exportedKg: number
   landfilledKg: number
+  energyRecoveryKg: number
   status: 'Verified' | 'Warning' | 'Error'
   errorDetail?: string
 }
@@ -33,6 +36,10 @@ export default function ContractorReportImport() {
   const [isProcessing, setIsProcessing] = useState<boolean>(false)
   const [selectedContractor, setSelectedContractor] = useState<string>('Contractor 1')
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
+  const [validationResults, setValidationResults] = useState<ContractorReportValidationRowResult[]>(
+    [],
+  )
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   const reportRows: ReportRow[] = [
     {
@@ -41,11 +48,12 @@ export default function ContractorReportImport() {
       contractor: 'GreenSort Textiles',
       storeWeight: 12.3,
       reportedWeight: 12.1,
-      resoldKg: 4.2,
-      recycledFiberKg: 4.8,
+      upcycledKg: 4.2,
+      fibreToFibreKg: 4.8,
       downcycledKg: 1.8,
-      exportedKg: 0.9,
-      landfilledKg: 0.4,
+      exportedKg: 0.6,
+      landfilledKg: 0.2,
+      energyRecoveryKg: 0.2,
       status: 'Verified',
     },
     {
@@ -54,11 +62,12 @@ export default function ContractorReportImport() {
       contractor: 'ReWeave Recyclers',
       storeWeight: 15.1,
       reportedWeight: 10.0,
-      resoldKg: 5.3,
-      recycledFiberKg: 2.7,
+      upcycledKg: 5.3,
+      fibreToFibreKg: 2.7,
       downcycledKg: 1.0,
       exportedKg: 0.6,
       landfilledKg: 0.4,
+      energyRecoveryKg: 0.6,
       status: 'Error',
       errorDetail: 'Weight variance exceeds ±5% threshold (-5.1kg discrepancy)',
     },
@@ -68,11 +77,12 @@ export default function ContractorReportImport() {
       contractor: 'Loopfibre Co.',
       storeWeight: 14.0,
       reportedWeight: 13.9,
-      resoldKg: 3.5,
-      recycledFiberKg: 4.5,
+      upcycledKg: 3.5,
+      fibreToFibreKg: 4.5,
       downcycledKg: 3.0,
       exportedKg: 2.0,
       landfilledKg: 0.9,
+      energyRecoveryKg: 0,
       status: 'Error',
       errorDetail: 'Missing or Invalid Bin ID format',
     },
@@ -82,29 +92,63 @@ export default function ContractorReportImport() {
       contractor: 'ReWeave Recyclers',
       storeWeight: 16.5,
       reportedWeight: 15.8,
-      resoldKg: 4.5,
-      recycledFiberKg: 4.0,
+      upcycledKg: 4.5,
+      fibreToFibreKg: 4.0,
       downcycledKg: 3.2,
       exportedKg: 2.5,
-      landfilledKg: 1.6,
+      landfilledKg: 1.3,
+      energyRecoveryKg: 0.3,
       status: 'Warning',
       errorDetail: 'Minor weight variance flagged (-0.7kg)',
     },
   ]
 
-  const handleStartReview = () => {
+  const handleStartReview = async () => {
     setIsProcessing(true)
-    setTimeout(() => {
+    setValidationError(null)
+    try {
+      const response = await validateContractorReport(
+        reportRows.map((row) => ({
+          row: row.row,
+          received_kg: row.reportedWeight,
+          dispositions: {
+            upcycled_kg: row.upcycledKg,
+            fibre_to_fibre_kg: row.fibreToFibreKg,
+            downcycled_kg: row.downcycledKg,
+            exported_kg: row.exportedKg,
+            landfilled_kg: row.landfilledKg,
+            incinerated_energy_recovery_kg: row.energyRecoveryKg,
+          },
+        })),
+      )
+      setValidationResults(response.rows)
       setIsProcessing(false)
       setUploadedFileName('monthly_contractor_report_october.xlsx')
       setStep(2)
-    }, 400)
+    } catch (error) {
+      setValidationError(
+        error instanceof Error ? error.message : 'The report could not be validated.',
+      )
+      setIsProcessing(false)
+    }
   }
 
-  const totalRows = reportRows.length
-  const verifiedCount = reportRows.filter((r) => r.status === 'Verified').length
-  const warningCount = reportRows.filter((r) => r.status === 'Warning').length
-  const errorCount = reportRows.filter((r) => r.status === 'Error').length
+  const validatedRows = reportRows.map((row) => {
+    const weightValidation = validationResults.find((result) => result.row === row.row)
+    return {
+      ...row,
+      uncategorizedKg: weightValidation?.uncategorized_weight_kg ?? 0,
+      status: weightValidation && !weightValidation.is_valid ? ('Error' as const) : row.status,
+      errorDetail:
+        weightValidation && !weightValidation.is_valid
+          ? weightValidation.errors.join(' ')
+          : row.errorDetail,
+    }
+  })
+  const totalRows = validatedRows.length
+  const verifiedCount = validatedRows.filter((row) => row.status === 'Verified').length
+  const warningCount = validatedRows.filter((row) => row.status === 'Warning').length
+  const errorCount = validatedRows.filter((row) => row.status === 'Error').length
 
   return (
     <div className="w-full space-y-6">
@@ -112,7 +156,7 @@ export default function ContractorReportImport() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {[
           { num: 1, title: 'Step 1: Upload File', desc: 'CSV, XLS, XLSX' },
-          { num: 2, title: 'Step 2: Review 5 Categories', desc: 'Verify weights & rules' },
+          { num: 2, title: 'Step 2: Review 6 Categories', desc: 'Verify weights & rules' },
           { num: 3, title: 'Step 3: Save Report', desc: 'Finalize & record' },
         ].map((s) => {
           const isActive = step === s.num
@@ -194,6 +238,16 @@ export default function ContractorReportImport() {
               )}
             </div>
 
+            {validationError ? (
+              <div
+                role="alert"
+                className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800"
+              >
+                <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                <span>{validationError}</span>
+              </div>
+            ) : null}
+
             {/* 文件限制说明 */}
             <div className="flex flex-col sm:flex-row justify-between text-[11px] text-slate-400 gap-1 border-b border-slate-100 pb-4">
               <span>Supported Formats: CSV, XLS, XLSX</span>
@@ -250,7 +304,7 @@ export default function ContractorReportImport() {
               <button
                 type="button"
                 onClick={() =>
-                  alert('Formatting guide: Ensure 5 statutory outcome columns are included.')
+                  alert('Formatting guide: Ensure all 6 disposition columns are included.')
                 }
                 className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 underline self-start sm:self-auto cursor-pointer"
               >
@@ -332,10 +386,10 @@ export default function ContractorReportImport() {
                     <th className="py-3 px-3">Store Wt</th>
                     <th className="py-3 px-3">Reported Wt</th>
                     <th className="py-3 px-3 text-emerald-800 bg-emerald-100/60 font-bold">
-                      Resold
+                      Upcycled
                     </th>
                     <th className="py-3 px-3 text-blue-800 bg-blue-100/60 font-bold">
-                      Recycled Fiber
+                      Fibre-to-fibre
                     </th>
                     <th className="py-3 px-3 text-amber-800 bg-amber-100/60 font-bold">
                       Downcycled
@@ -344,11 +398,17 @@ export default function ContractorReportImport() {
                       Exported
                     </th>
                     <th className="py-3 px-3 text-rose-800 bg-rose-100/60 font-bold">Landfilled</th>
+                    <th className="bg-orange-100/60 py-3 px-3 font-bold text-orange-800">
+                      Incinerated with energy recovery
+                    </th>
+                    <th className="bg-slate-200/60 py-3 px-3 font-bold text-slate-700">
+                      Uncategorized
+                    </th>
                     <th className="py-3 px-3">Validation Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {reportRows.map((r) => (
+                  {validatedRows.map((r) => (
                     <tr
                       key={r.row}
                       className={
@@ -371,10 +431,10 @@ export default function ContractorReportImport() {
                       <td className="py-3 px-3 text-slate-600">{r.storeWeight} kg</td>
                       <td className="py-3 px-3 text-slate-900 font-bold">{r.reportedWeight} kg</td>
                       <td className="py-3 px-3 text-emerald-800 font-bold bg-emerald-50/30">
-                        {r.resoldKg} kg
+                        {r.upcycledKg} kg
                       </td>
                       <td className="py-3 px-3 text-blue-800 font-bold bg-blue-50/30">
-                        {r.recycledFiberKg} kg
+                        {r.fibreToFibreKg} kg
                       </td>
                       <td className="py-3 px-3 text-amber-800 font-bold bg-amber-50/30">
                         {r.downcycledKg} kg
@@ -384,6 +444,12 @@ export default function ContractorReportImport() {
                       </td>
                       <td className="py-3 px-3 text-rose-800 font-bold bg-rose-50/30">
                         {r.landfilledKg} kg
+                      </td>
+                      <td className="bg-orange-50/30 py-3 px-3 font-bold text-orange-800">
+                        {r.energyRecoveryKg} kg
+                      </td>
+                      <td className="bg-slate-50 py-3 px-3 font-bold text-slate-700">
+                        {r.uncategorizedKg.toFixed(1)} kg
                       </td>
                       <td className="py-3 px-3">
                         {r.status === 'Verified' && (

@@ -104,13 +104,23 @@ Apply the committed schema after MySQL is healthy:
 npm run db:migrate
 ```
 
+To populate deterministic local data for the compliance dashboard, run:
+
+```bash
+uv run --project backend --locked python backend/seed.py
+```
+
+The dashboard seed is additive and idempotent. It creates two sites and
+January–October 2026 handoff, contractor-report, disposition, and EPR examples
+without deleting existing records.
+
 Create a migration after changing `backend/app/models.py`, verify that the
 metadata matches the migrated database, or roll back one revision during local
 development:
 
 ```bash
 npm run db:revision -- -m "describe the schema change"
-python -m alembic -c backend/alembic.ini check
+npm run db:check
 npm run db:rollback
 ```
 
@@ -172,8 +182,8 @@ Vite proxies `/api` requests to FastAPI during development. To point the fronten
 | `/`                                                            | Fullscreen responsive login page                    |
 | `/login`                                                       | Alternate URL for the login page                    |
 | `/manager`                                                     | Redirects to the compliance dashboard               |
-| `/manager/compliance-dashboard`, `/admin/compliance-dashboard` | Compliance dashboard                                |
-| `/manager/compliance-dashboard/import`                         | Contractor monthly outcome report import            |
+| `/manager/compliance-dashboard`, `/admin/compliance-dashboard` | Database-backed compliance dashboard                |
+| `/manager/import`                                              | Contractor monthly outcome report import            |
 | `/manager/resale-bins`                                         | Resale bin records placeholder                      |
 | `/manager/recycle-bins`                                        | Recycle bin records placeholder                     |
 | `/staff/sorting`                                               | Garment sorting workspace                           |
@@ -193,6 +203,21 @@ and `/admin/users` for admins.
 
 The workspace routes are intentionally **not protected** yet, so they can also
 be opened directly during development.
+
+## Dashboard API
+
+`GET /api/dashboard` returns summary metrics, six contractor disposition
+categories, monthly trends, pending/disputed handoffs, and filter options from
+MySQL. It accepts `frequency`, `year`, `month`, `quarter`, `site_id`, and
+`contractor_id` query parameters. Until real authentication is implemented,
+site selection filters data but does not enforce manager membership.
+
+## Contractor report validation
+
+`POST /api/contractor-reports/validate` checks monthly report rows before they
+are saved. `Landfilled` and `Incinerated with energy recovery` remain separate
+categories, categorized weight cannot exceed received weight, and any remaining
+weight is returned as `uncategorized_weight_kg` for review on the import page.
 
 ## Frontend UI
 
@@ -214,6 +239,8 @@ npm run build
 npm run test
 npm run lint
 npm run format:check
+npm run guardrails
+npm run test:guardrails
 ```
 
 You can run each side independently with `npm run dev:frontend` and `npm run dev:backend`.
@@ -225,10 +252,11 @@ GitHub Actions runs `.github/workflows/ci.yaml` for pull requests targeting
 three independent checks:
 
 - **Backend checks:** start MySQL 8.4, install `backend[dev]` on Python 3.12,
-  apply every Alembic migration, run Ruff lint and formatting checks, then run
-  Pytest.
+  apply every Alembic migration, verify SQLModel metadata with `alembic check`,
+  run Ruff lint and formatting checks, then run Pytest.
 - **Frontend checks:** install the locked npm dependencies on Node.js 24, check
-  Prettier and ESLint, run Vitest, then create a production build.
+  and test the executable project guardrails, check Prettier and ESLint, run
+  Vitest, then create a production build.
 - **Compose validation:** resolve `compose.yaml` with non-production CI values
   and validate its syntax without starting MySQL.
 
@@ -267,8 +295,9 @@ and the backend test suite pass before Commitizen creates the commit.
 
 The interactive command performs these steps in order:
 
-1. Confirm that at least one file has been staged with `git add`.
-2. Run lint-staged against the staged files.
+1. Run and test the executable project guardrails.
+2. Confirm that at least one file has been staged with `git add` and run
+   lint-staged against the staged files.
 3. Run the complete backend Pytest suite.
 4. Stop immediately if lint, formatting, or tests fail.
 5. After all checks pass, open the Commitizen prompts configured in

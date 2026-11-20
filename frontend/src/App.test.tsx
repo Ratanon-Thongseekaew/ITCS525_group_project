@@ -5,6 +5,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { toast } from 'sonner'
 import { afterEach, expect, test, vi } from 'vitest'
+import { dashboardFixture } from './test/dashboard-fixture'
 import App from './App'
 
 afterEach(() => {
@@ -39,12 +40,19 @@ Object.defineProperty(globalThis, 'ResizeObserver', {
 })
 
 function renderRoute(route: string) {
-  vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input) =>
     Promise.resolve(
-      new Response(JSON.stringify({ message: 'Hello from FastAPI!' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
+      new Response(
+        JSON.stringify(
+          String(input).includes('/api/dashboard')
+            ? dashboardFixture
+            : { message: 'Hello from FastAPI!' },
+        ),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
     ),
   )
 
@@ -79,7 +87,7 @@ test('redirects the manager root to the compliance dashboard', () => {
   expect(screen.queryByRole('status', { name: 'loading...' })).not.toBeInTheDocument()
 })
 
-test('navigates from the manager workspace to the compliance dashboard path', () => {
+test('navigates from the manager workspace to the compliance dashboard path', async () => {
   renderRoute('/manager/resale-bins')
 
   fireEvent.click(screen.getByRole('link', { name: 'Compliance Dashboard' }))
@@ -89,7 +97,7 @@ test('navigates from the manager workspace to the compliance dashboard path', ()
   expect(complianceDashboardLink).toHaveAttribute('href', '/manager/compliance-dashboard')
   expect(complianceDashboardLink).toHaveAttribute('data-active', 'true')
   expect(screen.getByRole('heading', { name: 'Compliance Dashboard' })).toBeInTheDocument()
-  expect(screen.getByText('Recycling Bins Collected')).toBeInTheDocument()
+  expect(await screen.findByText('Recycling Bins Collected')).toBeInTheDocument()
   expect(screen.getByRole('table')).toBeInTheDocument()
 })
 
@@ -414,10 +422,10 @@ test('redirects the demo staff login to the sorting workspace', () => {
   expect(screen.getByText('Your work, clearly organized.')).toBeInTheDocument()
 })
 
-test('opens the contractor report import page from the compliance dashboard', () => {
+test('opens the contractor report import page from manager navigation', () => {
   renderRoute('/manager/compliance-dashboard')
 
-  fireEvent.click(screen.getByRole('link', { name: 'Import Monthly Files' }))
+  fireEvent.click(screen.getByRole('link', { name: 'Import Data' }))
 
   expect(
     screen.getByRole('heading', { name: 'Import Monthly Outcome Report File' }),
