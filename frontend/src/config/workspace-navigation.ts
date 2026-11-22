@@ -35,12 +35,12 @@ export const workspaceNavigation: readonly WorkspaceNavigationItem[] = [
     icon: Shirt,
     roles: ['manager'],
   },
-  {
-    label: 'Recycle Bin Records',
-    segment: 'recycle-bins',
-    icon: Recycle,
-    roles: ['manager'],
-  },
+  // {
+  //   label: 'Recycle Bin Records',
+  //   segment: 'recycle-bins',
+  //   icon: Recycle,
+  //   roles: ['manager'],
+  // },
   {
     label: 'Import Data',
     segment: 'import',

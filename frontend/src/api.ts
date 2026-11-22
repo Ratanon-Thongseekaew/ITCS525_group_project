@@ -2,6 +2,16 @@ export interface Greeting {
   message: string
 }
 
+export interface ResaleStoreSummary {
+  id: number
+  name: string
+  actual_value: number
+}
+
+export interface ResaleStoreSummaryResponse {
+  stores: ResaleStoreSummary[]
+}
+
 export type BinType = 'resale' | 'recycle'
 export type BinStatus = 'active' | 'closed'
 export type GarmentCondition = 'good_reusable' | 'worn_recyclable'
@@ -182,6 +192,70 @@ export interface DashboardResponse {
   }
 }
 
+export interface EprQuarterReport {
+  year: number
+  quarter: number
+  source: 'live_records' | 'submitted_snapshot'
+  total_weight_received_kg: number
+  resold_weight_kg: number
+  repaired_weight_kg: number
+  upcycled_weight_kg: number
+  fibre_to_fibre_weight_kg: number
+  downcycled_weight_kg: number
+  exported_weight_kg: number
+  landfilled_weight_kg: number
+  incinerated_energy_recovery_weight_kg: number
+  uncategorized_weight_kg: number
+  excess_weight_kg: number
+  recovery_rate_percent: number
+  garments_missing_weight: number | null
+}
+
+export type EprAdjustmentMetric =
+  | 'total_received'
+  | 'resold'
+  | 'repaired'
+  | 'upcycled'
+  | 'fibre_to_fibre'
+  | 'downcycled'
+  | 'exported'
+  | 'landfilled'
+  | 'incinerated_energy_recovery'
+
+export interface EprAdjustmentRequest {
+  actor_id: number
+  site_id: number
+  expected_latest_adjustment_id: number | null
+  effective_date: string
+  reason: string
+  lines: { metric: EprAdjustmentMetric; weight_delta_kg: string }[]
+}
+
+export interface EprManagementOption {
+  id: number
+  label: string
+}
+
+export interface EprManagement {
+  report: EprQuarterReport
+  status: 'draft' | 'submitted'
+  submitted_at: string | null
+  submitted_by: string | null
+  adjusted_report: EprQuarterReport | null
+  adjustments: {
+    id: number
+    site_id: number
+    metric: EprAdjustmentMetric
+    weight_delta_kg: number
+    effective_date: string
+    reason: string
+    created_at: string
+    recorded_by: string
+  }[]
+  sites: EprManagementOption[]
+  actors: EprManagementOption[]
+}
+
 const API_URL = import.meta.env.VITE_API_URL ?? ''
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -195,6 +269,13 @@ async function handleResponse<T>(response: Response): Promise<T> {
 export async function getGreeting(): Promise<Greeting> {
   const response = await fetch(`${API_URL}/api/greeting`)
   return handleResponse<Greeting>(response)
+}
+
+export async function getResaleStoreSummary(
+  signal?: AbortSignal,
+): Promise<ResaleStoreSummaryResponse> {
+  const response = await fetch(`${API_URL}/api/resale-bins/summary`, { signal })
+  return handleResponse<ResaleStoreSummaryResponse>(response)
 }
 
 export async function getDashboard(
@@ -220,6 +301,52 @@ export async function getDashboard(
 
   const response = await fetch(`${API_URL}/api/dashboard?${params.toString()}`, { signal })
   return handleResponse<DashboardResponse>(response)
+}
+
+export async function getEprQuarterReport(
+  year: number,
+  quarter: number,
+  signal?: AbortSignal,
+): Promise<EprQuarterReport> {
+  const params = new URLSearchParams({ year: String(year), quarter: String(quarter) })
+  const response = await fetch(`${API_URL}/api/epr/quarterly-report?${params}`, { signal })
+  return handleResponse<EprQuarterReport>(response)
+}
+
+export async function getEprManagement(year: number, quarter: number, signal?: AbortSignal) {
+  const params = new URLSearchParams({ year: String(year), quarter: String(quarter) })
+  const response = await fetch(`${API_URL}/api/epr/quarterly-report/management?${params}`, {
+    signal,
+  })
+  return handleResponse<EprManagement>(response)
+}
+
+async function writeEprManagement(
+  action: 'submit' | 'adjustments',
+  year: number,
+  quarter: number,
+  payload: { actor_id: number } | EprAdjustmentRequest,
+) {
+  const params = new URLSearchParams({ year: String(year), quarter: String(quarter) })
+  const response = await fetch(`${API_URL}/api/epr/quarterly-report/${action}?${params}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const error = (await response.json().catch(() => null)) as { detail?: unknown } | null
+    if (typeof error?.detail === 'string') throw new Error(error.detail)
+    throw new Error('The report could not be saved. Check the entered values and try again.')
+  }
+  return handleResponse<EprManagement>(response)
+}
+
+export function submitEprQuarter(year: number, quarter: number, actorId: number) {
+  return writeEprManagement('submit', year, quarter, { actor_id: actorId })
+}
+
+export function saveEprAdjustment(year: number, quarter: number, payload: EprAdjustmentRequest) {
+  return writeEprManagement('adjustments', year, quarter, payload)
 }
 
 export async function validateContractorReport(

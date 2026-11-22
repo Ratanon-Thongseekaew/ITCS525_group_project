@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertCircle, Database, Download, RefreshCw, TrendingDown } from 'lucide-react'
-import { Link } from 'react-router'
+import { AlertCircle, Database, RefreshCw, TrendingDown } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from 'recharts'
 
 import {
@@ -10,6 +9,8 @@ import {
   type DashboardOutcome,
   type DashboardResponse,
 } from '@/api'
+import { EprReportExportDialog } from '@/components/EprReportExportDialog'
+import { EprReportManagementDialog } from '@/components/EprReportManagementDialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -452,12 +453,18 @@ export function ComplianceDashboardPage() {
             Live handoff and contractor outcome data from Textile Track
           </p>
         </div>
-        <Button asChild size="sm" className="bg-teal-700 text-white hover:bg-teal-800">
-          <Link to=".">
-            <Download aria-hidden="true" />
-            Export Report
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <EprReportManagementDialog
+            defaultYear={year}
+            defaultQuarter={frequency === 'monthly' ? Math.ceil(month / 3) : quarter}
+            years={dashboard?.filters.available_years ?? [year]}
+          />
+          <EprReportExportDialog
+            defaultYear={year}
+            defaultQuarter={frequency === 'monthly' ? Math.ceil(month / 3) : quarter}
+            years={dashboard?.filters.available_years ?? [year]}
+          />
+        </div>
       </section>
 
       <Separator />
