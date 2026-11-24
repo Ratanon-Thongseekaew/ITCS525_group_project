@@ -12,9 +12,9 @@ export interface ResaleStoreSummaryResponse {
   stores: ResaleStoreSummary[]
 }
 
-export type BinType = 'resale' | 'recycle'
+export type BinType = 'resale' | 'recycle' | 'repair'
 export type BinStatus = 'active' | 'closed'
-export type GarmentCondition = 'good_reusable' | 'worn_recyclable'
+export type GarmentCondition = 'good_reusable' | 'worn_recyclable' | 'repair_upcycle'
 
 export interface GarmentSortRequest {
   condition: GarmentCondition
@@ -58,17 +58,21 @@ export interface BinCreateRequest {
 export interface ActiveBinsResponse {
   resale_bin: BinRecord | null
   recycle_bin: BinRecord | null
+  repair_bin: BinRecord | null
 }
 
 export interface SortingStatsResponse {
   total_sorted_today: number
   resale_count: number
   recycle_count: number
+  repair_count: number
   resale_percentage: number
   active_resale_bin_code: string | null
   active_resale_bin_items: number
   active_recycle_bin_code: string | null
   active_recycle_bin_items: number
+  active_repair_bin_code: string | null
+  active_repair_bin_items: number
 }
 
 export interface SortGarmentResponse {

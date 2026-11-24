@@ -116,6 +116,58 @@ def test_sort_garment_recycle() -> None:
     assert updated_stats["recycle_count"] == initial_recycle + 1
 
 
+def test_sort_garment_repair_upcycle_goes_to_repair_bin() -> None:
+    initial_stats = client.get("/api/sorting/stats").json()
+
+    response = client.post(
+        "/api/garments/sort",
+        json={"condition": "repair_upcycle", "category": "Tops", "notes": "Missing button"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["garment"]["condition"] == "repair_upcycle"
+    assert data["bin"]["bin_type"] == "repair"
+    assert data["bin"]["status"] == "active"
+    assert "Repair/Upcycle" in data["message"]
+
+    updated_stats = client.get("/api/sorting/stats").json()
+    assert updated_stats["repair_count"] == initial_stats["repair_count"] + 1
+    assert updated_stats["total_sorted_today"] == initial_stats["total_sorted_today"] + 1
+    assert updated_stats["active_repair_bin_code"] == data["bin"]["bin_code"]
+    assert client.get("/api/bins/active").json()["repair_bin"]["id"] == data["bin"]["id"]
+
+
+def test_repair_items_reuse_active_repair_bin_and_never_enter_other_bins() -> None:
+    first = client.post("/api/garments/sort", json={"condition": "repair_upcycle"}).json()
+    second = client.post("/api/garments/sort", json={"condition": "repair_upcycle"}).json()
+
+    assert second["bin"]["id"] == first["bin"]["id"]
+    assert second["bin"]["item_count"] == first["bin"]["item_count"] + 1
+
+
+def test_repair_item_ignores_requested_bin_of_wrong_type() -> None:
+    resale_bin = client.get("/api/bins/active").json()["resale_bin"]
+
+    response = client.post(
+        "/api/garments/sort",
+        json={"condition": "repair_upcycle", "bin_id": resale_bin["id"]},
+    )
+
+    assert response.json()["bin"]["bin_type"] == "repair"
+
+
+def test_repair_bin_can_be_created_filtered_and_closed() -> None:
+    created = client.post("/api/bins", json={"bin_type": "repair"}).json()
+    assert created["bin_code"].startswith("BIN-RP-")
+
+    repair_bins = client.get("/api/bins?bin_type=repair").json()
+    assert created["id"] in {b["id"] for b in repair_bins}
+    assert all(b["bin_type"] == "repair" for b in repair_bins)
+
+    closed = client.post(f"/api/bins/{created['id']}/close", json={}).json()
+    assert closed["status"] == "closed"
+
+
 def test_get_recent_garments() -> None:
     response = client.get("/api/garments/recent?limit=5")
     assert response.status_code == 200

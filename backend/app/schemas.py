@@ -141,6 +141,7 @@ class ResaleStoreSummaryResponse(BaseModel):
 class BinType(StrEnum):
     RESALE = "resale"
     RECYCLE = "recycle"
+    REPAIR = "repair"
 
 
 class BinStatus(StrEnum):
@@ -151,6 +152,7 @@ class BinStatus(StrEnum):
 class GarmentCondition(StrEnum):
     GOOD_REUSABLE = "good_reusable"
     WORN_RECYCLABLE = "worn_recyclable"
+    REPAIR_UPCYCLE = "repair_upcycle"
 
 
 class GarmentSortRequest(BaseModel):
@@ -199,17 +201,21 @@ class BinCloseRequest(BaseModel):
 class ActiveBinsResponse(BaseModel):
     resale_bin: BinRecord | None = None
     recycle_bin: BinRecord | None = None
+    repair_bin: BinRecord | None = None
 
 
 class SortingStatsResponse(BaseModel):
     total_sorted_today: int
     resale_count: int
     recycle_count: int
+    repair_count: int = 0
     resale_percentage: float
     active_resale_bin_code: str | None = None
     active_resale_bin_items: int = 0
     active_recycle_bin_code: str | None = None
     active_recycle_bin_items: int = 0
+    active_repair_bin_code: str | None = None
+    active_repair_bin_items: int = 0
 
 
 class SortGarmentResponse(BaseModel):

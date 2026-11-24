@@ -15,6 +15,22 @@ from .schemas import (
     SortingStatsResponse,
 )
 
+CONDITION_TARGET_BIN_TYPE: dict[GarmentCondition, BinType] = {
+    GarmentCondition.GOOD_REUSABLE: BinType.RESALE,
+    GarmentCondition.WORN_RECYCLABLE: BinType.RECYCLE,
+    GarmentCondition.REPAIR_UPCYCLE: BinType.REPAIR,
+}
+CONDITION_LABELS: dict[GarmentCondition, str] = {
+    GarmentCondition.GOOD_REUSABLE: "Good/Reusable (Resale)",
+    GarmentCondition.WORN_RECYCLABLE: "Worn/Recyclable (Recycle)",
+    GarmentCondition.REPAIR_UPCYCLE: "Repair/Upcycle (Repair)",
+}
+BIN_CODE_PREFIXES: dict[BinType, str] = {
+    BinType.RESALE: "RS",
+    BinType.RECYCLE: "RC",
+    BinType.REPAIR: "RP",
+}
+
 
 class SortingService:
     def __init__(self) -> None:
@@ -144,6 +160,7 @@ class SortingService:
     def get_active_bins(self) -> ActiveBinsResponse:
         resale_bin: BinRecord | None = None
         recycle_bin: BinRecord | None = None
+        repair_bin: BinRecord | None = None
 
         for b in self._bins.values():
             if b.status == BinStatus.ACTIVE:
@@ -151,15 +168,19 @@ class SortingService:
                     resale_bin = b
                 elif b.bin_type == BinType.RECYCLE and recycle_bin is None:
                     recycle_bin = b
+                elif b.bin_type == BinType.REPAIR and repair_bin is None:
+                    repair_bin = b
 
-        return ActiveBinsResponse(resale_bin=resale_bin, recycle_bin=recycle_bin)
+        return ActiveBinsResponse(
+            resale_bin=resale_bin, recycle_bin=recycle_bin, repair_bin=repair_bin
+        )
 
     def get_bin(self, bin_id: str) -> BinRecord | None:
         return self._bins.get(bin_id)
 
     def create_bin(self, request: BinCreateRequest) -> BinRecord:
         now = datetime.now(UTC)
-        prefix = "RS" if request.bin_type == BinType.RESALE else "RC"
+        prefix = BIN_CODE_PREFIXES[request.bin_type]
         type_count = sum(1 for b in self._bins.values() if b.bin_type == request.bin_type)
         bin_code = request.bin_code or f"BIN-{prefix}-{type_count + 1:03d}"
         bin_id = f"bin-{prefix.lower()}-{uuid4().hex[:6]}"
@@ -194,11 +215,7 @@ class SortingService:
         return bin_record
 
     def sort_garment(self, request: GarmentSortRequest) -> SortGarmentResponse:
-        target_bin_type = (
-            BinType.RESALE
-            if request.condition == GarmentCondition.GOOD_REUSABLE
-            else BinType.RECYCLE
-        )
+        target_bin_type = CONDITION_TARGET_BIN_TYPE[request.condition]
 
         target_bin: BinRecord | None = None
 
@@ -213,11 +230,11 @@ class SortingService:
 
         if not target_bin:
             active_bins = self.get_active_bins()
-            target_bin = (
-                active_bins.resale_bin
-                if target_bin_type == BinType.RESALE
-                else active_bins.recycle_bin
-            )
+            target_bin = {
+                BinType.RESALE: active_bins.resale_bin,
+                BinType.RECYCLE: active_bins.recycle_bin,
+                BinType.REPAIR: active_bins.repair_bin,
+            }[target_bin_type]
 
         # If no active bin of this type exists, automatically spawn a new one
         if not target_bin:
@@ -247,11 +264,7 @@ class SortingService:
 
         self._garments.insert(0, garment)
 
-        condition_label = (
-            "Good/Reusable (Resale)"
-            if request.condition == GarmentCondition.GOOD_REUSABLE
-            else "Worn/Recyclable (Recycle)"
-        )
+        condition_label = CONDITION_LABELS[request.condition]
         message = (
             f"Item successfully sorted as {condition_label} into {target_bin.bin_code} "
             f"({target_bin.item_count}/{target_bin.max_capacity} items)."
@@ -270,6 +283,9 @@ class SortingService:
         recycle_count = sum(
             1 for g in self._garments if g.condition == GarmentCondition.WORN_RECYCLABLE
         )
+        repair_count = sum(
+            1 for g in self._garments if g.condition == GarmentCondition.REPAIR_UPCYCLE
+        )
         pct = round((resale_count / total * 100), 1) if total > 0 else 0.0
 
         active_bins = self.get_active_bins()
@@ -278,6 +294,7 @@ class SortingService:
             total_sorted_today=total,
             resale_count=resale_count,
             recycle_count=recycle_count,
+            repair_count=repair_count,
             resale_percentage=pct,
             active_resale_bin_code=(
                 active_bins.resale_bin.bin_code if active_bins.resale_bin else None
@@ -290,6 +307,12 @@ class SortingService:
             ),
             active_recycle_bin_items=(
                 active_bins.recycle_bin.item_count if active_bins.recycle_bin else 0
+            ),
+            active_repair_bin_code=(
+                active_bins.repair_bin.bin_code if active_bins.repair_bin else None
+            ),
+            active_repair_bin_items=(
+                active_bins.repair_bin.item_count if active_bins.repair_bin else 0
             ),
         )
 

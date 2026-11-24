@@ -11,11 +11,14 @@ describe('GarmentSortingWorkspace', () => {
     total_sorted_today: 36,
     resale_count: 14,
     recycle_count: 22,
+    repair_count: 3,
     resale_percentage: 38.9,
     active_resale_bin_code: 'BIN-RS-001',
     active_resale_bin_items: 14,
     active_recycle_bin_code: 'BIN-RC-001',
     active_recycle_bin_items: 22,
+    active_repair_bin_code: 'BIN-RP-001',
+    active_repair_bin_items: 3,
   }
 
   const mockActiveBins: api.ActiveBinsResponse = {
@@ -43,11 +46,24 @@ describe('GarmentSortingWorkspace', () => {
       closed_at: null,
       notes: 'Active recycle bin',
     },
+    repair_bin: {
+      id: 'bin-rp-001',
+      bin_code: 'BIN-RP-001',
+      bin_type: 'repair',
+      status: 'active',
+      item_count: 3,
+      total_weight_kg: 1.1,
+      max_capacity: 50,
+      created_at: new Date().toISOString(),
+      closed_at: null,
+      notes: 'Active repair bin',
+    },
   }
 
   const mockBins: api.BinRecord[] = [
     mockActiveBins.resale_bin!,
     mockActiveBins.recycle_bin!,
+    mockActiveBins.repair_bin!,
     {
       id: 'bin-rs-000',
       bin_code: 'BIN-RS-000',
@@ -139,6 +155,42 @@ describe('GarmentSortingWorkspace', () => {
 
     expect(screen.getByRole('button', { name: /Good \/ Reusable/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Worn \/ Recyclable/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Repair \/ Upcycle/i })).toBeInTheDocument()
+  })
+
+  test('handles quick-tap sorting to repair with a single tap', async () => {
+    render(<GarmentSortingWorkspace />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Repair \/ Upcycle/i }))
+
+    await waitFor(() => {
+      expect(api.sortGarment).toHaveBeenCalledTimes(1)
+      expect(api.sortGarment).toHaveBeenCalledWith(
+        expect.objectContaining({ condition: 'repair_upcycle', category: 'Tops' }),
+      )
+    })
+  })
+
+  test.each(['u', '3'])('sorts to repair with keyboard shortcut %s', async (key) => {
+    render(<GarmentSortingWorkspace />)
+
+    fireEvent.keyDown(window, { key })
+
+    await waitFor(() => {
+      expect(api.sortGarment).toHaveBeenCalledWith(
+        expect.objectContaining({ condition: 'repair_upcycle' }),
+      )
+    })
+  })
+
+  test('filters the bin list to repair bins', async () => {
+    render(<GarmentSortingWorkspace />)
+    await waitFor(() => expect(screen.getAllByText('BIN-RP-001').length).toBeGreaterThan(0))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Repair' }))
+
+    expect(screen.queryByText('BIN-RS-000')).not.toBeInTheDocument()
+    expect(screen.getAllByText('BIN-RP-001').length).toBeGreaterThan(0)
   })
 
   test('handles quick-tap sorting to direct resale', async () => {

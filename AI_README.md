@@ -219,15 +219,15 @@ Used by the starter React page to demonstrate frontend/backend communication.
 
 ### `POST /api/garments/sort` (Feature 2)
 
-Used by the Store Staff counter intake interface to classify garments into `good_reusable` (direct resale) or `worn_recyclable` (recycling), automatically assigning them to active bins.
+Used by the Store Staff counter intake interface to classify garments into `good_reusable` (direct resale), `worn_recyclable` (recycling) or `repair_upcycle` (repair partner, change request #13), automatically assigning them to the active bin of the matching type (`resale`, `recycle`, `repair`). A bin of that type is created when none is active. The staff screen offers one quick-tap button per condition (shortcuts R/1, C/2, U/3).
 
 ### `GET /api/bins/active` (Feature 2)
 
-Returns the current active open resale and recycling bins ready to receive sorted garments.
+Returns the current active open resale, recycling and repair bins (`resale_bin`, `recycle_bin`, `repair_bin`) ready to receive sorted garments.
 
 ### `GET /api/bins` (Feature 2)
 
-Lists bin records with optional `bin_type` (`resale` / `recycle`) and `status` (`active` / `closed`) filters.
+Lists bin records with optional `bin_type` (`resale` / `recycle` / `repair`) and `status` (`active` / `closed`) filters.
 
 ### `POST /api/bins` (Feature 2)
 
@@ -239,7 +239,7 @@ Marks a bin as closed/sealed, recording completion timestamp and locking it for 
 
 ### `GET /api/sorting/stats` (Feature 2)
 
-Returns shift intake metrics (total garments sorted today, resale count, recycle count, resale capture percentage).
+Returns shift intake metrics (total garments sorted today, resale, recycle and repair counts, resale capture percentage, and the active bin code and item count per type).
 
 ### Authentication and user management
 

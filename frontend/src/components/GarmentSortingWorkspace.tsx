@@ -12,6 +12,7 @@ import {
   Shirt,
   Sparkles,
   TrendingUp,
+  Wrench,
 } from 'lucide-react'
 
 import {
@@ -36,6 +37,38 @@ import { Label } from '@/components/ui/label'
 
 const CATEGORIES = ['Tops', 'Bottoms', 'Outerwear', 'Dresses', 'Accessories', 'Other']
 
+const FEEDBACK_TYPE_BY_CONDITION: Record<GarmentCondition, 'resale' | 'recycle' | 'repair'> = {
+  good_reusable: 'resale',
+  worn_recyclable: 'recycle',
+  repair_upcycle: 'repair',
+}
+
+const CONDITION_LABELS: Record<GarmentCondition, string> = {
+  good_reusable: 'Good / Reusable',
+  worn_recyclable: 'Worn / Recyclable',
+  repair_upcycle: 'Repair / Upcycle',
+}
+
+const BIN_CODE_PREFIXES: Record<BinType, string> = { resale: 'RS', recycle: 'RC', repair: 'RP' }
+
+const BIN_TYPE_LABELS: Record<BinType, string> = {
+  resale: 'Direct Resale',
+  recycle: 'Recycling',
+  repair: 'Repair',
+}
+
+const BIN_TYPE_STYLES: Record<BinType, string> = {
+  resale: 'bg-emerald-100 text-emerald-800',
+  recycle: 'bg-amber-100 text-amber-800',
+  repair: 'bg-sky-100 text-sky-800',
+}
+
+const FEEDBACK_STYLES = {
+  resale: 'bg-emerald-50 text-emerald-900 border-emerald-300',
+  recycle: 'bg-amber-50 text-amber-900 border-amber-300',
+  repair: 'bg-sky-50 text-sky-900 border-sky-300',
+} as const
+
 export function GarmentSortingWorkspace() {
   const [stats, setStats] = React.useState<SortingStatsResponse | null>(null)
   const [activeBins, setActiveBins] = React.useState<ActiveBinsResponse | null>(null)
@@ -49,13 +82,13 @@ export function GarmentSortingWorkspace() {
   const [weightKg, setWeightKg] = React.useState<string>('')
   const [notes, setNotes] = React.useState<string>('')
   const [lastFeedback, setLastFeedback] = React.useState<{
-    type: 'resale' | 'recycle'
+    type: 'resale' | 'recycle' | 'repair'
     message: string
   } | null>(null)
 
   // Bin filter & creation modal state
   const [binFilter, setBinFilter] = React.useState<
-    'all' | 'active' | 'closed' | 'resale' | 'recycle'
+    'all' | 'active' | 'closed' | 'resale' | 'recycle' | 'repair'
   >('all')
   const [showNewBinModal, setShowNewBinModal] = React.useState(false)
   const [newBinType, setNewBinType] = React.useState<BinType>('resale')
@@ -130,7 +163,7 @@ export function GarmentSortingWorkspace() {
         })
 
         setLastFeedback({
-          type: condition === 'good_reusable' ? 'resale' : 'recycle',
+          type: FEEDBACK_TYPE_BY_CONDITION[condition],
           message: response.message,
         })
 
@@ -159,7 +192,7 @@ export function GarmentSortingWorkspace() {
     handleSortRef.current = handleSort
   })
 
-  // Keyboard shortcut listener for ultra-fast intake (R/1 = Resale, C/2 = Recycle)
+  // Keyboard shortcut listener for ultra-fast intake (R/1 = Resale, C/2 = Recycle, U/3 = Repair)
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
@@ -174,6 +207,9 @@ export function GarmentSortingWorkspace() {
       } else if (e.key === 'c' || e.key === 'C' || e.key === '2') {
         e.preventDefault()
         void handleSortRef.current('worn_recyclable')
+      } else if (e.key === 'u' || e.key === 'U' || e.key === '3') {
+        e.preventDefault()
+        void handleSortRef.current('repair_upcycle')
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -218,6 +254,7 @@ export function GarmentSortingWorkspace() {
       if (binFilter === 'closed') return bin.status === 'closed'
       if (binFilter === 'resale') return bin.bin_type === 'resale'
       if (binFilter === 'recycle') return bin.bin_type === 'recycle'
+      if (binFilter === 'repair') return bin.bin_type === 'repair'
       return true
     })
   }, [allBins, binFilter])
@@ -349,9 +386,7 @@ export function GarmentSortingWorkspace() {
           {lastFeedback && (
             <div
               className={`flex items-center gap-2.5 p-3 rounded-lg text-sm border font-medium transition-all ${
-                lastFeedback.type === 'resale'
-                  ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
-                  : 'bg-amber-50 text-amber-900 border-amber-300'
+                FEEDBACK_STYLES[lastFeedback.type]
               }`}
             >
               <CheckCircle2 className="size-4 shrink-0" />
@@ -383,7 +418,7 @@ export function GarmentSortingWorkspace() {
           </div>
 
           {/* Quick-Tap Buttons: Resale vs Recycle */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
             {/* Button 1: Good / Reusable (Resale) */}
             <button
               type="button"
@@ -415,6 +450,23 @@ export function GarmentSortingWorkspace() {
               <span className="text-2xl font-extrabold tracking-tight">Worn / Recyclable</span>
               <span className="text-xs text-amber-100 mt-1 font-medium">
                 Route to Contractor Recycling Bin ({activeBins?.recycle_bin?.bin_code ?? 'Auto'})
+              </span>
+            </button>
+
+            {/* Button 3: Repair / Upcycle (Repair) */}
+            <button
+              type="button"
+              disabled={sortingInProgress}
+              onClick={() => void handleSort('repair_upcycle')}
+              className="group relative flex flex-col items-center justify-center p-6 rounded-xl border-2 border-sky-600 bg-sky-600 !text-white hover:bg-sky-700 active:scale-[0.98] transition-all shadow-md focus:outline-none focus:ring-4 focus:ring-sky-300 disabled:opacity-50"
+            >
+              <div className="absolute top-3 right-3 flex items-center gap-1 bg-sky-800/80 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded">
+                Key: [U] or [3]
+              </div>
+              <Wrench className="size-10 mb-2 transition-transform group-hover:scale-110" />
+              <span className="text-2xl font-extrabold tracking-tight">Repair / Upcycle</span>
+              <span className="text-xs text-sky-100 mt-1 font-medium">
+                Route to Repair Bin ({activeBins?.repair_bin?.bin_code ?? 'Auto'})
               </span>
             </button>
           </div>
@@ -456,7 +508,7 @@ export function GarmentSortingWorkspace() {
       </Card>
 
       {/* Active Bins Status Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Resale Bin Progress */}
         <Card className="border-slate-200">
           <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
@@ -583,6 +635,68 @@ export function GarmentSortingWorkspace() {
             )}
           </CardContent>
         </Card>
+
+        {/* Repair Bin Progress */}
+        <Card className="border-slate-200">
+          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-sky-700 bg-sky-100 px-2 py-0.5 rounded">
+                Repair Bin
+              </span>
+              <CardTitle className="text-lg font-bold text-slate-900 mt-1">
+                {activeBins?.repair_bin?.bin_code ?? 'None Active'}
+              </CardTitle>
+            </div>
+            {activeBins?.repair_bin && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setClosingBinId(activeBins.repair_bin!.id)}
+                className="text-xs border-slate-300 hover:bg-slate-100 flex items-center gap-1"
+              >
+                <Archive className="size-3.5 text-slate-600" />
+                Seal / Close Bin
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className="p-4 pt-1 space-y-2">
+            {activeBins?.repair_bin ? (
+              <>
+                <div className="flex justify-between text-xs text-slate-600 font-medium">
+                  <span>
+                    Capacity: {activeBins.repair_bin.item_count} /{' '}
+                    {activeBins.repair_bin.max_capacity} items
+                  </span>
+                  <span>
+                    {Math.round(
+                      (activeBins.repair_bin.item_count / activeBins.repair_bin.max_capacity) * 100,
+                    )}
+                    %
+                  </span>
+                </div>
+                <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                  <div
+                    className="bg-sky-600 h-2.5 rounded-full transition-all"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        (activeBins.repair_bin.item_count / activeBins.repair_bin.max_capacity) *
+                          100,
+                      )}%`,
+                    }}
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Total Weight: {activeBins.repair_bin.total_weight_kg} kg • For the repair partner
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-slate-500 py-3">
+                No active repair bin. Sort a Repair / Upcycle item to start one.
+              </p>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Bin Records List & Management Table */}
@@ -607,6 +721,7 @@ export function GarmentSortingWorkspace() {
                   { id: 'closed', label: 'Closed' },
                   { id: 'resale', label: 'Resale' },
                   { id: 'recycle', label: 'Recycle' },
+                  { id: 'repair', label: 'Repair' },
                 ] as const
               ).map((f) => (
                 <button
@@ -653,13 +768,9 @@ export function GarmentSortingWorkspace() {
                       <td className="py-2.5 px-4 font-semibold text-slate-900">{bin.bin_code}</td>
                       <td className="py-2.5 px-4">
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${
-                            bin.bin_type === 'resale'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${BIN_TYPE_STYLES[bin.bin_type]}`}
                         >
-                          {bin.bin_type === 'resale' ? 'Direct Resale' : 'Recycling'}
+                          {BIN_TYPE_LABELS[bin.bin_type]}
                         </span>
                       </td>
                       <td className="py-2.5 px-4">
@@ -738,13 +849,15 @@ export function GarmentSortingWorkspace() {
                   <div className="flex items-center gap-2">
                     <span
                       className={`inline-block size-2 rounded-full ${
-                        item.condition === 'good_reusable' ? 'bg-emerald-500' : 'bg-amber-500'
+                        item.condition === 'good_reusable'
+                          ? 'bg-emerald-500'
+                          : item.condition === 'repair_upcycle'
+                            ? 'bg-sky-500'
+                            : 'bg-amber-500'
                       }`}
                     />
                     <span className="font-semibold text-slate-800">{item.category}</span>
-                    <span className="text-slate-500">
-                      {item.condition === 'good_reusable' ? 'Good / Reusable' : 'Worn / Recyclable'}
-                    </span>
+                    <span className="text-slate-500">{CONDITION_LABELS[item.condition]}</span>
                     {item.weight_kg && (
                       <span className="text-slate-400 text-[11px]">({item.weight_kg} kg)</span>
                     )}
@@ -780,7 +893,7 @@ export function GarmentSortingWorkspace() {
               <CardContent className="space-y-4">
                 <div>
                   <Label className="text-xs">Bin Destination Type</Label>
-                  <div className="grid grid-cols-2 gap-2 mt-1">
+                  <div className="grid grid-cols-3 gap-2 mt-1">
                     <button
                       type="button"
                       onClick={() => setNewBinType('resale')}
@@ -805,6 +918,18 @@ export function GarmentSortingWorkspace() {
                       <Recycle className="size-4" />
                       Recycling
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewBinType('repair')}
+                      className={`p-2.5 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 ${
+                        newBinType === 'repair'
+                          ? 'border-sky-600 bg-sky-50 text-sky-800'
+                          : 'border-slate-200 bg-white text-slate-600'
+                      }`}
+                    >
+                      <Wrench className="size-4" />
+                      Repair
+                    </button>
                   </div>
                 </div>
 
@@ -814,7 +939,7 @@ export function GarmentSortingWorkspace() {
                   </Label>
                   <Input
                     id="modal-bincode"
-                    placeholder={`e.g. BIN-${newBinType === 'resale' ? 'RS' : 'RC'}-005`}
+                    placeholder={`e.g. BIN-${BIN_CODE_PREFIXES[newBinType]}-005`}
                     value={newBinCode}
                     onChange={(e) => setNewBinCode(e.target.value)}
                     className="text-xs"
