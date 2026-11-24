@@ -597,11 +597,47 @@ def seed_handoff_data(session: Session) -> None:
     session.commit()
 
 
+SORTING_ACTIVE_BIN_TYPES = (
+    (BinType.RESALE, "RS"),
+    (BinType.RECYCLE, "RC"),
+    (BinType.REPAIR, "RP"),
+)
+
+
+def seed_sorting_data(session: Session) -> None:
+    """Insert one empty open bin of each type per site for the garment sorting screen.
+
+    Run after ``seed_dashboard_data``. Uses the ``SORT-`` prefix and adds no garment records,
+    so EPR totals are unchanged.
+    """
+
+    site_codes = [code for code, _name in SITE_DEFINITIONS]
+    sites = session.exec(select(Site).where(Site.code.in_(site_codes)).order_by(Site.code)).all()
+    for site in sites:
+        for bin_type, suffix in SORTING_ACTIVE_BIN_TYPES:
+            code = f"SORT-{site.code[-3:]}-{suffix}-01"
+            exists = session.exec(
+                select(Bin.id).where(Bin.site_id == site.id, Bin.code == code)
+            ).first()
+            if exists is None:
+                session.add(
+                    Bin(
+                        site_id=site.id,
+                        code=code,
+                        bin_type=bin_type,
+                        status=BinStatus.ACTIVE,
+                        notes="Sorting development seed data",
+                    )
+                )
+    session.commit()
+
+
 def seed_development_data(session: Session) -> None:
-    """Insert all development records: the dashboard data, then the handoff data."""
+    """Insert all development records: dashboard, handoff, then sorting data."""
 
     seed_dashboard_data(session)
     seed_handoff_data(session)
+    seed_sorting_data(session)
 
 
 def main() -> None:
@@ -609,7 +645,8 @@ def main() -> None:
         seed_development_data(session)
     print(
         "Seed data is ready: dashboard (2 sites, Jan-Oct 2026, EPR Q3-Q4) and recycle bin "
-        f"handoff ({HANDOFF_READY_BINS_PER_SITE} ready bins and 1 picked-up handoff per site)."
+        f"handoff ({HANDOFF_READY_BINS_PER_SITE} ready bins and 1 picked-up handoff per site), "
+        "sorting (one open bin of each type per site)."
     )
 
 

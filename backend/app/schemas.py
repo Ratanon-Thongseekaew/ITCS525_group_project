@@ -141,31 +141,42 @@ class ResaleStoreSummaryResponse(BaseModel):
 class BinType(StrEnum):
     RESALE = "resale"
     RECYCLE = "recycle"
+    REPAIR = "repair"
 
 
 class BinStatus(StrEnum):
     ACTIVE = "active"
+    READY = "ready"
+    HANDED_OFF = "handed_off"
     CLOSED = "closed"
 
 
 class GarmentCondition(StrEnum):
     GOOD_REUSABLE = "good_reusable"
     WORN_RECYCLABLE = "worn_recyclable"
+    REPAIR_UPCYCLE = "repair_upcycle"
+
+
+ShortText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
 
 
 class GarmentSortRequest(BaseModel):
+    actor_id: int = Field(gt=0)
     condition: GarmentCondition
-    category: str = "Tops"
-    weight_kg: float | None = Field(default=None, ge=0.0)
-    notes: str | None = None
-    bin_id: str | None = None
+    category: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)
+    ] = "Tops"
+    # A single garment never weighs this much; the cap catches a mistyped grams value.
+    weight_kg: float | None = Field(default=None, ge=0.0, le=50.0)
+    notes: ShortText | None = None
+    bin_id: int | None = Field(default=None, gt=0)
 
 
 class GarmentItem(BaseModel):
-    id: str
+    id: int
     condition: GarmentCondition
     category: str
-    bin_id: str
+    bin_id: int
     bin_code: str
     weight_kg: float | None = None
     notes: str | None = None
@@ -173,7 +184,7 @@ class GarmentItem(BaseModel):
 
 
 class BinRecord(BaseModel):
-    id: str
+    id: int
     bin_code: str
     bin_type: BinType
     status: BinStatus
@@ -181,35 +192,44 @@ class BinRecord(BaseModel):
     total_weight_kg: float = 0.0
     max_capacity: int = 50
     created_at: datetime
+    ready_at: datetime | None = None
     closed_at: datetime | None = None
     notes: str | None = None
 
 
 class BinCreateRequest(BaseModel):
+    actor_id: int = Field(gt=0)
     bin_type: BinType
-    bin_code: str | None = None
-    max_capacity: int = 50
-    notes: str | None = None
+    bin_code: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)] | None
+    ) = None
+    max_capacity: int = Field(default=50, ge=1, le=500)
+    notes: ShortText | None = None
 
 
 class BinCloseRequest(BaseModel):
-    notes: str | None = None
+    actor_id: int = Field(gt=0)
+    notes: ShortText | None = None
 
 
 class ActiveBinsResponse(BaseModel):
     resale_bin: BinRecord | None = None
     recycle_bin: BinRecord | None = None
+    repair_bin: BinRecord | None = None
 
 
 class SortingStatsResponse(BaseModel):
     total_sorted_today: int
     resale_count: int
     recycle_count: int
+    repair_count: int
     resale_percentage: float
     active_resale_bin_code: str | None = None
     active_resale_bin_items: int = 0
     active_recycle_bin_code: str | None = None
     active_recycle_bin_items: int = 0
+    active_repair_bin_code: str | None = None
+    active_repair_bin_items: int = 0
 
 
 class SortGarmentResponse(BaseModel):
