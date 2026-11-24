@@ -9,6 +9,7 @@ from .auth import router as auth_router
 from .contractor_reports import router as contractor_reports_router
 from .dashboard import router as dashboard_router
 from .epr import router as epr_router
+from .handoffs import router as handoffs_router
 from .resale import router as resale_router
 from .schemas import (
     ActiveBinsResponse,
@@ -51,6 +52,7 @@ app.include_router(dashboard_router)
 app.include_router(epr_router)
 app.include_router(contractor_reports_router)
 app.include_router(resale_router)
+app.include_router(handoffs_router)
 
 app.add_middleware(
     CORSMiddleware,

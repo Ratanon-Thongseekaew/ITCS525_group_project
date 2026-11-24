@@ -104,15 +104,18 @@ Apply the committed schema after MySQL is healthy:
 npm run db:migrate
 ```
 
-To populate deterministic local data for the compliance dashboard, run:
+To populate deterministic local data for the compliance dashboard and the
+recycle bin handoff pages, run:
 
 ```bash
 uv run --project backend --locked python backend/seed.py
 ```
 
-The dashboard seed is additive and idempotent. It creates two sites and
+The seed is additive and idempotent. It creates two sites and
 January–October 2026 handoff, contractor-report, disposition, and EPR examples
-without deleting existing records.
+for the dashboard (`DASH-` codes). It also adds recycle bin handoff data
+(`HAND-` codes): three ready recycling bins per site and one picked-up handoff
+per site, the Bangkok one disputed. It never deletes existing records.
 
 Create a migration after changing `backend/app/models.py`, verify that the
 metadata matches the migrated database, or roll back one revision during local
@@ -203,9 +206,8 @@ Vite proxies `/api` requests to FastAPI during development. To point the fronten
 | `/staff/direct-resale`                                         | Direct resale bins (mock data)                      |
 | `/staff/direct-resale/potential-revenue-analysis`              | Potential revenue analysis (mock data)              |
 | `/staff/direct-resale/processed-bins-record`                   | Processed resale bin records (mock data)            |
-| `/staff/recycle-bin-handoff`                                   | New bins for handoff (mock data)                    |
-| `/staff/recycle-bin-handoff/scheduled-pickup-dates`            | Scheduled pickup dates placeholder                  |
-| `/staff/recycle-bin-handoff/handoff-records`                   | Handoff records (mock data)                         |
+| `/staff/recycle-bin-handoff`                                   | Record a handoff when the driver arrives            |
+| `/staff/recycle-bin-handoff/handoff-records`                   | Handoff records and their status                    |
 | `/admin/users`                                                 | User management, the admin landing page (mock data) |
 
 The login page currently runs in demo mode. The backend now has a `users` table
@@ -252,6 +254,45 @@ site selection filters data but does not enforce manager membership.
 `GET /api/resale-bins/summary` returns the five sites with the highest summed
 actual value from resale bins. The manager resale page shows each site's value
 and their combined total.
+
+## Recycle bin handoff API
+
+Every recycling handoff records the staff and driver pickup weights, a photo of
+the scale reading, and the driver's name and vehicle plate number. If the two
+weights differ by more than 3%, the handoff becomes **Disputed**, appears on the
+compliance dashboard, and needs manager approval before it can be closed.
+
+| Endpoint                             | Purpose                                                      |
+| ------------------------------------ | ------------------------------------------------------------ |
+| `GET /api/handoffs/options`          | Sites, active contractors, and demo actor accounts           |
+| `GET /api/handoffs/bins`             | Ready recycling bins without a handoff (optional `site_id`)  |
+| `GET /api/handoffs`                  | Handoff records (optional `site_id` and `status`)            |
+| `POST /api/handoffs/pickups`         | Record a handoff and its pickup evidence in one step         |
+| `GET /api/handoffs/{id}/scale-photo` | Download the uploaded scale photo                            |
+| `POST /api/handoffs/{id}/approve`    | Manager or admin approval of a disputed handoff              |
+| `POST /api/handoffs/{id}/close`      | Manager or admin closes a handoff once outcomes are reported |
+
+On **New Bins for Handoff**, staff select a bin when the driver arrives and record
+the contractor, pickup time, both weights, the scale photo, and the driver
+details in one step. The pickup date and time default to now and can't be in
+the future. The form warns before saving when the weights differ by more than
+3%, and the page's **Awaiting Approval** card counts disputed handoffs.
+**Handoff Records** lists the site's handoffs with their evidence, status, and
+outcomes. These pages are a staff workplace: a **Staff member** picker stands
+in for login, lists only staff accounts, and shows that person's site. Managers
+approve disputed handoffs and close handoffs through the API endpoints below. A
+handoff (and its bin) can only be closed after the contractor's outcome report
+for it has been saved;
+there is no manager screen for this yet.
+
+Until the frontend uses real login, write requests name the acting user with
+`actor_id`. Only staff can record handoffs, and only for their own site; only
+managers and admins can approve or close them. Timestamps must include
+a UTC offset. Scale photos must be JPEG, PNG, or WebP up to 5 MB and are stored
+in `backend/uploads/` (ignored by Git); set `UPLOAD_DIR` in `.env` to change it.
+
+Demo bins and handoffs for these pages come from the same seed command as the
+dashboard data (`python backend/seed.py`; see Database above).
 
 ## Contractor report validation
 

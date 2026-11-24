@@ -19,7 +19,9 @@ This is a minimal full-stack monorepo:
 - The backend uses SQLModel as its ORM, PyMySQL as the MySQL driver, and Alembic
   for versioned schema migrations. Database settings are loaded from the root
   `.env`, with an optional `DATABASE_URL` override.
-  Authentication and deployment configuration also remain unimplemented.
+- The backend has JWT authentication and admin user management, but the
+  frontend does not use real login yet. Deployment configuration remains
+  unimplemented.
 
 ## Repository map
 
@@ -29,13 +31,16 @@ This is a minimal full-stack monorepo:
 │   ├── src/
 │   │   ├── App.tsx          Client-side route definitions
 │   │   ├── components/      Shared layout and workspace components
+│   │   │   ├── staff/       Staff workspace UI, including recycle bin handoff
 │   │   │   └── ui/          Local shadcn/ui component primitives
 │   │   ├── config/          Role-aware workspace navigation configuration
 │   │   ├── pages/           Login, workspace feature, and 404 pages
 │   │   ├── types/           Shared workspace role types and guards
 │   │   ├── App.test.tsx     Frontend component test
 │   │   ├── api.ts           Typed HTTP client functions
-│   │   ├── lib/utils.ts     Shared `cn` class-name utility
+│   │   ├── lib/             Helpers: `utils.ts`, handoff formatting/records,
+│   │   │                    `use-handoff-workspace.ts`, `use-api-resource.ts`
+│   │   ├── test/            Shared test fixtures (dashboard, handoff)
 │   │   ├── styles.css       Tailwind import and shared workspace styles
 │   │   ├── main.tsx         React application entry point
 │   │   └── vite-env.d.ts    Vite TypeScript declarations
@@ -48,6 +53,7 @@ This is a minimal full-stack monorepo:
 │   │   ├── auth.py          Login/me routes, current-user and admin dependencies
 │   │   ├── create_admin.py  CLI to create the first administrator
 │   │   ├── database.py      Settings, engine, and session dependency
+│   │   ├── handoffs.py      Recycle bin handoff routes and scale-photo storage
 │   │   ├── main.py          FastAPI app, middleware, routes, and lifespan
 │   │   ├── models.py        SQLModel tables and database enums
 │   │   ├── schemas.py       Pydantic response models
@@ -57,10 +63,13 @@ This is a minimal full-stack monorepo:
 │   │   └── users.py         Admin-only user management routes
 │   ├── alembic/             Migration environment and versioned revisions
 │   ├── alembic.ini          Alembic configuration
+│   ├── seed.py              Development seed: dashboard and handoff demo data
+│   ├── uploads/             Uploaded scale photos (gitignored, `UPLOAD_DIR`)
 │   ├── tests/
 │   │   ├── test_auth.py     Login, token, role-guard and user-management tests
 │   │   ├── test_create_admin.py Administrator CLI tests
 │   │   ├── test_database.py SQLModel and migration tests
+│   │   ├── test_handoffs.py Recycle bin handoff API tests
 │   │   ├── test_main.py     API and sorting tests
 │   │   ├── test_user_stores.py Full name, stores, temporary passwords, password change
 │   │   └── test_users.py    User API and database tests
@@ -141,10 +150,17 @@ React Router owns client-side navigation. The current frontend routes are:
 - `/staff/direct-resale/processed-bins-record` renders Processed Bin Records,
   using the same mock data. Bins processed during a session do not carry over
   to either page yet.
-- `/staff/recycle-bin-handoff` renders New Bins for Handoff, using mock data.
-- `/staff/recycle-bin-handoff/scheduled-pickup-dates` renders a placeholder page.
-- `/staff/recycle-bin-handoff/handoff-records` renders Handoff Records, using
-  mock data.
+- `/staff/recycle-bin-handoff` renders New Bins for Handoff from
+  `/api/handoffs/bins`. Selecting a bin opens `NewHandoffRecordDialog`, which
+  records the handoff and its pickup evidence through `POST /api/handoffs/pickups`.
+  Its Awaiting Approval card counts disputed handoffs at the staff member's site.
+  There is no separate scheduling page; handoffs are recorded at pickup.
+- `/staff/recycle-bin-handoff/handoff-records` renders Handoff Records from
+  `GET /api/handoffs`, read-only. Both handoff pages are staff-only: they share
+  `useHandoffWorkspace` and `HandoffActorBar`, a staff-account picker kept in
+  `localStorage` until login is connected, and load nothing until a staff
+  account is chosen. There is no manager handoff route; managers approve and
+  close through the API until a manager screen exists.
 - `/admin/users` renders user management, using mock data. It is the admin
   landing page after login; `/admin` has no route.
 - Unknown frontend paths render the local not-found page.
@@ -316,6 +332,38 @@ call `lock_open_epr_quarter(session, report_date)` before reading or changing
 quarter data, in the same transaction. The helper coordinates with submission
 and returns HTTP 409 for locked periods. The current import validates only.
 
+### Recycle bin handoff endpoints (Feature 4)
+
+`backend/app/handoffs.py` serves `/api/handoffs`. `GET /options` lists sites,
+active contractors, and demo actors with their site memberships. `GET /bins`
+lists `ready` recycle bins that have no handoff. `GET /api/handoffs` lists
+records with bin, contractor, weights, variance, approval fields, and six
+`outcomes` weights summed from contractor report entries (null when none).
+
+`POST /api/handoffs/pickups` is the only way to create a handoff. It is
+`multipart/form-data` with `bin_id`, `contractor_id`, `actor_id`,
+`picked_up_at` (with a UTC offset, at most 5 minutes in the future), both
+weights, `driver_name`, `vehicle_plate_number`, and the `scale_photo` file, and
+creates the handoff with its evidence in one transaction. It calls `Handoff.record_pickup_weights()`, which sets
+`picked_up`, or `disputed` with manager approval required when the variance is
+above 3%, and the bin becomes `handed_off`. `POST /{id}/approve` (disputed only)
+and `POST /{id}/close` (picked-up or approved only) require a manager or admin
+`actor_id`. Closing also requires at least one `contractor_report_entries` row
+for the handoff (the same "reported" rule the dashboard uses), so a handoff and
+its bin stay open while the outcome report is pending; closing also closes the
+bin. Recording requires a Staff actor who
+belongs to the bin's site. Wrong states return 409, unknown actors 422, and a
+non-Staff actor or Staff from another site 403.
+
+Photos are validated by content type and file signature (JPEG, PNG, WebP, up to
+5 MB), saved under `UPLOAD_DIR` (default `backend/uploads/`), and referenced by
+a relative path in `handoffs.scale_photo_url`. Responses expose that as
+`/api/handoffs/{id}/scale-photo`. Timestamps in requests must include a UTC
+offset. The `scheduled` status remains in the database enum, but no endpoint
+creates it. `backend/seed.py` runs `seed_dashboard_data` (`DASH-` records) and then
+`seed_handoff_data` (`HAND-` ready bins and picked-up handoffs);
+`seed_development_data` runs both and is what `main()` and the handoff tests use.
+
 ### `POST /api/contractor-reports/validate` (EPR change request)
 
 Validates monthly contractor rows before import. Each row carries six separate
@@ -350,6 +398,7 @@ npm run db:migrate      # Apply all committed Alembic migrations
 npm run db:rollback     # Roll back one Alembic revision
 npm run db:revision -- -m "message"  # Autogenerate a new revision
 npm run db:check        # Compare SQLModel metadata with upgraded MySQL
+python backend/seed.py  # Load dashboard and handoff demo data (idempotent)
 npm run guardrails      # Enforce repository architecture policies
 npm run test:guardrails # Test the executable policy checker
 npm run build           # Type-check and build the frontend
@@ -449,6 +498,12 @@ python -m ruff check backend
 - Follow Ruff's configured 100-character line length and Python 3.11 target.
 - Use the existing `mysql` Compose service for local database work. Do not
   hardcode credentials; read them from `.env` or future application settings.
+- Store uploaded files under `UPLOAD_DIR` (default `backend/uploads/`, ignored
+  by Git) and keep only a relative path in the database. File uploads use
+  `python-multipart`, a backend dependency.
+- Add development data to `backend/seed.py` as its own idempotent function
+  and call it from `seed_development_data`; keep `seed_dashboard_data`
+  unchanged so its counts and tests stay stable.
 - Define persistent models in `backend/app/models.py` and evolve the database
   only through reviewed Alembic revisions. Do not restore `create_all()` in the
   application lifespan.

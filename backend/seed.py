@@ -1,17 +1,17 @@
-"""Seed deterministic development data used by the compliance dashboard.
+"""Seed deterministic development data for the compliance dashboard and recycle bin handoff.
 
 Run from the repository root after applying migrations:
 
     python backend/seed.py
 
-The seed is additive and idempotent. It never deletes existing records and uses
-the ``DASH-`` prefix for dashboard-specific bins and external references.
+The seed is additive and idempotent. It never deletes existing records. Dashboard
+records use the ``DASH-`` prefix; recycle bin handoff records use ``HAND-``.
 """
 
 from __future__ import annotations
 
 from calendar import monthrange
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from sqlmodel import Session, select
@@ -496,10 +496,121 @@ def seed_dashboard_data(session: Session) -> None:
     session.commit()
 
 
+# Recycle bin handoff demo data (HAND- prefix).
+HANDOFF_READY_BINS_PER_SITE = 3
+HANDOFF_READY_AT = datetime(2026, 11, 18, 9, 0, tzinfo=UTC)
+HANDOFF_PICKED_UP_AT = datetime(2026, 11, 20, 4, 0, tzinfo=UTC)
+
+
+def _handoff_prefix(site: Site) -> str:
+    return f"HAND-{site.code[-3:]}"
+
+
+def _get_or_create_ready_recycle_bin(
+    session: Session,
+    *,
+    site: Site,
+    code: str,
+    weight: Decimal,
+    item_count: int,
+    ready_at: datetime,
+) -> tuple[Bin, bool]:
+    bin_record = session.exec(
+        select(Bin).where(Bin.site_id == site.id, Bin.code == code)
+    ).one_or_none()
+    if bin_record is not None:
+        return bin_record, False
+    bin_record = Bin(
+        site_id=site.id,
+        code=code,
+        bin_type=BinType.RECYCLE,
+        status=BinStatus.READY,
+        item_count=item_count,
+        total_weight_kg=weight,
+        max_capacity=max(item_count, 50),
+        ready_at=ready_at,
+        notes="Handoff development seed data",
+    )
+    session.add(bin_record)
+    session.flush()
+    return bin_record, True
+
+
+def seed_handoff_data(session: Session) -> None:
+    """Insert recycle bin handoff records. Run after ``seed_dashboard_data``.
+
+    Adds ready recycling bins (for the New Bins for Handoff page) and one picked-up handoff per
+    site, using the ``HAND-`` prefix. It adds no garment records, so EPR totals are unchanged.
+    """
+
+    site_codes = [code for code, _name in SITE_DEFINITIONS]
+    sites = session.exec(select(Site).where(Site.code.in_(site_codes)).order_by(Site.code)).all()
+    contractors = session.exec(
+        select(Contractor).where(Contractor.name.startswith("Dashboard ")).order_by(Contractor.name)
+    ).all()
+
+    for site_index, site in enumerate(sites):
+        prefix = _handoff_prefix(site)
+        staff = session.exec(
+            select(User).where(
+                User.username == f"dashboard.staff.{site.code[-3:].lower()}@example.invalid"
+            )
+        ).one()
+
+        for number in range(1, HANDOFF_READY_BINS_PER_SITE + 1):
+            weight = Decimal(36 + number * 4 + site_index * 3)
+            _get_or_create_ready_recycle_bin(
+                session,
+                site=site,
+                code=f"{prefix}-READY-{number:02d}",
+                weight=weight,
+                item_count=int(weight * 2),
+                ready_at=HANDOFF_READY_AT + timedelta(hours=number),
+            )
+
+        picked_bin, created = _get_or_create_ready_recycle_bin(
+            session,
+            site=site,
+            code=f"{prefix}-PICKED-01",
+            weight=Decimal("41.000"),
+            item_count=88,
+            ready_at=HANDOFF_READY_AT - timedelta(days=2),
+        )
+        if created:
+            picked_bin.status = BinStatus.HANDED_OFF
+            handoff = Handoff(
+                site_id=site.id,
+                bin_id=picked_bin.id,
+                contractor_id=contractors[(site_index + 1) % len(contractors)].id,
+                created_by_user_id=staff.id,
+                scheduled_pickup_at=HANDOFF_PICKED_UP_AT,
+                picked_up_at=HANDOFF_PICKED_UP_AT,
+                scale_photo_url=f"https://example.invalid/handoff-scales/{picked_bin.code}.jpg",
+                driver_name="Seed Driver",
+                vehicle_plate_number=f"{prefix}-01",
+            )
+            # The first site's driver weight differs by more than 3%, so it starts Disputed.
+            driver_weight = Decimal("42.800") if site_index == 0 else Decimal("40.600")
+            handoff.record_pickup_weights(Decimal("41.000"), driver_weight)
+            session.add_all([picked_bin, handoff])
+
+    session.commit()
+
+
+def seed_development_data(session: Session) -> None:
+    """Insert all development records: the dashboard data, then the handoff data."""
+
+    seed_dashboard_data(session)
+    seed_handoff_data(session)
+
+
 def main() -> None:
     with Session(get_engine()) as session:
-        seed_dashboard_data(session)
-    print("Dashboard seed data is ready (2 sites, Jan-Oct 2026, EPR Q3-Q4).")
+        seed_development_data(session)
+    print(
+        "Seed data is ready: dashboard (2 sites, Jan-Oct 2026, EPR Q3-Q4) and recycle bin "
+        f"handoff ({HANDOFF_READY_BINS_PER_SITE} ready bins and 1 picked-up handoff per site)."
+    )
 
 
 if __name__ == "__main__":

@@ -1,146 +1,168 @@
 /** @vitest-environment jsdom */
 
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, expect, test, vi } from 'vitest'
-import type { HandoffBin } from '@/types/handoff'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+import { recordHandoffAtPickup } from '@/api'
+import {
+  chooseOption,
+  fillPickupEvidence,
+  handoffOptions,
+  handoffRecord,
+  readyBin,
+  scalePhoto,
+  STAFF_ID,
+  stubRadixBrowserApis,
+} from '@/test/handoff-fixtures'
 import { NewHandoffRecordDialog } from './NewHandoffRecordDialog'
 
-// jsdom lacks these browser APIs, which Radix Select needs.
-Element.prototype.hasPointerCapture = () => false
-Element.prototype.setPointerCapture = () => {}
-Element.prototype.releasePointerCapture = () => {}
-Element.prototype.scrollIntoView = () => {}
-vi.stubGlobal(
-  'ResizeObserver',
-  class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  },
-)
+vi.mock('@/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api')>()),
+  recordHandoffAtPickup: vi.fn(),
+}))
 
-const bin: HandoffBin = {
-  id: 'b1',
-  bin_code: 'bin-id-001',
-  bin_type: 'recycle',
-  status: 'awaiting_handoff',
-  item_count: 100,
-  total_weight_kg: 40,
-  packed_at: '2026-10-01T15:30:00',
-}
+stubRadixBrowserApis()
 
-function renderDialog(defaultPickup: string | null = '2026-10-20T18:30:00') {
+function renderDialog() {
   const onClose = vi.fn()
-  const onConfirm = vi.fn()
+  const onRecorded = vi.fn()
   render(
     <NewHandoffRecordDialog
-      bin={bin}
-      defaultPickup={defaultPickup}
+      bin={readyBin()}
+      contractors={handoffOptions.contractors}
+      actorId={STAFF_ID}
       onClose={onClose}
-      onConfirm={onConfirm}
-      onCloseAutoFocus={() => {}}
+      onRecorded={onRecorded}
     />,
   )
-  return { onClose, onConfirm }
-}
-
-function chooseOption(label: string, option: string) {
-  fireEvent.keyDown(screen.getByLabelText(label), { key: 'Enter' })
-  fireEvent.click(screen.getByRole('option', { name: option }))
+  return { onClose, onRecorded }
 }
 
 function submit() {
   fireEvent.click(screen.getByRole('button', { name: 'Confirm Handoff' }))
 }
 
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 21, 10, 47) })
+  vi.mocked(recordHandoffAtPickup).mockReset()
+})
+
 afterEach(() => {
+  vi.useRealTimers()
   cleanup()
 })
 
-test('shows the bin details', () => {
+test('prefills the pickup time with now and the staff weight with the bin weight', () => {
   renderDialog()
 
-  const dialog = within(screen.getByRole('dialog', { name: 'New Handoff Record' }))
-
-  expect(dialog.getByText('#bin-id-001')).toBeInTheDocument()
-  expect(dialog.getByText('Recycling Bin')).toBeInTheDocument()
-  expect(dialog.getByText('Item Count').nextElementSibling).toHaveTextContent('100 items')
-  expect(dialog.getByText('Grossed Weight').nextElementSibling).toHaveTextContent('40kg')
-  expect(dialog.getByText('Packed at 3:30 PM, 1 OCT 2026')).toBeInTheDocument()
+  expect(screen.getByLabelText('Pickup Date')).toHaveValue('2026-11-21')
+  expect(screen.getByLabelText('Pickup Time')).toHaveTextContent('10:30 AM')
+  expect(screen.getByLabelText('Staff Weight (kg)')).toHaveValue(40)
+  expect(screen.queryByLabelText(/Notes/)).not.toBeInTheDocument()
 })
 
-test('prefills the pickup date and time from the next scheduled pickup', () => {
+test('requires the contractor and every piece of pickup evidence', () => {
   renderDialog()
-
-  expect(screen.getByLabelText('Pickup Date')).toHaveValue('2026-10-20')
-  expect(screen.getByLabelText('Pickup Time')).toHaveTextContent('6:30 PM')
-  expect(screen.getByLabelText('Contractor')).toHaveTextContent('Select a contractor')
-})
-
-test('blocks an incomplete submit and clears each error once fixed', () => {
-  const { onConfirm } = renderDialog(null)
 
   submit()
 
-  expect(onConfirm).not.toHaveBeenCalled()
-  expect(screen.getByText('Select a contractor.')).toBeInTheDocument()
-  expect(screen.getByText('Select a pickup date.')).toBeInTheDocument()
-  expect(screen.getByText('Select a pickup time.')).toBeInTheDocument()
-  expect(screen.getByLabelText('Contractor')).toHaveAttribute('aria-invalid', 'true')
-
-  chooseOption('Contractor', 'Contractor 1')
-
-  expect(screen.queryByText('Select a contractor.')).not.toBeInTheDocument()
-  expect(screen.getByText('Select a pickup date.')).toBeInTheDocument()
+  for (const message of [
+    'Select a contractor.',
+    "Enter the driver's weight.",
+    "Enter the driver's name.",
+    'Enter the vehicle plate number.',
+    'Attach a photo of the scale reading.',
+  ]) {
+    expect(screen.getByText(message)).toBeInTheDocument()
+  }
+  expect(recordHandoffAtPickup).not.toHaveBeenCalled()
 })
 
-test('leaves the time empty when the default pickup is not on a time slot', () => {
-  renderDialog('2026-10-20T18:45:00')
+test.each([
+  [scalePhoto('application/pdf'), 'Use a JPEG, PNG, or WebP photo.'],
+  [scalePhoto('image/png', 5 * 1024 * 1024 + 1), 'Use a photo of 5 MB or smaller.'],
+])('rejects an unusable scale photo', (photo, message) => {
+  renderDialog()
+  chooseOption('Contractor', 'GreenLoop Recycling')
+  fillPickupEvidence({ photo })
 
-  expect(screen.getByLabelText('Pickup Time')).toHaveTextContent('Select a time')
-})
-
-test('submits the entered record', () => {
-  const { onConfirm } = renderDialog(null)
-
-  chooseOption('Contractor', 'Contractor 2')
-  fireEvent.change(screen.getByLabelText('Pickup Date'), { target: { value: '2026-12-03' } })
-  chooseOption('Pickup Time', '12:30 AM')
-  fireEvent.change(screen.getByLabelText(/Notes/), { target: { value: '  Use the back gate  ' } })
   submit()
 
-  expect(onConfirm).toHaveBeenCalledExactlyOnceWith({
-    bin_id: 'b1',
-    contractor_id: 'c2',
-    pickup_at: '2026-12-03T00:30:00',
-    notes: 'Use the back gate',
+  expect(screen.getByText(message)).toBeInTheDocument()
+  expect(recordHandoffAtPickup).not.toHaveBeenCalled()
+})
+
+test('refuses a pickup time in the future', () => {
+  renderDialog()
+  chooseOption('Contractor', 'GreenLoop Recycling')
+  fillPickupEvidence()
+  chooseOption('Pickup Time', '11:00 AM')
+
+  submit()
+
+  expect(screen.getByText("Pickup time can't be in the future.")).toBeInTheDocument()
+  expect(recordHandoffAtPickup).not.toHaveBeenCalled()
+})
+
+test('warns before saving when the weights differ by more than 3%', () => {
+  renderDialog()
+
+  fillPickupEvidence({ driverWeight: '41.2' })
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Weight difference: 1.2 kg (3.00% of the staff weight). Within 3%.',
+  )
+
+  fillPickupEvidence({ driverWeight: '42' })
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Weight difference: 2.0 kg (5.00% of the staff weight). Over 3%, so this handoff will be marked Disputed',
+  )
+})
+
+test('records the handoff and its evidence in one request', async () => {
+  const saved = handoffRecord()
+  vi.mocked(recordHandoffAtPickup).mockResolvedValue(saved)
+  const { onRecorded } = renderDialog()
+  chooseOption('Contractor', 'Circular Fibre Co.')
+  const photo = scalePhoto()
+  fillPickupEvidence({ photo })
+
+  submit()
+
+  await waitFor(() => expect(onRecorded).toHaveBeenCalledWith(saved))
+  expect(recordHandoffAtPickup).toHaveBeenCalledExactlyOnceWith({
+    bin_id: 1,
+    contractor_id: 2,
+    actor_id: STAFF_ID,
+    picked_up_at: new Date(2026, 10, 21, 10, 30).toISOString(),
+    staff_weight_kg: 40,
+    driver_weight_kg: 40.5,
+    driver_name: 'Somchai P.',
+    vehicle_plate_number: '1KB-2345',
+    scale_photo: photo,
   })
 })
 
-test('saves empty notes as null', () => {
-  const { onConfirm } = renderDialog()
+test('shows the API error in the dialog and allows another try', async () => {
+  vi.mocked(recordHandoffAtPickup).mockRejectedValue(new Error('This bin already has a handoff.'))
+  const { onRecorded } = renderDialog()
+  chooseOption('Contractor', 'GreenLoop Recycling')
+  fillPickupEvidence()
 
-  chooseOption('Contractor', 'Contractor 1')
-  fireEvent.change(screen.getByLabelText(/Notes/), { target: { value: '   ' } })
   submit()
 
-  expect(onConfirm).toHaveBeenCalledExactlyOnceWith({
-    bin_id: 'b1',
-    contractor_id: 'c1',
-    pickup_at: '2026-10-20T18:30:00',
-    notes: null,
-  })
+  expect(await screen.findByText('This bin already has a handoff.')).toBeInTheDocument()
+  expect(onRecorded).not.toHaveBeenCalled()
+  expect(screen.getByRole('button', { name: 'Confirm Handoff' })).toBeEnabled()
 })
 
 test.each([
   ['the X button', () => fireEvent.click(screen.getByRole('button', { name: 'Close' }))],
   ['Escape', () => fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })],
 ])('closes without saving using %s', (_, close) => {
-  const { onClose, onConfirm } = renderDialog()
+  const { onClose, onRecorded } = renderDialog()
 
   close()
 
   expect(onClose).toHaveBeenCalledOnce()
-  expect(onConfirm).not.toHaveBeenCalled()
+  expect(onRecorded).not.toHaveBeenCalled()
 })
