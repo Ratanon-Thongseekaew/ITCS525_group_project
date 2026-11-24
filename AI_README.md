@@ -19,7 +19,9 @@ This is a minimal full-stack monorepo:
 - The backend uses SQLModel as its ORM, PyMySQL as the MySQL driver, and Alembic
   for versioned schema migrations. Database settings are loaded from the root
   `.env`, with an optional `DATABASE_URL` override.
-  Authentication and deployment configuration also remain unimplemented.
+- The backend has JWT authentication and admin user management, but the
+  frontend does not use real login yet. Deployment configuration remains
+  unimplemented.
 
 ## Repository map
 
@@ -29,13 +31,16 @@ This is a minimal full-stack monorepo:
 │   ├── src/
 │   │   ├── App.tsx          Client-side route definitions
 │   │   ├── components/      Shared layout and workspace components
+│   │   │   ├── staff/       Staff workspace UI, including recycle bin handoff
 │   │   │   └── ui/          Local shadcn/ui component primitives
 │   │   ├── config/          Role-aware workspace navigation configuration
 │   │   ├── pages/           Login, workspace feature, and 404 pages
 │   │   ├── types/           Shared workspace role types and guards
 │   │   ├── App.test.tsx     Frontend component test
 │   │   ├── api.ts           Typed HTTP client functions
-│   │   ├── lib/utils.ts     Shared `cn` class-name utility
+│   │   ├── lib/             Helpers: `utils.ts`, handoff formatting/records,
+│   │   │                    `use-handoff-workspace.ts`, `use-api-resource.ts`
+│   │   ├── test/            Shared test fixtures (dashboard, handoff)
 │   │   ├── styles.css       Tailwind import and shared workspace styles
 │   │   ├── main.tsx         React application entry point
 │   │   └── vite-env.d.ts    Vite TypeScript declarations
@@ -48,20 +53,26 @@ This is a minimal full-stack monorepo:
 │   │   ├── auth.py          Login/me routes, current-user and admin dependencies
 │   │   ├── create_admin.py  CLI to create the first administrator
 │   │   ├── database.py      Settings, engine, and session dependency
+│   │   ├── handoffs.py      Recycle bin handoff routes and scale-photo storage
 │   │   ├── main.py          FastAPI app, middleware, routes, and lifespan
 │   │   ├── models.py        SQLModel tables and database enums
 │   │   ├── schemas.py       Pydantic response models
 │   │   ├── security.py      Password hashing, JWT and temporary-password helpers
 │   │   ├── sites.py         Admin-only store list for the user form
+│   │   ├── sorting.py       Garment sorting and bin record routes (Feature 2)
 │   │   ├── user_stores.py   User-to-store (`user_sites`) helpers and response builders
 │   │   └── users.py         Admin-only user management routes
 │   ├── alembic/             Migration environment and versioned revisions
 │   ├── alembic.ini          Alembic configuration
+│   ├── seed.py              Development seed: dashboard, handoff and sorting demo data
+│   ├── uploads/             Uploaded scale photos (gitignored, `UPLOAD_DIR`)
 │   ├── tests/
 │   │   ├── test_auth.py     Login, token, role-guard and user-management tests
 │   │   ├── test_create_admin.py Administrator CLI tests
 │   │   ├── test_database.py SQLModel and migration tests
-│   │   ├── test_main.py     API and sorting tests
+│   │   ├── test_handoffs.py Recycle bin handoff API tests
+│   │   ├── test_main.py     Health and greeting tests
+│   │   ├── test_sorting.py  Garment sorting and bin record tests
 │   │   ├── test_user_stores.py Full name, stores, temporary passwords, password change
 │   │   └── test_users.py    User API and database tests
 │   ├── uv.lock              Locked Python dependency graph
@@ -130,6 +141,7 @@ React Router owns client-side navigation. The current frontend routes are:
   printable EPR report for the requested `year` and `quarter`.
 - `/manager/import` renders the contractor monthly outcome report import page
   and is available from the manager workspace navigation.
+- `/manager/sorting` renders the read-only sorting overview across the manager's sites.
 - `/manager/resale-bins` renders the database-backed top-five store resale
   summary.
 - `/staff/sorting` renders the garment sorting workspace. `/staff` has no route;
@@ -141,10 +153,17 @@ React Router owns client-side navigation. The current frontend routes are:
 - `/staff/direct-resale/processed-bins-record` renders Processed Bin Records,
   using the same mock data. Bins processed during a session do not carry over
   to either page yet.
-- `/staff/recycle-bin-handoff` renders New Bins for Handoff, using mock data.
-- `/staff/recycle-bin-handoff/scheduled-pickup-dates` renders a placeholder page.
-- `/staff/recycle-bin-handoff/handoff-records` renders Handoff Records, using
-  mock data.
+- `/staff/recycle-bin-handoff` renders New Bins for Handoff from
+  `/api/handoffs/bins`. Selecting a bin opens `NewHandoffRecordDialog`, which
+  records the handoff and its pickup evidence through `POST /api/handoffs/pickups`.
+  Its Awaiting Approval card counts disputed handoffs at the staff member's site.
+  There is no separate scheduling page; handoffs are recorded at pickup.
+- `/staff/recycle-bin-handoff/handoff-records` renders Handoff Records from
+  `GET /api/handoffs`, read-only. Both handoff pages are staff-only: they share
+  `useHandoffWorkspace` and `HandoffActorBar`, a staff-account picker kept in
+  `localStorage` until login is connected, and load nothing until a staff
+  account is chosen. There is no manager handoff route; managers approve and
+  close through the API until a manager screen exists.
 - `/admin/users` renders user management, using mock data. It is the admin
   landing page after login; `/admin` has no route.
 - Unknown frontend paths render the local not-found page.
@@ -170,8 +189,8 @@ sidebar logo both use: `/manager`, `/staff/sorting`, and `/admin/users`.
 Authenticated workspace screens share `WorkspaceSidebar`, composed from the
 local shadcn sidebar primitives. `frontend/src/config/workspace-navigation.ts`
 owns labels, icons, route segments, and the `roles` arrays used to filter menu
-visibility. Managers see Compliance Dashboard, Resale Bin Records, and Import
-Data. Staff see Sorting, Direct Resale, and Recycle Bin Handoff. Admins
+visibility. Managers see Compliance Dashboard, Sorting Overview, Resale Bin Records,
+and Import Data. Staff see Sorting, Direct Resale, and Recycle Bin Handoff. Admins
 see Compliance Dashboard and User Management. `AppLayout` derives the demo role
 from the URL only for presentation; this is not authentication.
 
@@ -201,29 +220,45 @@ Used by the starter React page to demonstrate frontend/backend communication.
 }
 ```
 
-### `POST /api/garments/sort` (Feature 2)
+### Garment sorting and bin records (Feature 2)
 
-Used by the Store Staff counter intake interface to classify garments into `good_reusable` (direct resale) or `worn_recyclable` (recycling), automatically assigning them to active bins.
+`backend/app/sorting.py` stores sorting in MySQL (`bins` and `garment_records`). Every request
+names the acting user with `actor_id` until login is connected (`422` unknown user).
 
-### `GET /api/bins/active` (Feature 2)
+- **Writes** (sort, create bin, seal bin) need a staff user, who always works at their own site
+  (`403` not staff, no site, or another site's bin).
+- **Reads** take `actor_id` and an optional `site_id` (change request #16). Staff only reach
+  their own site (`403` for another). A manager reaches the sites they belong to, or every site
+  when none is assigned; an administrator reaches every site. A `site_id` outside that is `403`
+  (`404` if the site doesn't exist). Leaving `site_id` out returns all of the actor's sites
+  combined, and `BinRecord` and `GarmentItem` carry `site_id` and `site_name` for that view.
 
-Returns the current active open resale and recycling bins ready to receive sorted garments.
+- `POST /api/garments/sort` takes `{actor_id, condition, category?, weight_kg?, notes?, bin_id?}`.
+  `condition` is `good_reusable` (resale bin), `worn_recyclable` (recycle bin) or
+  `repair_upcycle` (repair bin, change request #13). The garment goes to the oldest open bin
+  of that type with room at the actor's site. A full bin is skipped; a new bin
+  (`BIN-RS|RC|RP-###`) is created when none has room. A `bin_id` of the wrong type, status or
+  capacity is ignored; another site's bin returns `403`. `weight_kg` must be 0-50.
+- `GET /api/bins/active?actor_id=&site_id=` returns `resale_bin`, `recycle_bin` and `repair_bin`
+  for one site, so a manager must pass `site_id` (`422` otherwise).
+- `GET /api/bins?actor_id=&site_id=` lists bins, with optional `bin_type` (`resale` / `recycle` /
+  `repair`) and `status` (`active` / `ready` / `handed_off` / `closed`) filters.
+- `POST /api/bins` takes `{actor_id, bin_type, bin_code?, max_capacity?, notes?}`. A duplicate
+  code at the site returns `409`; capacity is 1-500.
+- `POST /api/bins/{id}/close` takes `{actor_id, notes?}`. Sealing a **recycle** bin sets it
+  `ready` with `ready_at`, which is what `GET /api/handoffs/bins` lists. Resale and repair bins
+  become `closed` with `closed_at`. Empty or already sealed bins return `409`.
+- `GET /api/sorting/stats?actor_id=&site_id=` returns today's counts (each site's own day), the
+  resale capture percentage, and the active bin code and item count per type. Open bins belong
+  to one site, so they are only reported when the request covers a single site.
+- `GET /api/garments/recent?actor_id=&site_id=&limit=` returns the latest garments.
 
-### `GET /api/bins` (Feature 2)
-
-Lists bin records with optional `bin_type` (`resale` / `recycle`) and `status` (`active` / `closed`) filters.
-
-### `POST /api/bins` (Feature 2)
-
-Registers a new bin record with custom or auto-generated bin code and maximum capacity.
-
-### `POST /api/bins/{bin_id}/close` (Feature 2)
-
-Marks a bin as closed/sealed, recording completion timestamp and locking it for downstream resale (Feature 3) or contractor handoff (Feature 4).
-
-### `GET /api/sorting/stats` (Feature 2)
-
-Returns shift intake metrics (total garments sorted today, resale count, recycle count, resale capture percentage).
+The staff screen reuses `useHandoffWorkspace` and `HandoffActorBar` to choose the staff member
+and loads nothing until one is chosen. `/manager/sorting` (`SortingOverviewPage`) is a read-only
+overview for managers: a temporary manager picker, a site switcher with an "All sites" option,
+today's counts, the bins and the recent garments, with the site on every row. It offers no sorting,
+sealing or bin creation. Sealed Repair bins have no next step yet. Handoff only covers recycle
+bins.
 
 ### Authentication and user management
 
@@ -316,6 +351,39 @@ call `lock_open_epr_quarter(session, report_date)` before reading or changing
 quarter data, in the same transaction. The helper coordinates with submission
 and returns HTTP 409 for locked periods. The current import validates only.
 
+### Recycle bin handoff endpoints (Feature 4)
+
+`backend/app/handoffs.py` serves `/api/handoffs`. `GET /options` lists sites,
+active contractors, and demo actors with their site memberships. `GET /bins`
+lists `ready` recycle bins that have no handoff. `GET /api/handoffs` lists
+records with bin, contractor, weights, variance, approval fields, and six
+`outcomes` weights summed from contractor report entries (null when none).
+
+`POST /api/handoffs/pickups` is the only way to create a handoff. It is
+`multipart/form-data` with `bin_id`, `contractor_id`, `actor_id`,
+`picked_up_at` (with a UTC offset, at most 5 minutes in the future), both
+weights, `driver_name`, `vehicle_plate_number`, and the `scale_photo` file, and
+creates the handoff with its evidence in one transaction. It calls `Handoff.record_pickup_weights()`, which sets
+`picked_up`, or `disputed` with manager approval required when the variance is
+above 3%, and the bin becomes `handed_off`. `POST /{id}/approve` (disputed only)
+and `POST /{id}/close` (picked-up or approved only) require a manager or admin
+`actor_id`. Closing also requires at least one `contractor_report_entries` row
+for the handoff (the same "reported" rule the dashboard uses), so a handoff and
+its bin stay open while the outcome report is pending; closing also closes the
+bin. Recording requires a Staff actor who
+belongs to the bin's site. Wrong states return 409, unknown actors 422, and a
+non-Staff actor or Staff from another site 403.
+
+Photos are validated by content type and file signature (JPEG, PNG, WebP, up to
+5 MB), saved under `UPLOAD_DIR` (default `backend/uploads/`), and referenced by
+a relative path in `handoffs.scale_photo_url`. Responses expose that as
+`/api/handoffs/{id}/scale-photo`. Timestamps in requests must include a UTC
+offset. The `scheduled` status remains in the database enum, but no endpoint
+creates it. `backend/seed.py` runs `seed_dashboard_data` (`DASH-` records), then
+`seed_handoff_data` (`HAND-` ready bins and picked-up handoffs), then `seed_sorting_data`
+(`SORT-` empty open bins of each type per site, no garment records so EPR totals are unchanged);
+`seed_development_data` runs all three and is what `main()` and the tests use.
+
 ### `POST /api/contractor-reports/validate` (EPR change request)
 
 Validates monthly contractor rows before import. Each row carries six separate
@@ -350,6 +418,7 @@ npm run db:migrate      # Apply all committed Alembic migrations
 npm run db:rollback     # Roll back one Alembic revision
 npm run db:revision -- -m "message"  # Autogenerate a new revision
 npm run db:check        # Compare SQLModel metadata with upgraded MySQL
+python backend/seed.py  # Load dashboard and handoff demo data (idempotent)
 npm run guardrails      # Enforce repository architecture policies
 npm run test:guardrails # Test the executable policy checker
 npm run build           # Type-check and build the frontend
@@ -449,6 +518,12 @@ python -m ruff check backend
 - Follow Ruff's configured 100-character line length and Python 3.11 target.
 - Use the existing `mysql` Compose service for local database work. Do not
   hardcode credentials; read them from `.env` or future application settings.
+- Store uploaded files under `UPLOAD_DIR` (default `backend/uploads/`, ignored
+  by Git) and keep only a relative path in the database. File uploads use
+  `python-multipart`, a backend dependency.
+- Add development data to `backend/seed.py` as its own idempotent function
+  and call it from `seed_development_data`; keep `seed_dashboard_data`
+  unchanged so its counts and tests stay stable.
 - Define persistent models in `backend/app/models.py` and evolve the database
   only through reviewed Alembic revisions. Do not restore `create_all()` in the
   application lifespan.

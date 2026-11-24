@@ -12,6 +12,7 @@ import {
   Shirt,
   Sparkles,
   TrendingUp,
+  Wrench,
 } from 'lucide-react'
 
 import {
@@ -33,104 +34,241 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { HandoffActorBar } from '@/components/staff/HandoffActorBar'
+import { useHandoffWorkspace } from '@/lib/use-handoff-workspace'
+import {
+  BIN_STATUS_LABELS,
+  BIN_TYPE_LABELS,
+  BIN_TYPE_STYLES,
+  CONDITION_LABELS,
+} from '@/lib/sorting-labels'
 
 const CATEGORIES = ['Tops', 'Bottoms', 'Outerwear', 'Dresses', 'Accessories', 'Other']
 
+const FEEDBACK_TYPE_BY_CONDITION: Record<GarmentCondition, 'resale' | 'recycle' | 'repair'> = {
+  good_reusable: 'resale',
+  worn_recyclable: 'recycle',
+  repair_upcycle: 'repair',
+}
+
+const BIN_CODE_PREFIXES: Record<BinType, string> = { resale: 'RS', recycle: 'RC', repair: 'RP' }
+
+const FEEDBACK_STYLES = {
+  resale: 'bg-emerald-50 text-emerald-900 border-emerald-300',
+  recycle: 'bg-amber-50 text-amber-900 border-amber-300',
+  repair: 'bg-sky-50 text-sky-900 border-sky-300',
+} as const
+
+interface WorkspaceSnapshot {
+  siteId: number
+  stats: SortingStatsResponse
+  activeBins: ActiveBinsResponse
+  allBins: BinRecord[]
+  recentGarments: GarmentItem[]
+}
+
+async function loadWorkspaceSnapshot(actorId: number, siteId: number): Promise<WorkspaceSnapshot> {
+  const [stats, activeBins, allBins, recentGarments] = await Promise.all([
+    getSortingStats(actorId, siteId),
+    getActiveBins(actorId, siteId),
+    getBins(actorId, siteId),
+    getRecentGarments(actorId, siteId, 10),
+  ])
+  return { siteId, stats, activeBins, allBins, recentGarments }
+}
+
+function errorMessage(err: unknown, fallback: string) {
+  return err instanceof Error ? err.message : fallback
+}
+
+const BIN_CARD_THEMES: Record<
+  BinType,
+  { badge: string; bar: string; title: string; destination: string; empty: string }
+> = {
+  resale: {
+    badge: 'text-emerald-700 bg-emerald-100',
+    bar: 'bg-emerald-600',
+    title: 'Direct Resale Bin',
+    destination: 'Destined for Feature 3 Resale Processing',
+    empty: 'No active resale bin. Sort an item or click "New Bin Record" to start one.',
+  },
+  recycle: {
+    badge: 'text-amber-700 bg-amber-100',
+    bar: 'bg-amber-600',
+    title: 'Recycling Bin',
+    destination: 'Destined for Feature 4 Contractor Handoff',
+    empty: 'No active recycling bin. Sort an item or click "New Bin Record" to start one.',
+  },
+  repair: {
+    badge: 'text-sky-700 bg-sky-100',
+    bar: 'bg-sky-600',
+    title: 'Repair Bin',
+    destination: 'For the repair partner',
+    empty: 'No active repair bin. Sort a Repair / Upcycle item to start one.',
+  },
+}
+
+function BinProgressCard({
+  type,
+  bin,
+  onSeal,
+}: {
+  type: BinType
+  bin: BinRecord | null
+  onSeal: (binId: number) => void
+}) {
+  const theme = BIN_CARD_THEMES[type]
+  const percent = bin ? Math.min(100, Math.round((bin.item_count / bin.max_capacity) * 100)) : 0
+
+  return (
+    <Card className="border-slate-200">
+      <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
+        <div>
+          <span
+            className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${theme.badge}`}
+          >
+            {theme.title}
+          </span>
+          <CardTitle className="text-lg font-bold text-slate-900 mt-1">
+            {bin?.bin_code ?? 'None Active'}
+          </CardTitle>
+        </div>
+        {bin && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onSeal(bin.id)}
+            className="text-xs border-slate-300 hover:bg-slate-100 flex items-center gap-1"
+          >
+            <Archive className="size-3.5 text-slate-600" />
+            Seal / Close Bin
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="p-4 pt-1 space-y-2">
+        {bin ? (
+          <>
+            <div className="flex justify-between text-xs text-slate-600 font-medium">
+              <span>
+                Capacity: {bin.item_count} / {bin.max_capacity} items
+              </span>
+              <span>{percent}%</span>
+            </div>
+            <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+              <div
+                className={`${theme.bar} h-2.5 rounded-full transition-all`}
+                style={{ width: `${percent}%` }}
+              />
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Total Weight: {bin.total_weight_kg} kg • {theme.destination}
+            </p>
+          </>
+        ) : (
+          <p className="text-xs text-slate-500 py-3">{theme.empty}</p>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 export function GarmentSortingWorkspace() {
-  const [stats, setStats] = React.useState<SortingStatsResponse | null>(null)
-  const [activeBins, setActiveBins] = React.useState<ActiveBinsResponse | null>(null)
-  const [allBins, setAllBins] = React.useState<BinRecord[]>([])
-  const [recentGarments, setRecentGarments] = React.useState<GarmentItem[]>([])
-  const [loading, setLoading] = React.useState(true)
+  // Until staff sign in, the working staff member is chosen on screen; sorting is always done
+  // at that person's site.
+  const workspace = useHandoffWorkspace()
+  const actorId = workspace.actor?.id ?? null
+  const siteId = workspace.siteId
+
+  const [snapshot, setSnapshot] = React.useState<WorkspaceSnapshot | null>(null)
+  const [loadError, setLoadError] = React.useState<string | null>(null)
+  const [actionError, setActionError] = React.useState<string | null>(null)
+  const [refreshing, setRefreshing] = React.useState(false)
   const [sortingInProgress, setSortingInProgress] = React.useState(false)
+
+  // Data from another site's staff member is never shown: it is ignored until it is reloaded.
+  const current = snapshot?.siteId === siteId ? snapshot : null
+  const stats = current?.stats ?? null
+  const activeBins = current?.activeBins ?? null
+  const allBins = React.useMemo(() => current?.allBins ?? [], [current])
+  const recentGarments = current?.recentGarments ?? []
+  const loading = refreshing || (siteId !== null && current === null && loadError === null)
 
   // Intake form state
   const [selectedCategory, setSelectedCategory] = React.useState<string>('Tops')
   const [weightKg, setWeightKg] = React.useState<string>('')
   const [notes, setNotes] = React.useState<string>('')
   const [lastFeedback, setLastFeedback] = React.useState<{
-    type: 'resale' | 'recycle'
+    type: 'resale' | 'recycle' | 'repair'
     message: string
   } | null>(null)
 
   // Bin filter & creation modal state
   const [binFilter, setBinFilter] = React.useState<
-    'all' | 'active' | 'closed' | 'resale' | 'recycle'
+    'all' | 'active' | 'closed' | 'resale' | 'recycle' | 'repair'
   >('all')
   const [showNewBinModal, setShowNewBinModal] = React.useState(false)
   const [newBinType, setNewBinType] = React.useState<BinType>('resale')
   const [newBinCode, setNewBinCode] = React.useState('')
   const [newBinCapacity, setNewBinCapacity] = React.useState('50')
   const [newBinNotes, setNewBinNotes] = React.useState('')
-  const [closingBinId, setClosingBinId] = React.useState<string | null>(null)
+  const [closingBinId, setClosingBinId] = React.useState<number | null>(null)
   const [closeNotes, setCloseNotes] = React.useState('')
 
   const refreshData = React.useCallback(async () => {
+    if (siteId === null || actorId === null) return
     try {
-      setLoading(true)
-      const [statsData, activeBinsData, binsData, recentData] = await Promise.all([
-        getSortingStats(),
-        getActiveBins(),
-        getBins(),
-        getRecentGarments(10),
-      ])
-      setStats(statsData)
-      setActiveBins(activeBinsData)
-      setAllBins(binsData)
-      setRecentGarments(recentData)
+      setRefreshing(true)
+      setSnapshot(await loadWorkspaceSnapshot(actorId, siteId))
+      setLoadError(null)
     } catch (err) {
-      console.error('Failed to load sorting workspace data:', err)
+      setLoadError(errorMessage(err, 'Failed to load the sorting workspace.'))
     } finally {
-      setLoading(false)
+      setRefreshing(false)
     }
-  }, [])
+  }, [actorId, siteId])
 
   React.useEffect(() => {
+    if (siteId === null || actorId === null) return
     let ignore = false
-    async function loadInitialData() {
+    async function loadInitialData(forActor: number, forSite: number) {
       try {
-        const [statsData, activeBinsData, binsData, recentData] = await Promise.all([
-          getSortingStats(),
-          getActiveBins(),
-          getBins(),
-          getRecentGarments(10),
-        ])
+        const data = await loadWorkspaceSnapshot(forActor, forSite)
         if (!ignore) {
-          setStats(statsData)
-          setActiveBins(activeBinsData)
-          setAllBins(binsData)
-          setRecentGarments(recentData)
-          setLoading(false)
+          setSnapshot(data)
+          setLoadError(null)
         }
       } catch (err) {
-        if (!ignore) {
-          console.error('Failed to load initial sorting workspace data:', err)
-          setLoading(false)
-        }
+        if (!ignore) setLoadError(errorMessage(err, 'Failed to load the sorting workspace.'))
       }
     }
-    void loadInitialData()
+    void loadInitialData(actorId, siteId)
     return () => {
       ignore = true
     }
-  }, [])
+  }, [actorId, siteId])
 
   // Handle Quick Sort submission
   const handleSort = React.useCallback(
     async (condition: GarmentCondition) => {
-      if (sortingInProgress) return
+      if (sortingInProgress || actorId === null) return
+      const parsedWeight = weightKg.trim() ? parseFloat(weightKg) : undefined
+      if (parsedWeight !== undefined && (!Number.isFinite(parsedWeight) || parsedWeight < 0)) {
+        setActionError('Enter a weight of 0 kg or more, or leave it blank.')
+        return
+      }
       try {
         setSortingInProgress(true)
-        const parsedWeight = weightKg.trim() ? parseFloat(weightKg) : undefined
+        setActionError(null)
         const response = await sortGarment({
+          actor_id: actorId,
           condition,
           category: selectedCategory,
-          weight_kg: Number.isFinite(parsedWeight) ? parsedWeight : undefined,
+          weight_kg: parsedWeight,
           notes: notes.trim() || undefined,
         })
 
         setLastFeedback({
-          type: condition === 'good_reusable' ? 'resale' : 'recycle',
+          type: FEEDBACK_TYPE_BY_CONDITION[condition],
           message: response.message,
         })
 
@@ -142,15 +280,13 @@ export function GarmentSortingWorkspace() {
         await refreshData()
       } catch (err) {
         console.error('Failed to sort garment:', err)
-        setLastFeedback({
-          type: 'recycle',
-          message: 'Sorting failed. Please check network or try again.',
-        })
+        setLastFeedback(null)
+        setActionError(errorMessage(err, 'Sorting failed. Please check network or try again.'))
       } finally {
         setSortingInProgress(false)
       }
     },
-    [notes, refreshData, selectedCategory, sortingInProgress, weightKg],
+    [actorId, notes, refreshData, selectedCategory, sortingInProgress, weightKg],
   )
 
   // Ref to always access the latest handleSort in event listener
@@ -159,9 +295,11 @@ export function GarmentSortingWorkspace() {
     handleSortRef.current = handleSort
   })
 
-  // Keyboard shortcut listener for ultra-fast intake (R/1 = Resale, C/2 = Recycle)
+  // Keyboard shortcut listener for ultra-fast intake (R/1 = Resale, C/2 = Recycle, U/3 = Repair)
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // A held key repeats, and Ctrl/Cmd+C or Cmd+U are browser shortcuts: neither is a sort.
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return
       if (
         document.activeElement?.tagName === 'INPUT' ||
         document.activeElement?.tagName === 'TEXTAREA'
@@ -174,6 +312,9 @@ export function GarmentSortingWorkspace() {
       } else if (e.key === 'c' || e.key === 'C' || e.key === '2') {
         e.preventDefault()
         void handleSortRef.current('worn_recyclable')
+      } else if (e.key === 'u' || e.key === 'U' || e.key === '3') {
+        e.preventDefault()
+        void handleSortRef.current('repair_upcycle')
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -183,8 +324,11 @@ export function GarmentSortingWorkspace() {
   // Create new bin
   const handleCreateBin = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (actorId === null) return
     try {
+      setActionError(null)
       await createBin({
+        actor_id: actorId,
         bin_type: newBinType,
         bin_code: newBinCode.trim() || undefined,
         max_capacity: parseInt(newBinCapacity, 10) || 50,
@@ -196,18 +340,24 @@ export function GarmentSortingWorkspace() {
       await refreshData()
     } catch (err) {
       console.error('Failed to create bin:', err)
+      setShowNewBinModal(false)
+      setActionError(errorMessage(err, 'The bin could not be created.'))
     }
   }
 
   // Close bin
-  const handleCloseBin = async (binId: string) => {
+  const handleCloseBin = async (binId: number) => {
+    if (actorId === null) return
     try {
-      await closeBin(binId, closeNotes.trim() || undefined)
+      setActionError(null)
+      await closeBin(binId, actorId, closeNotes.trim() || undefined)
       setClosingBinId(null)
       setCloseNotes('')
       await refreshData()
     } catch (err) {
       console.error('Failed to close bin:', err)
+      setClosingBinId(null)
+      setActionError(errorMessage(err, 'The bin could not be sealed.'))
     }
   }
 
@@ -215,9 +365,10 @@ export function GarmentSortingWorkspace() {
   const filteredBins = React.useMemo(() => {
     return allBins.filter((bin) => {
       if (binFilter === 'active') return bin.status === 'active'
-      if (binFilter === 'closed') return bin.status === 'closed'
+      if (binFilter === 'closed') return bin.status !== 'active'
       if (binFilter === 'resale') return bin.bin_type === 'resale'
       if (binFilter === 'recycle') return bin.bin_type === 'recycle'
+      if (binFilter === 'repair') return bin.bin_type === 'repair'
       return true
     })
   }, [allBins, binFilter])
@@ -241,7 +392,7 @@ export function GarmentSortingWorkspace() {
             variant="outline"
             size="sm"
             onClick={() => void refreshData()}
-            disabled={loading}
+            disabled={loading || siteId === null}
             className="flex items-center gap-1.5"
           >
             <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -249,6 +400,7 @@ export function GarmentSortingWorkspace() {
           </Button>
           <Button
             size="sm"
+            disabled={actorId === null}
             onClick={() => setShowNewBinModal(true)}
             className="flex items-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
           >
@@ -257,6 +409,17 @@ export function GarmentSortingWorkspace() {
           </Button>
         </div>
       </div>
+
+      <HandoffActorBar workspace={workspace} />
+
+      {(loadError || actionError) && (
+        <div
+          role="alert"
+          className="rounded-[10px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"
+        >
+          {actionError ?? loadError}
+        </div>
+      )}
 
       {/* KPI / Session Metrics */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -349,9 +512,7 @@ export function GarmentSortingWorkspace() {
           {lastFeedback && (
             <div
               className={`flex items-center gap-2.5 p-3 rounded-lg text-sm border font-medium transition-all ${
-                lastFeedback.type === 'resale'
-                  ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
-                  : 'bg-amber-50 text-amber-900 border-amber-300'
+                FEEDBACK_STYLES[lastFeedback.type]
               }`}
             >
               <CheckCircle2 className="size-4 shrink-0" />
@@ -383,11 +544,11 @@ export function GarmentSortingWorkspace() {
           </div>
 
           {/* Quick-Tap Buttons: Resale vs Recycle */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
             {/* Button 1: Good / Reusable (Resale) */}
             <button
               type="button"
-              disabled={sortingInProgress}
+              disabled={sortingInProgress || actorId === null}
               onClick={() => void handleSort('good_reusable')}
               className="group relative flex flex-col items-center justify-center p-6 rounded-xl border-2 border-emerald-500 bg-emerald-600 !text-white hover:bg-emerald-700 active:scale-[0.98] transition-all shadow-md focus:outline-none focus:ring-4 focus:ring-emerald-300 disabled:opacity-50"
             >
@@ -404,7 +565,7 @@ export function GarmentSortingWorkspace() {
             {/* Button 2: Worn / Recyclable (Recycle) */}
             <button
               type="button"
-              disabled={sortingInProgress}
+              disabled={sortingInProgress || actorId === null}
               onClick={() => void handleSort('worn_recyclable')}
               className="group relative flex flex-col items-center justify-center p-6 rounded-xl border-2 border-amber-600 bg-amber-600 !text-white hover:bg-amber-700 active:scale-[0.98] transition-all shadow-md focus:outline-none focus:ring-4 focus:ring-amber-300 disabled:opacity-50"
             >
@@ -415,6 +576,23 @@ export function GarmentSortingWorkspace() {
               <span className="text-2xl font-extrabold tracking-tight">Worn / Recyclable</span>
               <span className="text-xs text-amber-100 mt-1 font-medium">
                 Route to Contractor Recycling Bin ({activeBins?.recycle_bin?.bin_code ?? 'Auto'})
+              </span>
+            </button>
+
+            {/* Button 3: Repair / Upcycle (Repair) */}
+            <button
+              type="button"
+              disabled={sortingInProgress || actorId === null}
+              onClick={() => void handleSort('repair_upcycle')}
+              className="group relative flex flex-col items-center justify-center p-6 rounded-xl border-2 border-sky-600 bg-sky-600 !text-white hover:bg-sky-700 active:scale-[0.98] transition-all shadow-md focus:outline-none focus:ring-4 focus:ring-sky-300 disabled:opacity-50"
+            >
+              <div className="absolute top-3 right-3 flex items-center gap-1 bg-sky-800/80 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded">
+                Key: [U] or [3]
+              </div>
+              <Wrench className="size-10 mb-2 transition-transform group-hover:scale-110" />
+              <span className="text-2xl font-extrabold tracking-tight">Repair / Upcycle</span>
+              <span className="text-xs text-sky-100 mt-1 font-medium">
+                Route to Repair Bin ({activeBins?.repair_bin?.bin_code ?? 'Auto'})
               </span>
             </button>
           </div>
@@ -456,133 +634,15 @@ export function GarmentSortingWorkspace() {
       </Card>
 
       {/* Active Bins Status Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Resale Bin Progress */}
-        <Card className="border-slate-200">
-          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
-            <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
-                Direct Resale Bin
-              </span>
-              <CardTitle className="text-lg font-bold text-slate-900 mt-1">
-                {activeBins?.resale_bin?.bin_code ?? 'None Active'}
-              </CardTitle>
-            </div>
-            {activeBins?.resale_bin && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setClosingBinId(activeBins.resale_bin!.id)}
-                className="text-xs border-slate-300 hover:bg-slate-100 flex items-center gap-1"
-              >
-                <Archive className="size-3.5 text-slate-600" />
-                Seal / Close Bin
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent className="p-4 pt-1 space-y-2">
-            {activeBins?.resale_bin ? (
-              <>
-                <div className="flex justify-between text-xs text-slate-600 font-medium">
-                  <span>
-                    Capacity: {activeBins.resale_bin.item_count} /{' '}
-                    {activeBins.resale_bin.max_capacity} items
-                  </span>
-                  <span>
-                    {Math.round(
-                      (activeBins.resale_bin.item_count / activeBins.resale_bin.max_capacity) * 100,
-                    )}
-                    %
-                  </span>
-                </div>
-                <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                  <div
-                    className="bg-emerald-600 h-2.5 rounded-full transition-all"
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        (activeBins.resale_bin.item_count / activeBins.resale_bin.max_capacity) *
-                          100,
-                      )}%`,
-                    }}
-                  />
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  Total Weight: {activeBins.resale_bin.total_weight_kg} kg • Destined for Feature 3
-                  Resale Processing
-                </p>
-              </>
-            ) : (
-              <p className="text-xs text-slate-500 py-3">
-                No active resale bin. Sort an item or click "New Bin Record" to start one.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Recycling Bin Progress */}
-        <Card className="border-slate-200">
-          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
-            <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
-                Recycling Bin
-              </span>
-              <CardTitle className="text-lg font-bold text-slate-900 mt-1">
-                {activeBins?.recycle_bin?.bin_code ?? 'None Active'}
-              </CardTitle>
-            </div>
-            {activeBins?.recycle_bin && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setClosingBinId(activeBins.recycle_bin!.id)}
-                className="text-xs border-slate-300 hover:bg-slate-100 flex items-center gap-1"
-              >
-                <Archive className="size-3.5 text-slate-600" />
-                Seal / Close Bin
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent className="p-4 pt-1 space-y-2">
-            {activeBins?.recycle_bin ? (
-              <>
-                <div className="flex justify-between text-xs text-slate-600 font-medium">
-                  <span>
-                    Capacity: {activeBins.recycle_bin.item_count} /{' '}
-                    {activeBins.recycle_bin.max_capacity} items
-                  </span>
-                  <span>
-                    {Math.round(
-                      (activeBins.recycle_bin.item_count / activeBins.recycle_bin.max_capacity) *
-                        100,
-                    )}
-                    %
-                  </span>
-                </div>
-                <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                  <div
-                    className="bg-amber-600 h-2.5 rounded-full transition-all"
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        (activeBins.recycle_bin.item_count / activeBins.recycle_bin.max_capacity) *
-                          100,
-                      )}%`,
-                    }}
-                  />
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  Total Weight: {activeBins.recycle_bin.total_weight_kg} kg • Destined for Feature 4
-                  Contractor Handoff
-                </p>
-              </>
-            ) : (
-              <p className="text-xs text-slate-500 py-3">
-                No active recycling bin. Sort an item or click "New Bin Record" to start one.
-              </p>
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {(['resale', 'recycle', 'repair'] as const).map((type) => (
+          <BinProgressCard
+            key={type}
+            type={type}
+            bin={activeBins?.[`${type}_bin`] ?? null}
+            onSeal={setClosingBinId}
+          />
+        ))}
       </div>
 
       {/* Bin Records List & Management Table */}
@@ -604,9 +664,10 @@ export function GarmentSortingWorkspace() {
                 [
                   { id: 'all', label: 'All Bins' },
                   { id: 'active', label: 'Active' },
-                  { id: 'closed', label: 'Closed' },
+                  { id: 'closed', label: 'Sealed' },
                   { id: 'resale', label: 'Resale' },
                   { id: 'recycle', label: 'Recycle' },
+                  { id: 'repair', label: 'Repair' },
                 ] as const
               ).map((f) => (
                 <button
@@ -653,13 +714,9 @@ export function GarmentSortingWorkspace() {
                       <td className="py-2.5 px-4 font-semibold text-slate-900">{bin.bin_code}</td>
                       <td className="py-2.5 px-4">
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${
-                            bin.bin_type === 'resale'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${BIN_TYPE_STYLES[bin.bin_type]}`}
                         >
-                          {bin.bin_type === 'resale' ? 'Direct Resale' : 'Recycling'}
+                          {BIN_TYPE_LABELS[bin.bin_type]}
                         </span>
                       </td>
                       <td className="py-2.5 px-4">
@@ -667,10 +724,12 @@ export function GarmentSortingWorkspace() {
                           className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${
                             bin.status === 'active'
                               ? 'bg-blue-100 text-blue-800'
-                              : 'bg-slate-100 text-slate-600'
+                              : bin.status === 'ready'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-slate-100 text-slate-600'
                           }`}
                         >
-                          {bin.status === 'active' ? 'Active / Open' : 'Closed / Sealed'}
+                          {BIN_STATUS_LABELS[bin.status]}
                         </span>
                       </td>
                       <td className="py-2.5 px-4 font-medium text-slate-800">
@@ -684,8 +743,8 @@ export function GarmentSortingWorkspace() {
                         })}
                       </td>
                       <td className="py-2.5 px-4 text-slate-500">
-                        {bin.closed_at
-                          ? new Date(bin.closed_at).toLocaleTimeString([], {
+                        {bin.closed_at || bin.ready_at
+                          ? new Date(bin.closed_at ?? bin.ready_at!).toLocaleTimeString([], {
                               hour: '2-digit',
                               minute: '2-digit',
                             })
@@ -702,7 +761,9 @@ export function GarmentSortingWorkspace() {
                             Close Bin
                           </Button>
                         ) : (
-                          <span className="text-[11px] text-slate-400">Ready</span>
+                          <span className="text-[11px] text-slate-400">
+                            {bin.status === 'ready' ? 'Ready for handoff' : 'Sealed'}
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -738,13 +799,15 @@ export function GarmentSortingWorkspace() {
                   <div className="flex items-center gap-2">
                     <span
                       className={`inline-block size-2 rounded-full ${
-                        item.condition === 'good_reusable' ? 'bg-emerald-500' : 'bg-amber-500'
+                        item.condition === 'good_reusable'
+                          ? 'bg-emerald-500'
+                          : item.condition === 'repair_upcycle'
+                            ? 'bg-sky-500'
+                            : 'bg-amber-500'
                       }`}
                     />
                     <span className="font-semibold text-slate-800">{item.category}</span>
-                    <span className="text-slate-500">
-                      {item.condition === 'good_reusable' ? 'Good / Reusable' : 'Worn / Recyclable'}
-                    </span>
+                    <span className="text-slate-500">{CONDITION_LABELS[item.condition]}</span>
                     {item.weight_kg && (
                       <span className="text-slate-400 text-[11px]">({item.weight_kg} kg)</span>
                     )}
@@ -780,7 +843,7 @@ export function GarmentSortingWorkspace() {
               <CardContent className="space-y-4">
                 <div>
                   <Label className="text-xs">Bin Destination Type</Label>
-                  <div className="grid grid-cols-2 gap-2 mt-1">
+                  <div className="grid grid-cols-3 gap-2 mt-1">
                     <button
                       type="button"
                       onClick={() => setNewBinType('resale')}
@@ -805,6 +868,18 @@ export function GarmentSortingWorkspace() {
                       <Recycle className="size-4" />
                       Recycling
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewBinType('repair')}
+                      className={`p-2.5 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 ${
+                        newBinType === 'repair'
+                          ? 'border-sky-600 bg-sky-50 text-sky-800'
+                          : 'border-slate-200 bg-white text-slate-600'
+                      }`}
+                    >
+                      <Wrench className="size-4" />
+                      Repair
+                    </button>
                   </div>
                 </div>
 
@@ -814,7 +889,7 @@ export function GarmentSortingWorkspace() {
                   </Label>
                   <Input
                     id="modal-bincode"
-                    placeholder={`e.g. BIN-${newBinType === 'resale' ? 'RS' : 'RC'}-005`}
+                    placeholder={`e.g. BIN-${BIN_CODE_PREFIXES[newBinType]}-005`}
                     value={newBinCode}
                     onChange={(e) => setNewBinCode(e.target.value)}
                     className="text-xs"

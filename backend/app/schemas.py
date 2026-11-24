@@ -141,31 +141,44 @@ class ResaleStoreSummaryResponse(BaseModel):
 class BinType(StrEnum):
     RESALE = "resale"
     RECYCLE = "recycle"
+    REPAIR = "repair"
 
 
 class BinStatus(StrEnum):
     ACTIVE = "active"
+    READY = "ready"
+    HANDED_OFF = "handed_off"
     CLOSED = "closed"
 
 
 class GarmentCondition(StrEnum):
     GOOD_REUSABLE = "good_reusable"
     WORN_RECYCLABLE = "worn_recyclable"
+    REPAIR_UPCYCLE = "repair_upcycle"
+
+
+ShortText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
 
 
 class GarmentSortRequest(BaseModel):
+    actor_id: int = Field(gt=0)
     condition: GarmentCondition
-    category: str = "Tops"
-    weight_kg: float | None = Field(default=None, ge=0.0)
-    notes: str | None = None
-    bin_id: str | None = None
+    category: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)
+    ] = "Tops"
+    # A single garment never weighs this much; the cap catches a mistyped grams value.
+    weight_kg: float | None = Field(default=None, ge=0.0, le=50.0)
+    notes: ShortText | None = None
+    bin_id: int | None = Field(default=None, gt=0)
 
 
 class GarmentItem(BaseModel):
-    id: str
+    id: int
+    site_id: int
+    site_name: str
     condition: GarmentCondition
     category: str
-    bin_id: str
+    bin_id: int
     bin_code: str
     weight_kg: float | None = None
     notes: str | None = None
@@ -173,7 +186,9 @@ class GarmentItem(BaseModel):
 
 
 class BinRecord(BaseModel):
-    id: str
+    id: int
+    site_id: int
+    site_name: str
     bin_code: str
     bin_type: BinType
     status: BinStatus
@@ -181,35 +196,44 @@ class BinRecord(BaseModel):
     total_weight_kg: float = 0.0
     max_capacity: int = 50
     created_at: datetime
+    ready_at: datetime | None = None
     closed_at: datetime | None = None
     notes: str | None = None
 
 
 class BinCreateRequest(BaseModel):
+    actor_id: int = Field(gt=0)
     bin_type: BinType
-    bin_code: str | None = None
-    max_capacity: int = 50
-    notes: str | None = None
+    bin_code: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)] | None
+    ) = None
+    max_capacity: int = Field(default=50, ge=1, le=500)
+    notes: ShortText | None = None
 
 
 class BinCloseRequest(BaseModel):
-    notes: str | None = None
+    actor_id: int = Field(gt=0)
+    notes: ShortText | None = None
 
 
 class ActiveBinsResponse(BaseModel):
     resale_bin: BinRecord | None = None
     recycle_bin: BinRecord | None = None
+    repair_bin: BinRecord | None = None
 
 
 class SortingStatsResponse(BaseModel):
     total_sorted_today: int
     resale_count: int
     recycle_count: int
+    repair_count: int
     resale_percentage: float
     active_resale_bin_code: str | None = None
     active_resale_bin_items: int = 0
     active_recycle_bin_code: str | None = None
     active_recycle_bin_items: int = 0
+    active_repair_bin_code: str | None = None
+    active_repair_bin_items: int = 0
 
 
 class SortGarmentResponse(BaseModel):
@@ -484,3 +508,100 @@ class ContractorReportImportResponse(BaseModel):
     total_received_kg: float
     total_categorized_weight_kg: float
     message: str
+
+
+# -------------------------------------------------------------------------
+# Recycle bin handoff
+# -------------------------------------------------------------------------
+
+
+class HandoffRecordStatus(StrEnum):
+    """Mirrors ``models.HandoffStatus``; models imports from this module, not the reverse."""
+
+    SCHEDULED = "scheduled"
+    PICKED_UP = "picked_up"
+    DISPUTED = "disputed"
+    APPROVED = "approved"
+    CLOSED = "closed"
+
+
+class HandoffSiteOption(BaseModel):
+    id: int
+    code: str
+    name: str
+
+
+class HandoffContractorOption(BaseModel):
+    id: int
+    name: str
+
+
+class HandoffActorOption(BaseModel):
+    id: int
+    username: str
+    role: UserRole
+    site_ids: list[int]
+
+
+class HandoffOptionsResponse(BaseModel):
+    sites: list[HandoffSiteOption]
+    contractors: list[HandoffContractorOption]
+    actors: list[HandoffActorOption]
+
+
+class HandoffReadyBin(BaseModel):
+    id: int
+    site_id: int
+    site_name: str
+    code: str
+    item_count: int = Field(ge=0)
+    total_weight_kg: float = Field(ge=0)
+    ready_at: datetime | None
+
+
+class HandoffReadyBinsResponse(BaseModel):
+    bins: list[HandoffReadyBin]
+
+
+class HandoffActorRequest(BaseModel):
+    actor_id: int = Field(gt=0)
+
+
+class HandoffOutcomes(BaseModel):
+    upcycled_weight_kg: float
+    fibre_to_fibre_weight_kg: float
+    downcycled_weight_kg: float
+    exported_weight_kg: float
+    landfilled_weight_kg: float
+    incinerated_energy_recovery_weight_kg: float
+
+
+class HandoffRecord(BaseModel):
+    id: int
+    site_id: int
+    site_name: str
+    bin_id: int
+    bin_code: str
+    item_count: int = Field(ge=0)
+    bin_weight_kg: float = Field(ge=0)
+    contractor_id: int
+    contractor_name: str
+    status: HandoffRecordStatus
+    scheduled_pickup_at: datetime | None
+    picked_up_at: datetime | None
+    staff_weight_kg: float | None
+    driver_weight_kg: float | None
+    weight_variance_percent: float | None
+    requires_manager_approval: bool
+    scale_photo_url: str | None
+    driver_name: str | None
+    vehicle_plate_number: str | None
+    created_by: str
+    approved_by: str | None
+    approved_at: datetime | None
+    closed_at: datetime | None
+    outcomes: HandoffOutcomes | None
+
+
+class HandoffListResponse(BaseModel):
+    handoffs: list[HandoffRecord]

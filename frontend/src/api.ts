@@ -12,23 +12,27 @@ export interface ResaleStoreSummaryResponse {
   stores: ResaleStoreSummary[]
 }
 
-export type BinType = 'resale' | 'recycle'
-export type BinStatus = 'active' | 'closed'
-export type GarmentCondition = 'good_reusable' | 'worn_recyclable'
+export type BinType = 'resale' | 'recycle' | 'repair'
+// 'active' accepts items; sealing makes a recycling bin 'ready' for handoff, others 'closed'.
+export type BinStatus = 'active' | 'ready' | 'handed_off' | 'closed'
+export type GarmentCondition = 'good_reusable' | 'worn_recyclable' | 'repair_upcycle'
 
 export interface GarmentSortRequest {
+  actor_id: number
   condition: GarmentCondition
   category?: string
   weight_kg?: number
   notes?: string
-  bin_id?: string
+  bin_id?: number
 }
 
 export interface GarmentItem {
-  id: string
+  id: number
+  site_id: number
+  site_name: string
   condition: GarmentCondition
   category: string
-  bin_id: string
+  bin_id: number
   bin_code: string
   weight_kg: number | null
   notes: string | null
@@ -36,7 +40,9 @@ export interface GarmentItem {
 }
 
 export interface BinRecord {
-  id: string
+  id: number
+  site_id: number
+  site_name: string
   bin_code: string
   bin_type: BinType
   status: BinStatus
@@ -44,11 +50,13 @@ export interface BinRecord {
   total_weight_kg: number
   max_capacity: number
   created_at: string
+  ready_at: string | null
   closed_at: string | null
   notes: string | null
 }
 
 export interface BinCreateRequest {
+  actor_id: number
   bin_type: BinType
   bin_code?: string
   max_capacity?: number
@@ -58,17 +66,21 @@ export interface BinCreateRequest {
 export interface ActiveBinsResponse {
   resale_bin: BinRecord | null
   recycle_bin: BinRecord | null
+  repair_bin: BinRecord | null
 }
 
 export interface SortingStatsResponse {
   total_sorted_today: number
   resale_count: number
   recycle_count: number
+  repair_count: number
   resale_percentage: number
   active_resale_bin_code: string | null
   active_resale_bin_items: number
   active_recycle_bin_code: string | null
   active_recycle_bin_items: number
+  active_repair_bin_code: string | null
+  active_repair_bin_items: number
 }
 
 export interface SortGarmentResponse {
@@ -360,62 +372,70 @@ export async function validateContractorReport(
   return handleResponse<ContractorReportValidationResponse>(response)
 }
 
-export async function getSortingStats(): Promise<SortingStatsResponse> {
-  const response = await fetch(`${API_URL}/api/sorting/stats`)
-  return handleResponse<SortingStatsResponse>(response)
-}
-
-export async function getActiveBins(): Promise<ActiveBinsResponse> {
-  const response = await fetch(`${API_URL}/api/bins/active`)
-  return handleResponse<ActiveBinsResponse>(response)
-}
-
-export async function getBins(filters?: {
-  bin_type?: BinType
-  status?: BinStatus
-}): Promise<BinRecord[]> {
-  const params = new URLSearchParams()
-  if (filters?.bin_type) {
-    params.set('bin_type', filters.bin_type)
+// Sorting reads are per site and writes name the acting staff member (`actor_id`) until the
+// frontend uses real login, the same stopgap the handoff pages use.
+async function sortingRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_URL}/api${path}`, init)
+  if (!response.ok) {
+    const error = (await response.json().catch(() => null)) as { detail?: unknown } | null
+    if (typeof error?.detail === 'string') throw new Error(error.detail)
+    throw new Error('The sorting request failed. Check the entered values and try again.')
   }
-  if (filters?.status) {
-    params.set('status', filters.status)
-  }
-  const query = params.toString() ? `?${params.toString()}` : ''
-  const response = await fetch(`${API_URL}/api/bins${query}`)
-  return handleResponse<BinRecord[]>(response)
+  return response.json() as Promise<T>
 }
 
-export async function createBin(payload: BinCreateRequest): Promise<BinRecord> {
-  const response = await fetch(`${API_URL}/api/bins`, {
+function postJson<T>(path: string, body: unknown) {
+  return sortingRequest<T>(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   })
-  return handleResponse<BinRecord>(response)
 }
 
-export async function closeBin(binId: string, notes?: string): Promise<BinRecord> {
-  const response = await fetch(`${API_URL}/api/bins/${encodeURIComponent(binId)}/close`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ notes }),
-  })
-  return handleResponse<BinRecord>(response)
+// Reads name the acting user (`actor_id`). Staff only reach their own site; managers pick one of
+// their sites, or leave `siteId` out for all of them combined (the list endpoints only).
+export function getSortingStats(actorId: number, siteId?: number): Promise<SortingStatsResponse> {
+  return sortingRequest<SortingStatsResponse>(
+    `/sorting/stats${buildQuery({ actor_id: actorId, site_id: siteId })}`,
+  )
 }
 
-export async function sortGarment(payload: GarmentSortRequest): Promise<SortGarmentResponse> {
-  const response = await fetch(`${API_URL}/api/garments/sort`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  return handleResponse<SortGarmentResponse>(response)
+export function getActiveBins(actorId: number, siteId?: number): Promise<ActiveBinsResponse> {
+  return sortingRequest<ActiveBinsResponse>(
+    `/bins/active${buildQuery({ actor_id: actorId, site_id: siteId })}`,
+  )
 }
 
-export async function getRecentGarments(limit = 15): Promise<GarmentItem[]> {
-  const response = await fetch(`${API_URL}/api/garments/recent?limit=${limit}`)
-  return handleResponse<GarmentItem[]>(response)
+export function getBins(
+  actorId: number,
+  siteId?: number,
+  filters?: { bin_type?: BinType; status?: BinStatus },
+): Promise<BinRecord[]> {
+  return sortingRequest<BinRecord[]>(
+    `/bins${buildQuery({ actor_id: actorId, site_id: siteId, ...filters })}`,
+  )
+}
+
+export function createBin(payload: BinCreateRequest): Promise<BinRecord> {
+  return postJson<BinRecord>('/bins', payload)
+}
+
+export function closeBin(binId: number, actorId: number, notes?: string): Promise<BinRecord> {
+  return postJson<BinRecord>(`/bins/${binId}/close`, { actor_id: actorId, notes })
+}
+
+export function sortGarment(payload: GarmentSortRequest): Promise<SortGarmentResponse> {
+  return postJson<SortGarmentResponse>('/garments/sort', payload)
+}
+
+export function getRecentGarments(
+  actorId: number,
+  siteId?: number,
+  limit = 15,
+): Promise<GarmentItem[]> {
+  return sortingRequest<GarmentItem[]>(
+    `/garments/recent${buildQuery({ actor_id: actorId, site_id: siteId, limit })}`,
+  )
 }
 
 export type UserRole = 'admin' | 'manager' | 'staff'
@@ -667,4 +687,175 @@ export async function importContractorReport(
     body: JSON.stringify(payload),
   })
   return parseImportApiResponse<ContractorReportImportResponse>(response)
+}
+
+// Recycle bin handoff. Mirrors the "Recycle bin handoff" section of backend/app/schemas.py.
+
+export type HandoffRecordStatus = 'scheduled' | 'picked_up' | 'disputed' | 'approved' | 'closed'
+
+export interface HandoffSiteOption {
+  id: number
+  code: string
+  name: string
+}
+
+export interface HandoffContractorOption {
+  id: number
+  name: string
+}
+
+export interface HandoffActorOption {
+  id: number
+  username: string
+  role: UserRole
+  site_ids: number[]
+}
+
+export interface HandoffOptions {
+  sites: HandoffSiteOption[]
+  contractors: HandoffContractorOption[]
+  actors: HandoffActorOption[]
+}
+
+export interface HandoffReadyBin {
+  id: number
+  site_id: number
+  site_name: string
+  code: string
+  item_count: number
+  total_weight_kg: number
+  ready_at: string | null
+}
+
+export interface HandoffReadyBinsResponse {
+  bins: HandoffReadyBin[]
+}
+
+export interface HandoffOutcomes {
+  upcycled_weight_kg: number
+  fibre_to_fibre_weight_kg: number
+  downcycled_weight_kg: number
+  exported_weight_kg: number
+  landfilled_weight_kg: number
+  incinerated_energy_recovery_weight_kg: number
+}
+
+export interface HandoffRecord {
+  id: number
+  site_id: number
+  site_name: string
+  bin_id: number
+  bin_code: string
+  item_count: number
+  bin_weight_kg: number
+  contractor_id: number
+  contractor_name: string
+  status: HandoffRecordStatus
+  scheduled_pickup_at: string | null
+  picked_up_at: string | null
+  staff_weight_kg: number | null
+  driver_weight_kg: number | null
+  weight_variance_percent: number | null
+  requires_manager_approval: boolean
+  // An API path (/api/handoffs/{id}/scale-photo) for uploaded photos, or an external URL.
+  scale_photo_url: string | null
+  driver_name: string | null
+  vehicle_plate_number: string | null
+  created_by: string
+  approved_by: string | null
+  approved_at: string | null
+  closed_at: string | null
+  outcomes: HandoffOutcomes | null
+}
+
+export interface HandoffListResponse {
+  handoffs: HandoffRecord[]
+}
+
+export interface HandoffPickupRequest {
+  bin_id: number
+  contractor_id: number
+  actor_id: number
+  // ISO 8601 with a UTC offset, not in the future.
+  picked_up_at: string
+  staff_weight_kg: number
+  driver_weight_kg: number
+  driver_name: string
+  vehicle_plate_number: string
+  // JPEG, PNG, or WebP, up to 5 MB.
+  scale_photo: Blob
+}
+
+async function handoffRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_URL}/api/handoffs${path}`, init)
+  if (!response.ok) {
+    const error = (await response.json().catch(() => null)) as { detail?: unknown } | null
+    if (typeof error?.detail === 'string') throw new Error(error.detail)
+    throw new Error('The handoff request failed. Check the entered values and try again.')
+  }
+  return response.json() as Promise<T>
+}
+
+function postHandoffJson<T>(path: string, payload: unknown) {
+  return handoffRequest<T>(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+function buildQuery(params: Record<string, string | number | undefined>) {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) query.set(key, String(value))
+  }
+  const text = query.toString()
+  return text ? `?${text}` : ''
+}
+
+export function getHandoffOptions(signal?: AbortSignal) {
+  return handoffRequest<HandoffOptions>('/options', { signal })
+}
+
+export function getHandoffReadyBins(siteId?: number, signal?: AbortSignal) {
+  return handoffRequest<HandoffReadyBinsResponse>(`/bins${buildQuery({ site_id: siteId })}`, {
+    signal,
+  })
+}
+
+export function getHandoffs(
+  filters: { site_id?: number; status?: HandoffRecordStatus } = {},
+  signal?: AbortSignal,
+) {
+  return handoffRequest<HandoffListResponse>(buildQuery(filters), { signal })
+}
+
+/** Creates a handoff and records its pickup evidence in one step, when the driver arrives. */
+export function recordHandoffAtPickup(payload: HandoffPickupRequest) {
+  const form = new FormData()
+  form.set('bin_id', String(payload.bin_id))
+  form.set('contractor_id', String(payload.contractor_id))
+  form.set('actor_id', String(payload.actor_id))
+  form.set('picked_up_at', payload.picked_up_at)
+  form.set('staff_weight_kg', String(payload.staff_weight_kg))
+  form.set('driver_weight_kg', String(payload.driver_weight_kg))
+  form.set('driver_name', payload.driver_name)
+  form.set('vehicle_plate_number', payload.vehicle_plate_number)
+  form.set('scale_photo', payload.scale_photo)
+  // No Content-Type header: the browser adds the multipart boundary itself.
+  return handoffRequest<HandoffRecord>('/pickups', { method: 'POST', body: form })
+}
+
+/** Makes an uploaded scale photo path usable when VITE_API_URL points at another origin. */
+export function handoffPhotoUrl(url: string | null) {
+  if (!url) return null
+  return url.startsWith('/api/') ? `${API_URL}${url}` : url
+}
+
+export function approveHandoff(handoffId: number, actorId: number) {
+  return postHandoffJson<HandoffRecord>(`/${handoffId}/approve`, { actor_id: actorId })
+}
+
+export function closeHandoff(handoffId: number, actorId: number) {
+  return postHandoffJson<HandoffRecord>(`/${handoffId}/close`, { actor_id: actorId })
 }

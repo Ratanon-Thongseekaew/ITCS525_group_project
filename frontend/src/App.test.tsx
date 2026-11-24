@@ -6,10 +6,12 @@ import { MemoryRouter } from 'react-router'
 import { toast } from 'sonner'
 import { afterEach, expect, test, vi } from 'vitest'
 import { dashboardFixture } from './test/dashboard-fixture'
+import { actAs, handoffOptions, handoffRecord, readyBin, STAFF_ID } from './test/handoff-fixtures'
 import App from './App'
 
 afterEach(() => {
   cleanup()
+  window.localStorage.clear()
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
@@ -39,20 +41,46 @@ Object.defineProperty(globalThis, 'ResizeObserver', {
   value: ResizeObserverMock,
 })
 
+const handoffBins = [
+  readyBin({ id: 1, code: 'bin-id-001', item_count: 100, total_weight_kg: 40 }),
+  readyBin({ id: 2, code: 'bin-id-002', item_count: 100, total_weight_kg: 40 }),
+]
+const handoffRecords = [
+  handoffRecord({ id: 1, bin_code: 'bin-id-001' }),
+  handoffRecord({
+    id: 2,
+    bin_code: 'bin-id-002',
+    status: 'closed',
+    picked_up_at: '2026-10-16T11:00:00Z',
+    staff_weight_kg: 40,
+    outcomes: {
+      upcycled_weight_kg: 5,
+      fibre_to_fibre_weight_kg: 15,
+      downcycled_weight_kg: 10,
+      exported_weight_kg: 5,
+      landfilled_weight_kg: 3,
+      incinerated_energy_recovery_weight_kg: 1,
+    },
+  }),
+]
+
+function fixtureFor(url: string) {
+  if (url.includes('/api/dashboard')) return dashboardFixture
+  if (url.includes('/api/handoffs/options')) return handoffOptions
+  if (url.includes('/api/handoffs/bins')) return { bins: handoffBins }
+  if (url.includes('/api/handoffs')) {
+    return { handoffs: url.includes('status=disputed') ? [] : handoffRecords }
+  }
+  return { message: 'Hello from FastAPI!' }
+}
+
 function renderRoute(route: string) {
   vi.spyOn(globalThis, 'fetch').mockImplementation((input) =>
     Promise.resolve(
-      new Response(
-        JSON.stringify(
-          String(input).includes('/api/dashboard')
-            ? dashboardFixture
-            : { message: 'Hello from FastAPI!' },
-        ),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        },
-      ),
+      new Response(JSON.stringify(fixtureFor(String(input))), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
     ),
   )
 
@@ -244,7 +272,12 @@ const staffNavigation = [
   ['Recycle Bin Handoff', '/staff/recycle-bin-handoff'],
 ] as const
 
-const managerNavigation = ['Compliance Dashboard', 'Resale Bin Records', 'Import Data']
+const managerNavigation = [
+  'Compliance Dashboard',
+  'Sorting Overview',
+  'Resale Bin Records',
+  'Import Data',
+]
 
 test('shows the Figma navigation in the staff sidebar', () => {
   renderRoute('/staff/sorting')
@@ -298,37 +331,34 @@ test('opens Direct Resale from the staff sidebar', async () => {
   expect(await screen.findByRole('heading', { name: 'Direct Resale Bins' })).toBeInTheDocument()
 })
 
-test('renders New Bins for Handoff with the mock data', () => {
+test('renders New Bins for Handoff from the API', async () => {
+  actAs(STAFF_ID)
   renderRoute('/staff/recycle-bin-handoff')
 
   expect(screen.getByRole('heading', { name: 'New Bins for Handoff' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { name: '#bin-id-001' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: '#bin-id-002' })).toBeInTheDocument()
   expect(screen.getByText('Bins Awaiting').nextElementSibling).toHaveTextContent('2')
   expect(screen.getByText('Items Staged').nextElementSibling).toHaveTextContent('200')
   expect(screen.getByText('Total Grossed Weight').nextElementSibling).toHaveTextContent('80 kg')
-  expect(screen.getByText('Next Scheduled Pickup').nextElementSibling).toHaveTextContent(
-    '20 Oct 2026',
-  )
-  expect(screen.getByRole('heading', { name: '#bin-id-001' })).toBeInTheDocument()
-  expect(screen.getByRole('heading', { name: '#bin-id-002' })).toBeInTheDocument()
+  expect(screen.getByText('Awaiting Approval').nextElementSibling).toHaveTextContent('0')
   expect(screen.getByText('Showing 2 of 2 records')).toBeInTheDocument()
 })
 
-test.each(['Scheduled Pickup Dates', 'Handoff Records'])(
-  'navigates to %s from the handoff page',
-  async (label) => {
-    renderRoute('/staff/recycle-bin-handoff')
+test('navigates to Handoff Records from the handoff page', async () => {
+  renderRoute('/staff/recycle-bin-handoff')
 
-    fireEvent.click(screen.getByRole('link', { name: label }))
+  fireEvent.click(screen.getByRole('link', { name: 'Handoff Records' }))
 
-    expect(await screen.findByRole('heading', { name: label })).toBeInTheDocument()
-  },
-)
+  expect(await screen.findByRole('heading', { name: 'Handoff Records' })).toBeInTheDocument()
+})
 
-test('renders Handoff Records with the mock data', () => {
+test('renders Handoff Records from the API', async () => {
+  actAs(STAFF_ID)
   renderRoute('/staff/recycle-bin-handoff/handoff-records')
 
   expect(screen.getByRole('heading', { name: 'Handoff Records' })).toBeInTheDocument()
-  expect(screen.getByRole('heading', { name: '#bin-id-001' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { name: '#bin-id-001' })).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: '#bin-id-002' })).toBeInTheDocument()
   expect(screen.getByText('Outcome report is still pending!')).toBeInTheDocument()
   expect(screen.getByText('Total Reported').nextElementSibling).toHaveTextContent('39.0 kg')

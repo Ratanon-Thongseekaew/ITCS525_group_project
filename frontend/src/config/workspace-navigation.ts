@@ -1,6 +1,7 @@
 import {
   ArrowDownUp,
   ChartNoAxesCombined,
+  ClipboardList,
   Recycle,
   Shirt,
   UserPlus,
@@ -28,6 +29,12 @@ export const workspaceNavigation: readonly WorkspaceNavigationItem[] = [
     segment: 'compliance-dashboard',
     icon: ChartNoAxesCombined,
     roles: ['manager', 'admin'],
+  },
+  {
+    label: 'Sorting Overview',
+    segment: 'sorting',
+    icon: ClipboardList,
+    roles: ['manager'],
   },
   {
     label: 'Resale Bin Records',
