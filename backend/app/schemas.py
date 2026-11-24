@@ -3,7 +3,15 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 
 class UserRole(StrEnum):
@@ -12,28 +20,71 @@ class UserRole(StrEnum):
     STAFF = "staff"
 
 
+class SiteRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    code: str
+    name: str
+
+
+def _clean_full_name(value: str | None) -> str | None:
+    """Trim whitespace; a blank name means "no name"."""
+    if value is None:
+        return None
+    return value.strip() or None
+
+
 class UserCreate(BaseModel):
     username: EmailStr = Field(max_length=254)
-    password: str = Field(min_length=8, max_length=128, repr=False)
+    # Omit the password to have the server generate a temporary one (returned once).
+    password: str | None = Field(default=None, min_length=8, max_length=128, repr=False)
     role: UserRole
+    full_name: str | None = Field(default=None, max_length=120)
+    # Staff need exactly one store, managers may have one, administrators have none.
+    site_id: int | None = Field(default=None, ge=1)
 
     @field_validator("username")
     @classmethod
     def normalize_username(cls, value: str) -> str:
         return value.lower()
 
+    @field_validator("full_name")
+    @classmethod
+    def normalize_full_name(cls, value: str | None) -> str | None:
+        return _clean_full_name(value)
+
+    @model_validator(mode="after")
+    def check_store_for_role(self) -> "UserCreate":
+        if self.role == UserRole.STAFF and self.site_id is None:
+            raise ValueError("Staff must be assigned to a store")
+        if self.role == UserRole.ADMIN and self.site_id is not None:
+            raise ValueError("Administrators are not assigned to a store")
+        return self
+
 
 class UserUpdate(BaseModel):
-    """Partial update; omitted or null fields are left unchanged."""
+    """Partial update; omitted or null fields are left unchanged.
+
+    Exceptions: sending ``full_name: null`` clears the name, and sending ``site_id: null``
+    removes the store (not allowed for staff).
+    """
 
     username: EmailStr | None = Field(default=None, max_length=254)
     password: str | None = Field(default=None, min_length=8, max_length=128, repr=False)
     role: UserRole | None = None
+    full_name: str | None = Field(default=None, max_length=120)
+    site_id: int | None = Field(default=None, ge=1)
 
     @field_validator("username")
     @classmethod
     def normalize_username(cls, value: str | None) -> str | None:
         return value.lower() if value is not None else None
+
+    @field_validator("full_name")
+    @classmethod
+    def normalize_full_name(cls, value: str | None) -> str | None:
+        return _clean_full_name(value)
 
 
 class UserRead(BaseModel):
@@ -42,11 +93,25 @@ class UserRead(BaseModel):
     id: int
     username: EmailStr
     role: UserRole
+    full_name: str | None = None
+    must_change_password: bool = False
+    store: SiteRead | None = None
+
+
+class UserWithTemporaryPassword(UserRead):
+    """Returned once when the server generates a password; it is never stored or shown again."""
+
+    temporary_password: str | None = None
 
 
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=254)
     password: str = Field(min_length=1, max_length=128, repr=False)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128, repr=False)
+    new_password: str = Field(min_length=8, max_length=128, repr=False)
 
 
 class TokenResponse(BaseModel):

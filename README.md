@@ -160,9 +160,23 @@ python -m app.create_admin admin@example.com
 
 The command prompts for the password. Add `--reset-password` to change the
 password of an existing account. The API then offers `POST /api/auth/login`,
-`GET /api/auth/me`, and administrator-only user management under
-`/api/users` (see Swagger at `http://127.0.0.1:8000/docs`; use **Authorize**
-with the token returned by login).
+`GET /api/auth/me`, `POST /api/auth/change-password`, and administrator-only user
+management under `/api/users` (see Swagger at `http://127.0.0.1:8000/docs`; use
+**Authorize** with the token returned by login).
+
+Each user has an optional `full_name` and a store (their `user_sites` link):
+staff need exactly one store, managers may have one, and administrators have none.
+`GET /api/sites` (administrator only) lists the active stores for the store
+dropdown. Seed sample stores with `uv run --project backend --locked python backend/seed.py`.
+
+Administrators add people without choosing a password: `POST /api/users` with no
+`password` makes the server generate a temporary one and return it **once** in
+`temporary_password`. Give it to the person securely; it cannot be shown again.
+`POST /api/users/{id}/reset-password` issues a new temporary password the same way.
+Accounts with a temporary password have `must_change_password: true` and can only
+call `GET /api/auth/me` and `POST /api/auth/change-password` until they choose
+their own password. Run `npm run db:migrate` after pulling: the `full_name` and
+`must_change_password` columns come from migration `20261124_0002`.
 
 ## Develop
 

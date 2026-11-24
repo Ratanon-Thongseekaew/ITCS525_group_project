@@ -25,6 +25,7 @@ from .schemas import (
     SortGarmentResponse,
     SortingStatsResponse,
 )
+from .sites import router as sites_router
 from .sorting_service import sorting_service
 from .users import router as users_router
 
@@ -46,6 +47,7 @@ app = FastAPI(
 
 app.include_router(auth_router)
 app.include_router(users_router)
+app.include_router(sites_router)
 app.include_router(dashboard_router)
 app.include_router(epr_router)
 app.include_router(contractor_reports_router)

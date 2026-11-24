@@ -57,7 +57,9 @@ This is a minimal full-stack monorepo:
 │   │   ├── main.py          FastAPI app, middleware, routes, and lifespan
 │   │   ├── models.py        SQLModel tables and database enums
 │   │   ├── schemas.py       Pydantic response models
-│   │   ├── security.py      Password hashing and JWT helpers
+│   │   ├── security.py      Password hashing, JWT and temporary-password helpers
+│   │   ├── sites.py         Admin-only store list for the user form
+│   │   ├── user_stores.py   User-to-store (`user_sites`) helpers and response builders
 │   │   └── users.py         Admin-only user management routes
 │   ├── alembic/             Migration environment and versioned revisions
 │   ├── alembic.ini          Alembic configuration
@@ -69,6 +71,7 @@ This is a minimal full-stack monorepo:
 │   │   ├── test_database.py SQLModel and migration tests
 │   │   ├── test_handoffs.py Recycle bin handoff API tests
 │   │   ├── test_main.py     API and sorting tests
+│   │   ├── test_user_stores.py Full name, stores, temporary passwords, password change
 │   │   └── test_users.py    User API and database tests
 │   ├── uv.lock              Locked Python dependency graph
 │   └── pyproject.toml       Python package and tool configuration
@@ -249,16 +252,40 @@ effect immediately. Create the first administrator with
 `python -m app.create_admin <email>` after `npm run db:migrate`.
 
 - `POST /api/auth/login` takes `{username, password}` and returns
-  `{access_token, token_type, user: {id, username, role}}`. Unknown users and wrong
-  passwords both return `401 Invalid username or password`.
+  `{access_token, token_type, user}`. Unknown users and wrong passwords both return
+  `401 Invalid username or password`. `user` is a `UserRead`:
+  `{id, username, role, full_name, must_change_password, store}` where `store` is
+  `{id, code, name}` or `null`.
 - `GET /api/auth/me` returns the current `UserRead`; `401` without a valid token.
+- `POST /api/auth/change-password` takes `{current_password, new_password}` (8–128
+  characters, different from the current one), clears `must_change_password` and
+  returns the `UserRead`. A wrong current password returns `400` (not `401`, so a
+  client does not treat it as an expired session).
 - `GET /api/users`, `POST /api/users`, `GET /api/users/{id}`,
-  `PATCH /api/users/{id}` (any of `username`, `password`, `role`) and
-  `DELETE /api/users/{id}` require the `admin` role (`401` unauthenticated, `403`
-  otherwise). Usernames are lowercase emails; duplicates return `409`. An admin
-  cannot delete their own account, the last administrator cannot be demoted, and a
-  user referenced by bins, garment records, handoffs, or reports cannot be deleted
-  (`409`) because those foreign keys use `ON DELETE RESTRICT`.
+  `PATCH /api/users/{id}` (any of `username`, `password`, `role`, `full_name`,
+  `site_id`), `POST /api/users/{id}/reset-password` and `DELETE /api/users/{id}`
+  require the `admin` role (`401` unauthenticated, `403` otherwise, and `403` with the
+  message "Password change required" for an administrator who still has a temporary
+  password).
+  Usernames are lowercase emails; duplicates return `409`. An admin cannot delete
+  their own account, the last administrator cannot be demoted, and a user referenced
+  by bins, garment records, handoffs, or reports cannot be deleted (`409`) because
+  those foreign keys use `ON DELETE RESTRICT`.
+- `POST /api/users` takes `{username, role, full_name?, site_id?, password?}`. With no
+  `password` the server generates a 14-character temporary password, sets
+  `must_change_password`, and returns it once as `temporary_password` (response is
+  `Cache-Control: no-store`; it is never stored in plain text or returned again). An
+  explicit `password` is accepted for scripts and is not flagged. `reset-password`
+  does the same for an existing user (not allowed on your own account). An admin
+  setting another user's password through `PATCH` also sets `must_change_password`.
+- Stores use the existing `users` ↔ `user_sites` link; no new table. Staff require
+  exactly one `site_id`, managers may have one or none, administrators none (`422`
+  otherwise, also for an unknown or inactive store). Setting `site_id` on `PATCH`
+  makes it the user's only store; `site_id: null` removes it (not allowed for staff).
+  `store` is the default membership, otherwise the lowest site id. Changing role to
+  administrator removes the store; to staff requires exactly one store. Sending
+  `full_name: null` clears the name.
+- `GET /api/sites` (admin only) returns active stores `[{id, code, name}]` by name.
 
 ### `GET /api/dashboard` (Feature 6 and change requests)
 
