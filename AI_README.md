@@ -141,6 +141,7 @@ React Router owns client-side navigation. The current frontend routes are:
   printable EPR report for the requested `year` and `quarter`.
 - `/manager/import` renders the contractor monthly outcome report import page
   and is available from the manager workspace navigation.
+- `/manager/sorting` renders the read-only sorting overview across the manager's sites.
 - `/manager/resale-bins` renders the database-backed top-five store resale
   summary.
 - `/staff/sorting` renders the garment sorting workspace. `/staff` has no route;
@@ -188,8 +189,8 @@ sidebar logo both use: `/manager`, `/staff/sorting`, and `/admin/users`.
 Authenticated workspace screens share `WorkspaceSidebar`, composed from the
 local shadcn sidebar primitives. `frontend/src/config/workspace-navigation.ts`
 owns labels, icons, route segments, and the `roles` arrays used to filter menu
-visibility. Managers see Compliance Dashboard, Resale Bin Records, and Import
-Data. Staff see Sorting, Direct Resale, and Recycle Bin Handoff. Admins
+visibility. Managers see Compliance Dashboard, Sorting Overview, Resale Bin Records,
+and Import Data. Staff see Sorting, Direct Resale, and Recycle Bin Handoff. Admins
 see Compliance Dashboard and User Management. `AppLayout` derives the demo role
 from the URL only for presentation; this is not authentication.
 
@@ -221,10 +222,16 @@ Used by the starter React page to demonstrate frontend/backend communication.
 
 ### Garment sorting and bin records (Feature 2)
 
-`backend/app/sorting.py` stores sorting in MySQL (`bins` and `garment_records`). Reads take a
-required `site_id` query parameter. Writes name the acting staff member with `actor_id`
-until login is connected; the actor must be a staff user and always works at their own site
-(`422` unknown user, `403` not staff, no site, or another site's bin).
+`backend/app/sorting.py` stores sorting in MySQL (`bins` and `garment_records`). Every request
+names the acting user with `actor_id` until login is connected (`422` unknown user).
+
+- **Writes** (sort, create bin, seal bin) need a staff user, who always works at their own site
+  (`403` not staff, no site, or another site's bin).
+- **Reads** take `actor_id` and an optional `site_id` (change request #16). Staff only reach
+  their own site (`403` for another). A manager reaches the sites they belong to, or every site
+  when none is assigned; an administrator reaches every site. A `site_id` outside that is `403`
+  (`404` if the site doesn't exist). Leaving `site_id` out returns all of the actor's sites
+  combined, and `BinRecord` and `GarmentItem` carry `site_id` and `site_name` for that view.
 
 - `POST /api/garments/sort` takes `{actor_id, condition, category?, weight_kg?, notes?, bin_id?}`.
   `condition` is `good_reusable` (resale bin), `worn_recyclable` (recycle bin) or
@@ -232,21 +239,26 @@ until login is connected; the actor must be a staff user and always works at the
   of that type with room at the actor's site. A full bin is skipped; a new bin
   (`BIN-RS|RC|RP-###`) is created when none has room. A `bin_id` of the wrong type, status or
   capacity is ignored; another site's bin returns `403`. `weight_kg` must be 0-50.
-- `GET /api/bins/active?site_id=` returns `resale_bin`, `recycle_bin` and `repair_bin`.
-- `GET /api/bins?site_id=` lists bins, with optional `bin_type` (`resale` / `recycle` /
+- `GET /api/bins/active?actor_id=&site_id=` returns `resale_bin`, `recycle_bin` and `repair_bin`
+  for one site, so a manager must pass `site_id` (`422` otherwise).
+- `GET /api/bins?actor_id=&site_id=` lists bins, with optional `bin_type` (`resale` / `recycle` /
   `repair`) and `status` (`active` / `ready` / `handed_off` / `closed`) filters.
 - `POST /api/bins` takes `{actor_id, bin_type, bin_code?, max_capacity?, notes?}`. A duplicate
   code at the site returns `409`; capacity is 1-500.
 - `POST /api/bins/{id}/close` takes `{actor_id, notes?}`. Sealing a **recycle** bin sets it
   `ready` with `ready_at`, which is what `GET /api/handoffs/bins` lists. Resale and repair bins
   become `closed` with `closed_at`. Empty or already sealed bins return `409`.
-- `GET /api/sorting/stats?site_id=` returns today's counts (in the site's timezone), the resale
-  capture percentage, and the active bin code and item count per type.
-- `GET /api/garments/recent?site_id=&limit=` returns the latest garments for the site.
+- `GET /api/sorting/stats?actor_id=&site_id=` returns today's counts (each site's own day), the
+  resale capture percentage, and the active bin code and item count per type. Open bins belong
+  to one site, so they are only reported when the request covers a single site.
+- `GET /api/garments/recent?actor_id=&site_id=&limit=` returns the latest garments.
 
 The staff screen reuses `useHandoffWorkspace` and `HandoffActorBar` to choose the staff member
-and loads nothing until one is chosen. Sealed Repair bins have no next step yet. Handoff only
-covers recycle bins.
+and loads nothing until one is chosen. `/manager/sorting` (`SortingOverviewPage`) is a read-only
+overview for managers: a temporary manager picker, a site switcher with an "All sites" option,
+today's counts, the bins and the recent garments, with the site on every row. It offers no sorting,
+sealing or bin creation. Sealed Repair bins have no next step yet. Handoff only covers recycle
+bins.
 
 ### Authentication and user management
 

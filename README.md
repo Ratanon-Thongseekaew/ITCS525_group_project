@@ -201,6 +201,7 @@ Vite proxies `/api` requests to FastAPI during development. To point the fronten
 | `/manager`                                                     | Redirects to the compliance dashboard               |
 | `/manager/compliance-dashboard`, `/admin/compliance-dashboard` | Database-backed compliance dashboard                |
 | `/manager/import`                                              | Contractor monthly outcome report import            |
+| `/manager/sorting`                                             | Read-only sorting overview, one site or all sites   |
 | `/manager/resale-bins`                                         | Top-five store resale value summary                 |
 | `/staff/sorting`                                               | Garment sorting (Resale, Recycle, Repair / Upcycle) |
 | `/staff/direct-resale`                                         | Direct resale bins (mock data)                      |
@@ -261,6 +262,8 @@ Staff sort each garment as **Good / Reusable** (resale bin), **Worn / Recyclable
 bin) or **Repair / Upcycle** (repair bin) from `/staff/sorting`, with one tap or the keys
 R/1, C/2 and U/3. Garments and bins are stored in MySQL and belong to the staff member's site.
 Choose a **Staff member** on the page (this stands in for login, like the handoff pages).
+Staff only see and change their own site. Managers use `/manager/sorting`, a read-only
+overview where they switch between their sites or view all of them combined.
 
 Garments go to the oldest open bin of their type that still has room; a new bin is created
 when none has room. Sealing a recycling bin makes it **ready**, so it appears under

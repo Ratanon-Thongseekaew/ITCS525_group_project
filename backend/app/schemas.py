@@ -174,6 +174,8 @@ class GarmentSortRequest(BaseModel):
 
 class GarmentItem(BaseModel):
     id: int
+    site_id: int
+    site_name: str
     condition: GarmentCondition
     category: str
     bin_id: int
@@ -185,6 +187,8 @@ class GarmentItem(BaseModel):
 
 class BinRecord(BaseModel):
     id: int
+    site_id: int
+    site_name: str
     bin_code: str
     bin_type: BinType
     status: BinStatus

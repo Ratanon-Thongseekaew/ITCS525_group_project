@@ -36,6 +36,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { HandoffActorBar } from '@/components/staff/HandoffActorBar'
 import { useHandoffWorkspace } from '@/lib/use-handoff-workspace'
+import {
+  BIN_STATUS_LABELS,
+  BIN_TYPE_LABELS,
+  BIN_TYPE_STYLES,
+  CONDITION_LABELS,
+} from '@/lib/sorting-labels'
 
 const CATEGORIES = ['Tops', 'Bottoms', 'Outerwear', 'Dresses', 'Accessories', 'Other']
 
@@ -45,25 +51,7 @@ const FEEDBACK_TYPE_BY_CONDITION: Record<GarmentCondition, 'resale' | 'recycle' 
   repair_upcycle: 'repair',
 }
 
-const CONDITION_LABELS: Record<GarmentCondition, string> = {
-  good_reusable: 'Good / Reusable',
-  worn_recyclable: 'Worn / Recyclable',
-  repair_upcycle: 'Repair / Upcycle',
-}
-
 const BIN_CODE_PREFIXES: Record<BinType, string> = { resale: 'RS', recycle: 'RC', repair: 'RP' }
-
-const BIN_TYPE_LABELS: Record<BinType, string> = {
-  resale: 'Direct Resale',
-  recycle: 'Recycling',
-  repair: 'Repair',
-}
-
-const BIN_TYPE_STYLES: Record<BinType, string> = {
-  resale: 'bg-emerald-100 text-emerald-800',
-  recycle: 'bg-amber-100 text-amber-800',
-  repair: 'bg-sky-100 text-sky-800',
-}
 
 const FEEDBACK_STYLES = {
   resale: 'bg-emerald-50 text-emerald-900 border-emerald-300',
@@ -79,25 +67,18 @@ interface WorkspaceSnapshot {
   recentGarments: GarmentItem[]
 }
 
-async function loadWorkspaceSnapshot(siteId: number): Promise<WorkspaceSnapshot> {
+async function loadWorkspaceSnapshot(actorId: number, siteId: number): Promise<WorkspaceSnapshot> {
   const [stats, activeBins, allBins, recentGarments] = await Promise.all([
-    getSortingStats(siteId),
-    getActiveBins(siteId),
-    getBins(siteId),
-    getRecentGarments(siteId, 10),
+    getSortingStats(actorId, siteId),
+    getActiveBins(actorId, siteId),
+    getBins(actorId, siteId),
+    getRecentGarments(actorId, siteId, 10),
   ])
   return { siteId, stats, activeBins, allBins, recentGarments }
 }
 
 function errorMessage(err: unknown, fallback: string) {
   return err instanceof Error ? err.message : fallback
-}
-
-const BIN_STATUS_LABELS: Record<BinRecord['status'], string> = {
-  active: 'Active / Open',
-  ready: 'Sealed / Ready for handoff',
-  handed_off: 'Handed off',
-  closed: 'Closed / Sealed',
 }
 
 const BIN_CARD_THEMES: Record<
@@ -234,24 +215,24 @@ export function GarmentSortingWorkspace() {
   const [closeNotes, setCloseNotes] = React.useState('')
 
   const refreshData = React.useCallback(async () => {
-    if (siteId === null) return
+    if (siteId === null || actorId === null) return
     try {
       setRefreshing(true)
-      setSnapshot(await loadWorkspaceSnapshot(siteId))
+      setSnapshot(await loadWorkspaceSnapshot(actorId, siteId))
       setLoadError(null)
     } catch (err) {
       setLoadError(errorMessage(err, 'Failed to load the sorting workspace.'))
     } finally {
       setRefreshing(false)
     }
-  }, [siteId])
+  }, [actorId, siteId])
 
   React.useEffect(() => {
-    if (siteId === null) return
+    if (siteId === null || actorId === null) return
     let ignore = false
-    async function loadInitialData(forSite: number) {
+    async function loadInitialData(forActor: number, forSite: number) {
       try {
-        const data = await loadWorkspaceSnapshot(forSite)
+        const data = await loadWorkspaceSnapshot(forActor, forSite)
         if (!ignore) {
           setSnapshot(data)
           setLoadError(null)
@@ -260,11 +241,11 @@ export function GarmentSortingWorkspace() {
         if (!ignore) setLoadError(errorMessage(err, 'Failed to load the sorting workspace.'))
       }
     }
-    void loadInitialData(siteId)
+    void loadInitialData(actorId, siteId)
     return () => {
       ignore = true
     }
-  }, [siteId])
+  }, [actorId, siteId])
 
   // Handle Quick Sort submission
   const handleSort = React.useCallback(

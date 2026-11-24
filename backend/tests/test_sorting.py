@@ -20,7 +20,9 @@ from app.models import (
     GarmentRecord,
     Site,
     User,
+    UserSite,
 )
+from app.schemas import UserRole
 from seed import seed_development_data
 
 SORT = "/api/garments/sort"
@@ -63,13 +65,23 @@ class SortingTestContext:
         body = {"actor_id": actor_id or self.bkk_staff_id, "condition": condition, **fields}
         return self.client.post(SORT, json=body)
 
-    def active_bins(self, site_id: int | None = None) -> dict:
-        response = self.client.get(f"/api/bins/active?site_id={site_id or self.bkk_site_id}")
+    def read(self, path: str, actor_id: int | None = None, site_id: int | None = None, **query):
+        """GET as an actor (BKK staff by default), for the BKK site unless told otherwise."""
+
+        params = {"actor_id": actor_id or self.bkk_staff_id, **query}
+        if site_id is not None:
+            params["site_id"] = site_id
+        return self.client.get(path, params=params)
+
+    def active_bins(self, actor_id: int | None = None, site_id: int | None = None) -> dict:
+        response = self.read("/api/bins/active", actor_id, site_id)
         assert response.status_code == 200
         return response.json()
 
-    def stats(self, site_id: int | None = None) -> dict:
-        return self.client.get(f"/api/sorting/stats?site_id={site_id or self.bkk_site_id}").json()
+    def stats(self, actor_id: int | None = None, site_id: int | None = None) -> dict:
+        response = self.read("/api/sorting/stats", actor_id, site_id)
+        assert response.status_code == 200
+        return response.json()
 
     def make_bin(self, bin_type: str, **fields):
         return self.client.post(
@@ -153,7 +165,7 @@ def test_sorting_persists_and_updates_stats_and_recent_feed(ctx) -> None:
     assert stats["active_repair_bin_code"] == "SORT-BKK-RP-01"
     assert stats["active_resale_bin_items"] == 2
 
-    recent = ctx.client.get(f"/api/garments/recent?site_id={ctx.bkk_site_id}&limit=3").json()
+    recent = ctx.read("/api/garments/recent", limit=3).json()
     assert [item["condition"] for item in recent] == [
         "repair_upcycle",
         "worn_recyclable",
@@ -223,7 +235,7 @@ def test_requested_active_bin_of_the_right_type_is_used(ctx) -> None:
 
 
 def test_staff_cannot_use_a_bin_from_another_site(ctx) -> None:
-    cnx_bin = ctx.active_bins(ctx.site_id("DASH-CNX"))["resale_bin"]
+    cnx_bin = ctx.active_bins(ctx.cnx_staff_id)["resale_bin"]
 
     response = ctx.sort("good_reusable", bin_id=cnx_bin["id"])
 
@@ -253,16 +265,13 @@ def test_only_staff_with_a_site_can_sort(ctx) -> None:
 
 def test_staff_only_see_and_fill_their_own_sites_bins(ctx) -> None:
     ctx.sort("good_reusable")
-    cnx_site = ctx.site_id("DASH-CNX")
 
     cnx = ctx.sort("good_reusable", actor_id=ctx.cnx_staff_id).json()
 
     assert cnx["bin"]["bin_code"] == "SORT-CNX-RS-01"
     assert ctx.stats()["total_sorted_today"] == 1
-    assert ctx.stats(cnx_site)["total_sorted_today"] == 1
-    bkk_codes = {
-        b["bin_code"] for b in ctx.client.get(f"/api/bins?site_id={ctx.bkk_site_id}").json()
-    }
+    assert ctx.stats(ctx.cnx_staff_id)["total_sorted_today"] == 1
+    bkk_codes = {b["bin_code"] for b in ctx.read("/api/bins").json()}
     assert not any("CNX" in code for code in bkk_codes)
 
 
@@ -283,9 +292,98 @@ def test_stats_only_count_garments_received_today(ctx) -> None:
     assert ctx.stats()["resale_percentage"] == 0.0
 
 
-def test_read_endpoints_require_a_site(ctx) -> None:
-    for path in ("/api/bins", "/api/bins/active", "/api/sorting/stats", "/api/garments/recent"):
-        assert ctx.client.get(path).status_code == 422
+READ_PATHS = ("/api/bins", "/api/bins/active", "/api/sorting/stats", "/api/garments/recent")
+
+
+@pytest.mark.parametrize("path", READ_PATHS)
+def test_reads_require_a_known_actor(ctx, path) -> None:
+    assert ctx.client.get(path).status_code == 422
+    assert ctx.read(path, actor_id=999_999).status_code == 422
+
+
+@pytest.mark.parametrize("path", READ_PATHS)
+def test_staff_cannot_read_another_site(ctx, path) -> None:
+    cnx_site = ctx.site_id("DASH-CNX")
+
+    assert ctx.read(path, site_id=cnx_site).status_code == 403
+    assert ctx.read(path, site_id=ctx.bkk_site_id).status_code == 200
+    assert ctx.read(path, site_id=999_999).status_code == 404
+
+
+def test_staff_reads_default_to_their_own_site(ctx) -> None:
+    ctx.sort("good_reusable")
+    bins = ctx.read("/api/bins").json()
+    recent = ctx.read("/api/garments/recent").json()
+
+    assert {b["site_id"] for b in bins} == {ctx.bkk_site_id}
+    assert {g["site_id"] for g in recent} == {ctx.bkk_site_id}
+    assert bins[0]["site_name"] and recent[0]["site_name"]
+
+
+def test_manager_can_switch_between_their_sites(ctx) -> None:
+    cnx_site = ctx.site_id("DASH-CNX")
+    ctx.sort("good_reusable")
+    ctx.sort("worn_recyclable", actor_id=ctx.cnx_staff_id)
+
+    cnx = ctx.read("/api/bins", ctx.manager_id, cnx_site).json()
+    bkk = ctx.read("/api/bins", ctx.manager_id, ctx.bkk_site_id).json()
+
+    assert {b["site_id"] for b in cnx} == {cnx_site}
+    assert {b["site_id"] for b in bkk} == {ctx.bkk_site_id}
+    assert ctx.stats(ctx.manager_id, cnx_site)["recycle_count"] == 1
+    assert ctx.stats(ctx.manager_id, ctx.bkk_site_id)["resale_count"] == 1
+
+
+def test_manager_without_a_site_filter_sees_all_their_sites_combined(ctx) -> None:
+    ctx.sort("good_reusable")
+    ctx.sort("worn_recyclable", actor_id=ctx.cnx_staff_id)
+
+    bins = ctx.read("/api/bins", ctx.manager_id).json()
+    recent = ctx.read("/api/garments/recent", ctx.manager_id).json()
+    stats = ctx.stats(ctx.manager_id)
+
+    assert {b["site_id"] for b in bins} == {ctx.bkk_site_id, ctx.site_id("DASH-CNX")}
+    assert {g["site_name"] for g in recent} >= {b["site_name"] for b in bins}
+    assert (stats["total_sorted_today"], stats["resale_count"], stats["recycle_count"]) == (2, 1, 1)
+    # Open bins belong to one site, so a combined view reports none.
+    assert stats["active_resale_bin_code"] is None
+
+
+def test_managers_are_limited_to_the_sites_they_belong_to(ctx) -> None:
+    cnx_site = ctx.site_id("DASH-CNX")
+    with ctx.session() as session:
+        manager = session.get(User, ctx.manager_id)
+        for membership in session.exec(select(UserSite).where(UserSite.user_id == manager.id)):
+            if membership.site_id == cnx_site:
+                session.delete(membership)
+        session.commit()
+
+    assert ctx.read("/api/bins", ctx.manager_id, cnx_site).status_code == 403
+    assert {b["site_id"] for b in ctx.read("/api/bins", ctx.manager_id).json()} == {ctx.bkk_site_id}
+
+
+def test_a_manager_without_a_site_and_an_admin_can_read_every_site(ctx) -> None:
+    with ctx.session() as session:
+        admin = User(
+            username="sorting.admin@example.invalid", password_hash="x", role=UserRole.ADMIN
+        )
+        session.add(admin)
+        for membership in session.exec(select(UserSite).where(UserSite.user_id == ctx.manager_id)):
+            session.delete(membership)
+        session.commit()
+        admin_id = admin.id
+
+    for actor_id in (ctx.manager_id, admin_id):
+        sites = {b["site_id"] for b in ctx.read("/api/bins", actor_id).json()}
+        assert sites >= {ctx.bkk_site_id, ctx.site_id("DASH-CNX")}
+
+
+def test_active_bins_need_a_single_site_for_managers(ctx) -> None:
+    assert ctx.read("/api/bins/active", ctx.manager_id).status_code == 422
+
+    data = ctx.read("/api/bins/active", ctx.manager_id, ctx.bkk_site_id).json()
+
+    assert data["resale_bin"]["site_id"] == ctx.bkk_site_id
 
 
 def test_create_bin_generates_codes_and_rejects_duplicates(ctx) -> None:
@@ -306,14 +404,14 @@ def test_create_bin_generates_codes_and_rejects_duplicates(ctx) -> None:
 
 
 def test_list_bins_filters_by_type_and_status(ctx) -> None:
-    repair_bins = ctx.client.get(f"/api/bins?site_id={ctx.bkk_site_id}&bin_type=repair").json()
+    repair_bins = ctx.read("/api/bins", bin_type="repair").json()
     assert "SORT-BKK-RP-01" in {b["bin_code"] for b in repair_bins}
     assert all(b["bin_type"] == "repair" for b in repair_bins)
 
     ctx.sort("worn_recyclable")
     recycle_id = ctx.active_bins()["recycle_bin"]["id"]
     ctx.close(recycle_id)
-    ready = ctx.client.get(f"/api/bins?site_id={ctx.bkk_site_id}&status=ready").json()
+    ready = ctx.read("/api/bins", status="ready").json()
     assert recycle_id in {b["id"] for b in ready}
     assert all(b["status"] == "ready" for b in ready)
 
