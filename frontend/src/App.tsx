@@ -2,7 +2,6 @@ import { Route, Routes } from 'react-router'
 import { AppLayout } from './components/AppLayout'
 import { GarmentSortingWorkspace } from './components/GarmentSortingWorkspace'
 import ResaleBinRecords from './components/ResaleBinRecords'
-import { WorkspaceFeaturePlaceholderPage } from './components/WorkspaceFeaturePlaceholderPage'
 import { Toaster } from './components/ui/sonner'
 import { ComplianceDashboardPage } from './pages/ComplianceDashboardPage'
 import { DirectResalePage } from './pages/DirectResalePage'
@@ -40,7 +39,6 @@ function App() {
               />
             }
           /> */}
-          <Route path="manager/recycle-bin-handoff" element={<NewBinsForHandoffPage />} />
           <Route path="staff/sorting" element={<GarmentSortingWorkspace />} />
           <Route path="staff/direct-resale" element={<DirectResalePage />} />
           <Route
@@ -52,16 +50,6 @@ function App() {
             element={<ProcessedBinsRecordPage />}
           />
           <Route path="staff/recycle-bin-handoff" element={<NewBinsForHandoffPage />} />
-          <Route
-            path="staff/recycle-bin-handoff/scheduled-pickup-dates"
-            element={
-              <WorkspaceFeaturePlaceholderPage
-                role="staff"
-                title="Scheduled Pickup Dates"
-                description="See upcoming contractor pickups for recycling bins."
-              />
-            }
-          />
           <Route
             path="staff/recycle-bin-handoff/handoff-records"
             element={<HandoffRecordsPage />}

@@ -356,3 +356,100 @@ class DashboardResponse(BaseModel):
     monthly_outcomes: list[DashboardMonthlyOutcome]
     exceptions: list[DashboardException]
     filters: DashboardFilterOptions
+
+
+# -------------------------------------------------------------------------
+# Recycle bin handoff
+# -------------------------------------------------------------------------
+
+
+class HandoffRecordStatus(StrEnum):
+    """Mirrors ``models.HandoffStatus``; models imports from this module, not the reverse."""
+
+    SCHEDULED = "scheduled"
+    PICKED_UP = "picked_up"
+    DISPUTED = "disputed"
+    APPROVED = "approved"
+    CLOSED = "closed"
+
+
+class HandoffSiteOption(BaseModel):
+    id: int
+    code: str
+    name: str
+
+
+class HandoffContractorOption(BaseModel):
+    id: int
+    name: str
+
+
+class HandoffActorOption(BaseModel):
+    id: int
+    username: str
+    role: UserRole
+    site_ids: list[int]
+
+
+class HandoffOptionsResponse(BaseModel):
+    sites: list[HandoffSiteOption]
+    contractors: list[HandoffContractorOption]
+    actors: list[HandoffActorOption]
+
+
+class HandoffReadyBin(BaseModel):
+    id: int
+    site_id: int
+    site_name: str
+    code: str
+    item_count: int = Field(ge=0)
+    total_weight_kg: float = Field(ge=0)
+    ready_at: datetime | None
+
+
+class HandoffReadyBinsResponse(BaseModel):
+    bins: list[HandoffReadyBin]
+
+
+class HandoffActorRequest(BaseModel):
+    actor_id: int = Field(gt=0)
+
+
+class HandoffOutcomes(BaseModel):
+    upcycled_weight_kg: float
+    fibre_to_fibre_weight_kg: float
+    downcycled_weight_kg: float
+    exported_weight_kg: float
+    landfilled_weight_kg: float
+    incinerated_energy_recovery_weight_kg: float
+
+
+class HandoffRecord(BaseModel):
+    id: int
+    site_id: int
+    site_name: str
+    bin_id: int
+    bin_code: str
+    item_count: int = Field(ge=0)
+    bin_weight_kg: float = Field(ge=0)
+    contractor_id: int
+    contractor_name: str
+    status: HandoffRecordStatus
+    scheduled_pickup_at: datetime | None
+    picked_up_at: datetime | None
+    staff_weight_kg: float | None
+    driver_weight_kg: float | None
+    weight_variance_percent: float | None
+    requires_manager_approval: bool
+    scale_photo_url: str | None
+    driver_name: str | None
+    vehicle_plate_number: str | None
+    created_by: str
+    approved_by: str | None
+    approved_at: datetime | None
+    closed_at: datetime | None
+    outcomes: HandoffOutcomes | None
+
+
+class HandoffListResponse(BaseModel):
+    handoffs: list[HandoffRecord]

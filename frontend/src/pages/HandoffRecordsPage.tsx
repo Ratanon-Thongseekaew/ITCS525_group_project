@@ -1,7 +1,9 @@
-import { useId, useState } from 'react'
+import { useCallback, useId, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { Link } from 'react-router'
-import { actionButtonClass } from '@/components/staff/handoff-ui'
+import { getHandoffs } from '@/api'
+import { HandoffActorBar } from '@/components/staff/HandoffActorBar'
+import { actionButtonClass, LoadState } from '@/components/staff/handoff-ui'
 import { HandoffRecordCard } from '@/components/staff/HandoffRecordCard'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -13,7 +15,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { getVisibleRecords } from '@/lib/handoff-records'
-import { handoffRecords } from '@/lib/mock-handoff-records'
+import { useApiResource } from '@/lib/use-api-resource'
+import { useHandoffWorkspace } from '@/lib/use-handoff-workspace'
 import {
   handoffRecordFilterLabels,
   handoffRecordSortLabels,
@@ -67,9 +70,22 @@ function RecordsControl<Value extends string>({
 }
 
 export function HandoffRecordsPage() {
+  const workspace = useHandoffWorkspace()
+  const { siteId } = workspace
   const [filter, setFilter] = useState<HandoffRecordFilter>('all')
   const [sort, setSort] = useState<HandoffRecordSort>('date')
-  const visibleRecords = getVisibleRecords(handoffRecords, filter, sort)
+  const loadRecords = useCallback(
+    (signal: AbortSignal) => getHandoffs({ site_id: siteId ?? undefined }, signal),
+    [siteId],
+  )
+  // Staff only see their own site, so nothing loads until a staff account is chosen.
+  const resource = useApiResource(
+    siteId === null ? null : `handoff-records:${siteId}`,
+    loadRecords,
+    'Handoff records could not be loaded.',
+  )
+  const records = resource.data?.handoffs ?? []
+  const visibleRecords = getVisibleRecords(records, filter, sort)
 
   return (
     <section className="flex flex-col gap-7">
@@ -108,6 +124,8 @@ export function HandoffRecordsPage() {
             </Link>
           </Button>
         </header>
+
+        <HandoffActorBar workspace={workspace} />
       </div>
 
       <section className="flex flex-col gap-4 border-t border-slate-200 pt-4">
@@ -131,22 +149,39 @@ export function HandoffRecordsPage() {
           </div>
         </div>
 
-        {visibleRecords.length > 0 ? (
-          <ul className="flex flex-col gap-4">
-            {visibleRecords.map((record) => (
-              <li key={record.id}>
-                <HandoffRecordCard record={record} />
-              </li>
-            ))}
-          </ul>
-        ) : (
+        {siteId === null && !workspace.isLoading ? (
           <p className="py-8 text-center text-sm text-slate-500">
-            {filter === 'all' ? 'No handoff records yet.' : 'No handoff records match this filter.'}
+            Choose your staff account above to see your site’s handoff records.
           </p>
-        )}
-        <p className="text-xs text-slate-500" aria-live="polite">
-          Showing {visibleRecords.length} of {handoffRecords.length} records
-        </p>
+        ) : null}
+        <LoadState
+          isLoading={resource.isLoading || workspace.isLoading}
+          error={resource.error}
+          loadingLabel="Loading handoff records…"
+          onRetry={resource.retry}
+        />
+        {resource.data ? (
+          <>
+            {visibleRecords.length > 0 ? (
+              <ul className="flex flex-col gap-4">
+                {visibleRecords.map((record) => (
+                  <li key={record.id}>
+                    <HandoffRecordCard record={record} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="py-8 text-center text-sm text-slate-500">
+                {filter === 'all'
+                  ? 'No handoff records yet.'
+                  : 'No handoff records match this filter.'}
+              </p>
+            )}
+            <p className="text-xs text-slate-500" aria-live="polite">
+              Showing {visibleRecords.length} of {records.length} records
+            </p>
+          </>
+        ) : null}
       </section>
     </section>
   )

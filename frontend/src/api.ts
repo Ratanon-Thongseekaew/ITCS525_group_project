@@ -503,3 +503,174 @@ export async function deleteUser(token: string, userId: number): Promise<void> {
     throw new Error(`API request failed (${response.status}): ${errorBody || response.statusText}`)
   }
 }
+
+// Recycle bin handoff. Mirrors the "Recycle bin handoff" section of backend/app/schemas.py.
+
+export type HandoffRecordStatus = 'scheduled' | 'picked_up' | 'disputed' | 'approved' | 'closed'
+
+export interface HandoffSiteOption {
+  id: number
+  code: string
+  name: string
+}
+
+export interface HandoffContractorOption {
+  id: number
+  name: string
+}
+
+export interface HandoffActorOption {
+  id: number
+  username: string
+  role: UserRole
+  site_ids: number[]
+}
+
+export interface HandoffOptions {
+  sites: HandoffSiteOption[]
+  contractors: HandoffContractorOption[]
+  actors: HandoffActorOption[]
+}
+
+export interface HandoffReadyBin {
+  id: number
+  site_id: number
+  site_name: string
+  code: string
+  item_count: number
+  total_weight_kg: number
+  ready_at: string | null
+}
+
+export interface HandoffReadyBinsResponse {
+  bins: HandoffReadyBin[]
+}
+
+export interface HandoffOutcomes {
+  upcycled_weight_kg: number
+  fibre_to_fibre_weight_kg: number
+  downcycled_weight_kg: number
+  exported_weight_kg: number
+  landfilled_weight_kg: number
+  incinerated_energy_recovery_weight_kg: number
+}
+
+export interface HandoffRecord {
+  id: number
+  site_id: number
+  site_name: string
+  bin_id: number
+  bin_code: string
+  item_count: number
+  bin_weight_kg: number
+  contractor_id: number
+  contractor_name: string
+  status: HandoffRecordStatus
+  scheduled_pickup_at: string | null
+  picked_up_at: string | null
+  staff_weight_kg: number | null
+  driver_weight_kg: number | null
+  weight_variance_percent: number | null
+  requires_manager_approval: boolean
+  // An API path (/api/handoffs/{id}/scale-photo) for uploaded photos, or an external URL.
+  scale_photo_url: string | null
+  driver_name: string | null
+  vehicle_plate_number: string | null
+  created_by: string
+  approved_by: string | null
+  approved_at: string | null
+  closed_at: string | null
+  outcomes: HandoffOutcomes | null
+}
+
+export interface HandoffListResponse {
+  handoffs: HandoffRecord[]
+}
+
+export interface HandoffPickupRequest {
+  bin_id: number
+  contractor_id: number
+  actor_id: number
+  // ISO 8601 with a UTC offset, not in the future.
+  picked_up_at: string
+  staff_weight_kg: number
+  driver_weight_kg: number
+  driver_name: string
+  vehicle_plate_number: string
+  // JPEG, PNG, or WebP, up to 5 MB.
+  scale_photo: Blob
+}
+
+async function handoffRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_URL}/api/handoffs${path}`, init)
+  if (!response.ok) {
+    const error = (await response.json().catch(() => null)) as { detail?: unknown } | null
+    if (typeof error?.detail === 'string') throw new Error(error.detail)
+    throw new Error('The handoff request failed. Check the entered values and try again.')
+  }
+  return response.json() as Promise<T>
+}
+
+function postHandoffJson<T>(path: string, payload: unknown) {
+  return handoffRequest<T>(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+function buildQuery(params: Record<string, string | number | undefined>) {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) query.set(key, String(value))
+  }
+  const text = query.toString()
+  return text ? `?${text}` : ''
+}
+
+export function getHandoffOptions(signal?: AbortSignal) {
+  return handoffRequest<HandoffOptions>('/options', { signal })
+}
+
+export function getHandoffReadyBins(siteId?: number, signal?: AbortSignal) {
+  return handoffRequest<HandoffReadyBinsResponse>(`/bins${buildQuery({ site_id: siteId })}`, {
+    signal,
+  })
+}
+
+export function getHandoffs(
+  filters: { site_id?: number; status?: HandoffRecordStatus } = {},
+  signal?: AbortSignal,
+) {
+  return handoffRequest<HandoffListResponse>(buildQuery(filters), { signal })
+}
+
+/** Creates a handoff and records its pickup evidence in one step, when the driver arrives. */
+export function recordHandoffAtPickup(payload: HandoffPickupRequest) {
+  const form = new FormData()
+  form.set('bin_id', String(payload.bin_id))
+  form.set('contractor_id', String(payload.contractor_id))
+  form.set('actor_id', String(payload.actor_id))
+  form.set('picked_up_at', payload.picked_up_at)
+  form.set('staff_weight_kg', String(payload.staff_weight_kg))
+  form.set('driver_weight_kg', String(payload.driver_weight_kg))
+  form.set('driver_name', payload.driver_name)
+  form.set('vehicle_plate_number', payload.vehicle_plate_number)
+  form.set('scale_photo', payload.scale_photo)
+  // No Content-Type header: the browser adds the multipart boundary itself.
+  return handoffRequest<HandoffRecord>('/pickups', { method: 'POST', body: form })
+}
+
+/** Makes an uploaded scale photo path usable when VITE_API_URL points at another origin. */
+export function handoffPhotoUrl(url: string | null) {
+  if (!url) return null
+  return url.startsWith('/api/') ? `${API_URL}${url}` : url
+}
+
+export function approveHandoff(handoffId: number, actorId: number) {
+  return postHandoffJson<HandoffRecord>(`/${handoffId}/approve`, { actor_id: actorId })
+}
+
+export function closeHandoff(handoffId: number, actorId: number) {
+  return postHandoffJson<HandoffRecord>(`/${handoffId}/close`, { actor_id: actorId })
+}
