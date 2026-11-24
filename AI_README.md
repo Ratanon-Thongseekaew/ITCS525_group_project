@@ -59,18 +59,20 @@ This is a minimal full-stack monorepo:
 │   │   ├── schemas.py       Pydantic response models
 │   │   ├── security.py      Password hashing, JWT and temporary-password helpers
 │   │   ├── sites.py         Admin-only store list for the user form
+│   │   ├── sorting.py       Garment sorting and bin record routes (Feature 2)
 │   │   ├── user_stores.py   User-to-store (`user_sites`) helpers and response builders
 │   │   └── users.py         Admin-only user management routes
 │   ├── alembic/             Migration environment and versioned revisions
 │   ├── alembic.ini          Alembic configuration
-│   ├── seed.py              Development seed: dashboard and handoff demo data
+│   ├── seed.py              Development seed: dashboard, handoff and sorting demo data
 │   ├── uploads/             Uploaded scale photos (gitignored, `UPLOAD_DIR`)
 │   ├── tests/
 │   │   ├── test_auth.py     Login, token, role-guard and user-management tests
 │   │   ├── test_create_admin.py Administrator CLI tests
 │   │   ├── test_database.py SQLModel and migration tests
 │   │   ├── test_handoffs.py Recycle bin handoff API tests
-│   │   ├── test_main.py     API and sorting tests
+│   │   ├── test_main.py     Health and greeting tests
+│   │   ├── test_sorting.py  Garment sorting and bin record tests
 │   │   ├── test_user_stores.py Full name, stores, temporary passwords, password change
 │   │   └── test_users.py    User API and database tests
 │   ├── uv.lock              Locked Python dependency graph
@@ -217,29 +219,34 @@ Used by the starter React page to demonstrate frontend/backend communication.
 }
 ```
 
-### `POST /api/garments/sort` (Feature 2)
+### Garment sorting and bin records (Feature 2)
 
-Used by the Store Staff counter intake interface to classify garments into `good_reusable` (direct resale), `worn_recyclable` (recycling) or `repair_upcycle` (repair partner, change request #13), automatically assigning them to the active bin of the matching type (`resale`, `recycle`, `repair`). A bin of that type is created when none is active. The staff screen offers one quick-tap button per condition (shortcuts R/1, C/2, U/3).
+`backend/app/sorting.py` stores sorting in MySQL (`bins` and `garment_records`). Reads take a
+required `site_id` query parameter. Writes name the acting staff member with `actor_id`
+until login is connected; the actor must be a staff user and always works at their own site
+(`422` unknown user, `403` not staff, no site, or another site's bin).
 
-### `GET /api/bins/active` (Feature 2)
+- `POST /api/garments/sort` takes `{actor_id, condition, category?, weight_kg?, notes?, bin_id?}`.
+  `condition` is `good_reusable` (resale bin), `worn_recyclable` (recycle bin) or
+  `repair_upcycle` (repair bin, change request #13). The garment goes to the oldest open bin
+  of that type with room at the actor's site. A full bin is skipped; a new bin
+  (`BIN-RS|RC|RP-###`) is created when none has room. A `bin_id` of the wrong type, status or
+  capacity is ignored; another site's bin returns `403`. `weight_kg` must be 0-50.
+- `GET /api/bins/active?site_id=` returns `resale_bin`, `recycle_bin` and `repair_bin`.
+- `GET /api/bins?site_id=` lists bins, with optional `bin_type` (`resale` / `recycle` /
+  `repair`) and `status` (`active` / `ready` / `handed_off` / `closed`) filters.
+- `POST /api/bins` takes `{actor_id, bin_type, bin_code?, max_capacity?, notes?}`. A duplicate
+  code at the site returns `409`; capacity is 1-500.
+- `POST /api/bins/{id}/close` takes `{actor_id, notes?}`. Sealing a **recycle** bin sets it
+  `ready` with `ready_at`, which is what `GET /api/handoffs/bins` lists. Resale and repair bins
+  become `closed` with `closed_at`. Empty or already sealed bins return `409`.
+- `GET /api/sorting/stats?site_id=` returns today's counts (in the site's timezone), the resale
+  capture percentage, and the active bin code and item count per type.
+- `GET /api/garments/recent?site_id=&limit=` returns the latest garments for the site.
 
-Returns the current active open resale, recycling and repair bins (`resale_bin`, `recycle_bin`, `repair_bin`) ready to receive sorted garments.
-
-### `GET /api/bins` (Feature 2)
-
-Lists bin records with optional `bin_type` (`resale` / `recycle` / `repair`) and `status` (`active` / `closed`) filters.
-
-### `POST /api/bins` (Feature 2)
-
-Registers a new bin record with custom or auto-generated bin code and maximum capacity.
-
-### `POST /api/bins/{bin_id}/close` (Feature 2)
-
-Marks a bin as closed/sealed, recording completion timestamp and locking it for downstream resale (Feature 3) or contractor handoff (Feature 4).
-
-### `GET /api/sorting/stats` (Feature 2)
-
-Returns shift intake metrics (total garments sorted today, resale, recycle and repair counts, resale capture percentage, and the active bin code and item count per type).
+The staff screen reuses `useHandoffWorkspace` and `HandoffActorBar` to choose the staff member
+and loads nothing until one is chosen. Sealed Repair bins have no next step yet. Handoff only
+covers recycle bins.
 
 ### Authentication and user management
 
@@ -360,9 +367,10 @@ Photos are validated by content type and file signature (JPEG, PNG, WebP, up to
 a relative path in `handoffs.scale_photo_url`. Responses expose that as
 `/api/handoffs/{id}/scale-photo`. Timestamps in requests must include a UTC
 offset. The `scheduled` status remains in the database enum, but no endpoint
-creates it. `backend/seed.py` runs `seed_dashboard_data` (`DASH-` records) and then
-`seed_handoff_data` (`HAND-` ready bins and picked-up handoffs);
-`seed_development_data` runs both and is what `main()` and the handoff tests use.
+creates it. `backend/seed.py` runs `seed_dashboard_data` (`DASH-` records), then
+`seed_handoff_data` (`HAND-` ready bins and picked-up handoffs), then `seed_sorting_data`
+(`SORT-` empty open bins of each type per site, no garment records so EPR totals are unchanged);
+`seed_development_data` runs all three and is what `main()` and the tests use.
 
 ### `POST /api/contractor-reports/validate` (EPR change request)
 

@@ -13,22 +13,24 @@ export interface ResaleStoreSummaryResponse {
 }
 
 export type BinType = 'resale' | 'recycle' | 'repair'
-export type BinStatus = 'active' | 'closed'
+// 'active' accepts items; sealing makes a recycling bin 'ready' for handoff, others 'closed'.
+export type BinStatus = 'active' | 'ready' | 'handed_off' | 'closed'
 export type GarmentCondition = 'good_reusable' | 'worn_recyclable' | 'repair_upcycle'
 
 export interface GarmentSortRequest {
+  actor_id: number
   condition: GarmentCondition
   category?: string
   weight_kg?: number
   notes?: string
-  bin_id?: string
+  bin_id?: number
 }
 
 export interface GarmentItem {
-  id: string
+  id: number
   condition: GarmentCondition
   category: string
-  bin_id: string
+  bin_id: number
   bin_code: string
   weight_kg: number | null
   notes: string | null
@@ -36,7 +38,7 @@ export interface GarmentItem {
 }
 
 export interface BinRecord {
-  id: string
+  id: number
   bin_code: string
   bin_type: BinType
   status: BinStatus
@@ -44,11 +46,13 @@ export interface BinRecord {
   total_weight_kg: number
   max_capacity: number
   created_at: string
+  ready_at: string | null
   closed_at: string | null
   notes: string | null
 }
 
 export interface BinCreateRequest {
+  actor_id: number
   bin_type: BinType
   bin_code?: string
   max_capacity?: number
@@ -364,62 +368,55 @@ export async function validateContractorReport(
   return handleResponse<ContractorReportValidationResponse>(response)
 }
 
-export async function getSortingStats(): Promise<SortingStatsResponse> {
-  const response = await fetch(`${API_URL}/api/sorting/stats`)
-  return handleResponse<SortingStatsResponse>(response)
-}
-
-export async function getActiveBins(): Promise<ActiveBinsResponse> {
-  const response = await fetch(`${API_URL}/api/bins/active`)
-  return handleResponse<ActiveBinsResponse>(response)
-}
-
-export async function getBins(filters?: {
-  bin_type?: BinType
-  status?: BinStatus
-}): Promise<BinRecord[]> {
-  const params = new URLSearchParams()
-  if (filters?.bin_type) {
-    params.set('bin_type', filters.bin_type)
+// Sorting reads are per site and writes name the acting staff member (`actor_id`) until the
+// frontend uses real login, the same stopgap the handoff pages use.
+async function sortingRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_URL}/api${path}`, init)
+  if (!response.ok) {
+    const error = (await response.json().catch(() => null)) as { detail?: unknown } | null
+    if (typeof error?.detail === 'string') throw new Error(error.detail)
+    throw new Error('The sorting request failed. Check the entered values and try again.')
   }
-  if (filters?.status) {
-    params.set('status', filters.status)
-  }
-  const query = params.toString() ? `?${params.toString()}` : ''
-  const response = await fetch(`${API_URL}/api/bins${query}`)
-  return handleResponse<BinRecord[]>(response)
+  return response.json() as Promise<T>
 }
 
-export async function createBin(payload: BinCreateRequest): Promise<BinRecord> {
-  const response = await fetch(`${API_URL}/api/bins`, {
+function postJson<T>(path: string, body: unknown) {
+  return sortingRequest<T>(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   })
-  return handleResponse<BinRecord>(response)
 }
 
-export async function closeBin(binId: string, notes?: string): Promise<BinRecord> {
-  const response = await fetch(`${API_URL}/api/bins/${encodeURIComponent(binId)}/close`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ notes }),
-  })
-  return handleResponse<BinRecord>(response)
+export function getSortingStats(siteId: number): Promise<SortingStatsResponse> {
+  return sortingRequest<SortingStatsResponse>(`/sorting/stats${buildQuery({ site_id: siteId })}`)
 }
 
-export async function sortGarment(payload: GarmentSortRequest): Promise<SortGarmentResponse> {
-  const response = await fetch(`${API_URL}/api/garments/sort`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  return handleResponse<SortGarmentResponse>(response)
+export function getActiveBins(siteId: number): Promise<ActiveBinsResponse> {
+  return sortingRequest<ActiveBinsResponse>(`/bins/active${buildQuery({ site_id: siteId })}`)
 }
 
-export async function getRecentGarments(limit = 15): Promise<GarmentItem[]> {
-  const response = await fetch(`${API_URL}/api/garments/recent?limit=${limit}`)
-  return handleResponse<GarmentItem[]>(response)
+export function getBins(
+  siteId: number,
+  filters?: { bin_type?: BinType; status?: BinStatus },
+): Promise<BinRecord[]> {
+  return sortingRequest<BinRecord[]>(`/bins${buildQuery({ site_id: siteId, ...filters })}`)
+}
+
+export function createBin(payload: BinCreateRequest): Promise<BinRecord> {
+  return postJson<BinRecord>('/bins', payload)
+}
+
+export function closeBin(binId: number, actorId: number, notes?: string): Promise<BinRecord> {
+  return postJson<BinRecord>(`/bins/${binId}/close`, { actor_id: actorId, notes })
+}
+
+export function sortGarment(payload: GarmentSortRequest): Promise<SortGarmentResponse> {
+  return postJson<SortGarmentResponse>('/garments/sort', payload)
+}
+
+export function getRecentGarments(siteId: number, limit = 15): Promise<GarmentItem[]> {
+  return sortingRequest<GarmentItem[]>(`/garments/recent${buildQuery({ site_id: siteId, limit })}`)
 }
 
 export type UserRole = 'admin' | 'manager' | 'staff'

@@ -115,7 +115,7 @@ The seed is additive and idempotent. It creates two sites and
 January–October 2026 handoff, contractor-report, disposition, and EPR examples
 for the dashboard (`DASH-` codes). It also adds recycle bin handoff data
 (`HAND-` codes): three ready recycling bins per site and one picked-up handoff
-per site, the Bangkok one disputed. It never deletes existing records.
+per site, the Bangkok one disputed. It also adds one empty open bin of each type per site for the sorting page (`SORT-` codes). It never deletes existing records.
 
 Create a migration after changing `backend/app/models.py`, verify that the
 metadata matches the migrated database, or roll back one revision during local
@@ -254,6 +254,20 @@ site selection filters data but does not enforce manager membership.
 `GET /api/resale-bins/summary` returns the five sites with the highest summed
 actual value from resale bins. The manager resale page shows each site's value
 and their combined total.
+
+## Garment sorting API
+
+Staff sort each garment as **Good / Reusable** (resale bin), **Worn / Recyclable** (recycle
+bin) or **Repair / Upcycle** (repair bin) from `/staff/sorting`, with one tap or the keys
+R/1, C/2 and U/3. Garments and bins are stored in MySQL and belong to the staff member's site.
+Choose a **Staff member** on the page (this stands in for login, like the handoff pages).
+
+Garments go to the oldest open bin of their type that still has room; a new bin is created
+when none has room. Sealing a recycling bin makes it **ready**, so it appears under
+`/staff/recycle-bin-handoff`. Resale and repair bins become closed. The endpoints are
+`GET /api/bins`, `GET /api/bins/active`, `POST /api/bins`, `POST /api/bins/{id}/close`,
+`POST /api/garments/sort`, `GET /api/garments/recent` and `GET /api/sorting/stats`; see
+[AI_README.md](./AI_README.md) for their parameters.
 
 ## Recycle bin handoff API
 
