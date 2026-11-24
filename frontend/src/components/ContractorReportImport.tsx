@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import {
   UploadCloud,
@@ -12,7 +12,14 @@ import {
   RefreshCw,
 } from 'lucide-react'
 
-import { validateContractorReport, type ContractorReportValidationRowResult } from '@/api'
+import {
+  fetchContractorReportOptions,
+  importContractorReport,
+  parseAndValidateContractorFile,
+  validateContractorReport,
+  type ContractorReportImportResponse,
+  type ContractorReportOptionItem,
+} from '@/api'
 
 interface ReportRow {
   row: number
@@ -26,89 +33,192 @@ interface ReportRow {
   exportedKg: number
   landfilledKg: number
   energyRecoveryKg: number
+  uncategorizedKg: number
   status: 'Verified' | 'Warning' | 'Error'
   errorDetail?: string
 }
 
+const DEFAULT_DEMO_ROWS: ReportRow[] = [
+  {
+    row: 1,
+    binId: 'BIN-C-0047',
+    contractor: 'Dashboard GreenLoop Recycling',
+    storeWeight: 12.3,
+    reportedWeight: 12.1,
+    upcycledKg: 4.2,
+    fibreToFibreKg: 4.8,
+    downcycledKg: 1.8,
+    exportedKg: 0.6,
+    landfilledKg: 0.2,
+    energyRecoveryKg: 0.2,
+    uncategorizedKg: 0.3,
+    status: 'Verified',
+  },
+  {
+    row: 2,
+    binId: 'BIN-C-0046',
+    contractor: 'ReWeave Recyclers',
+    storeWeight: 15.1,
+    reportedWeight: 10.0,
+    upcycledKg: 5.3,
+    fibreToFibreKg: 2.7,
+    downcycledKg: 1.0,
+    exportedKg: 0.6,
+    landfilledKg: 0.4,
+    energyRecoveryKg: 0.6,
+    uncategorizedKg: 0,
+    status: 'Error',
+    errorDetail: 'Disposition weights exceed received weight by 0.600 kg.',
+  },
+  {
+    row: 3,
+    binId: 'MISSING_ID',
+    contractor: 'Loopfibre Co.',
+    storeWeight: 14.0,
+    reportedWeight: 13.9,
+    upcycledKg: 3.5,
+    fibreToFibreKg: 4.5,
+    downcycledKg: 3.0,
+    exportedKg: 2.0,
+    landfilledKg: 0.9,
+    energyRecoveryKg: 0,
+    uncategorizedKg: 0,
+    status: 'Error',
+    errorDetail: 'Missing or invalid Bin ID format.',
+  },
+  {
+    row: 4,
+    binId: 'BIN-C-0042',
+    contractor: 'Dashboard GreenLoop Recycling',
+    storeWeight: 16.5,
+    reportedWeight: 16.0,
+    upcycledKg: 4.5,
+    fibreToFibreKg: 4.0,
+    downcycledKg: 3.2,
+    exportedKg: 2.5,
+    landfilledKg: 1.0,
+    energyRecoveryKg: 0.3,
+    uncategorizedKg: 0.5,
+    status: 'Warning',
+    errorDetail: 'Uncategorized remainder: 0.50 kg.',
+  },
+]
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      const base64 = result.includes(',') ? result.split(',')[1] : result
+      resolve(base64)
+    }
+    reader.onerror = () => reject(new Error('Failed to read selected file.'))
+    reader.readAsDataURL(file)
+  })
+}
+
 export default function ContractorReportImport() {
   const navigate = useNavigate()
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
   const [step, setStep] = useState<number>(1)
   const [isProcessing, setIsProcessing] = useState<boolean>(false)
-  const [selectedContractor, setSelectedContractor] = useState<string>('Contractor 1')
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
-  const [validationResults, setValidationResults] = useState<ContractorReportValidationRowResult[]>(
-    [],
+  const [isSaving, setIsSaving] = useState<boolean>(false)
+
+  const [sites, setSites] = useState<ContractorReportOptionItem[]>([])
+  const [contractors, setContractors] = useState<ContractorReportOptionItem[]>([])
+  const [selectedSiteId, setSelectedSiteId] = useState<number>(1)
+  const [selectedContractor, setSelectedContractor] = useState<string>(
+    'Dashboard GreenLoop Recycling',
   )
+  const [reportMonth, setReportMonth] = useState<string>('2026-11')
+
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
+  const [validatedRows, setValidatedRows] = useState<ReportRow[]>([])
   const [validationError, setValidationError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [importResult, setImportResult] = useState<ContractorReportImportResponse | null>(null)
 
-  const reportRows: ReportRow[] = [
-    {
-      row: 1,
-      binId: 'BIN-C-0047',
-      contractor: 'GreenSort Textiles',
-      storeWeight: 12.3,
-      reportedWeight: 12.1,
-      upcycledKg: 4.2,
-      fibreToFibreKg: 4.8,
-      downcycledKg: 1.8,
-      exportedKg: 0.6,
-      landfilledKg: 0.2,
-      energyRecoveryKg: 0.2,
-      status: 'Verified',
-    },
-    {
-      row: 2,
-      binId: 'BIN-C-0046',
-      contractor: 'ReWeave Recyclers',
-      storeWeight: 15.1,
-      reportedWeight: 10.0,
-      upcycledKg: 5.3,
-      fibreToFibreKg: 2.7,
-      downcycledKg: 1.0,
-      exportedKg: 0.6,
-      landfilledKg: 0.4,
-      energyRecoveryKg: 0.6,
-      status: 'Error',
-      errorDetail: 'Weight variance exceeds ±5% threshold (-5.1kg discrepancy)',
-    },
-    {
-      row: 3,
-      binId: 'MISSING_ID',
-      contractor: 'Loopfibre Co.',
-      storeWeight: 14.0,
-      reportedWeight: 13.9,
-      upcycledKg: 3.5,
-      fibreToFibreKg: 4.5,
-      downcycledKg: 3.0,
-      exportedKg: 2.0,
-      landfilledKg: 0.9,
-      energyRecoveryKg: 0,
-      status: 'Error',
-      errorDetail: 'Missing or Invalid Bin ID format',
-    },
-    {
-      row: 4,
-      binId: 'BIN-C-0042',
-      contractor: 'ReWeave Recyclers',
-      storeWeight: 16.5,
-      reportedWeight: 15.8,
-      upcycledKg: 4.5,
-      fibreToFibreKg: 4.0,
-      downcycledKg: 3.2,
-      exportedKg: 2.5,
-      landfilledKg: 1.3,
-      energyRecoveryKg: 0.3,
-      status: 'Warning',
-      errorDetail: 'Minor weight variance flagged (-0.7kg)',
-    },
-  ]
+  useEffect(() => {
+    let active = true
+    fetchContractorReportOptions()
+      .then((data) => {
+        if (!active) return
+        setSites(data.sites)
+        setContractors(data.contractors)
+        if (data.sites.length > 0) {
+          setSelectedSiteId(data.sites[0].id)
+        }
+        if (data.contractors.length > 0) {
+          setSelectedContractor(data.contractors[0].name)
+        }
+      })
+      .catch(() => {
+        // Fallback options remain usable if offline
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
-  const handleStartReview = async () => {
+  const handleFileSelected = async (file: File) => {
     setIsProcessing(true)
     setValidationError(null)
+    setSaveError(null)
+    try {
+      const base64 = await fileToBase64(file)
+      const parsed = await parseAndValidateContractorFile(file.name, base64)
+      const mapped: ReportRow[] = parsed.rows.map((r) => ({
+        row: r.row,
+        binId: r.bin_id,
+        contractor: r.contractor,
+        storeWeight: r.store_weight_kg,
+        reportedWeight: r.received_kg,
+        upcycledKg: r.dispositions.upcycled_kg,
+        fibreToFibreKg: r.dispositions.fibre_to_fibre_kg,
+        downcycledKg: r.dispositions.downcycled_kg,
+        exportedKg: r.dispositions.exported_kg,
+        landfilledKg: r.dispositions.landfilled_kg,
+        energyRecoveryKg: r.dispositions.incinerated_energy_recovery_kg,
+        uncategorizedKg: r.uncategorized_weight_kg,
+        status: r.status,
+        errorDetail: r.errors.join(' '),
+      }))
+      setValidatedRows(mapped)
+      setUploadedFileName(parsed.filename)
+      setStep(2)
+    } catch (error) {
+      setValidationError(
+        error instanceof Error ? error.message : 'The uploaded file could not be validated.',
+      )
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      void handleFileSelected(file)
+    }
+    e.target.value = ''
+  }
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const file = e.dataTransfer.files?.[0]
+    if (file) {
+      void handleFileSelected(file)
+    }
+  }
+
+  const handleStartSampleReview = async () => {
+    setIsProcessing(true)
+    setValidationError(null)
+    setSaveError(null)
     try {
       const response = await validateContractorReport(
-        reportRows.map((row) => ({
+        DEFAULT_DEMO_ROWS.map((row) => ({
           row: row.row,
           received_kg: row.reportedWeight,
           dispositions: {
@@ -121,43 +231,96 @@ export default function ContractorReportImport() {
           },
         })),
       )
-      setValidationResults(response.rows)
-      setIsProcessing(false)
-      setUploadedFileName('monthly_contractor_report_october.xlsx')
+      const merged = DEFAULT_DEMO_ROWS.map((row) => {
+        const res = response.rows.find((item) => item.row === row.row)
+        return {
+          ...row,
+          uncategorizedKg: res?.uncategorized_weight_kg ?? row.uncategorizedKg,
+          status: res && !res.is_valid ? ('Error' as const) : row.status,
+          errorDetail: res && !res.is_valid ? res.errors.join(' ') : row.errorDetail,
+        }
+      })
+      setValidatedRows(merged)
+      setUploadedFileName(`contractor_report_${reportMonth}_sample.csv`)
       setStep(2)
     } catch (error) {
       setValidationError(
         error instanceof Error ? error.message : 'The report could not be validated.',
       )
+    } finally {
       setIsProcessing(false)
     }
   }
 
-  const validatedRows = reportRows.map((row) => {
-    const weightValidation = validationResults.find((result) => result.row === row.row)
-    return {
-      ...row,
-      uncategorizedKg: weightValidation?.uncategorized_weight_kg ?? 0,
-      status: weightValidation && !weightValidation.is_valid ? ('Error' as const) : row.status,
-      errorDetail:
-        weightValidation && !weightValidation.is_valid
-          ? weightValidation.errors.join(' ')
-          : row.errorDetail,
+  const handleDownloadTemplate = () => {
+    const csvContent = [
+      'bin_id,contractor,store_weight_kg,received_kg,upcycled_kg,fibre_to_fibre_kg,downcycled_kg,exported_kg,landfilled_kg,incinerated_energy_recovery_kg',
+      `DASH-BKK-2026-11-RECYCLE,${selectedContractor},24.0,24.0,4.0,10.0,4.5,2.0,1.0,2.5`,
+    ].join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'contractor_monthly_report_template.csv'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const savableRows = validatedRows.filter((row) => row.status !== 'Error')
+
+  const handleSaveRecords = async () => {
+    if (savableRows.length === 0) {
+      setSaveError('No valid rows available to import. Please fix the rejected rows first.')
+      return
     }
-  })
+    setIsSaving(true)
+    setSaveError(null)
+    try {
+      const response = await importContractorReport({
+        site_id: selectedSiteId,
+        contractor_name: selectedContractor,
+        report_month: reportMonth,
+        source_filename: uploadedFileName ?? `report_${reportMonth}.csv`,
+        rows: savableRows.map((row) => ({
+          row: row.row,
+          bin_id: row.binId,
+          contractor: row.contractor,
+          store_weight_kg: row.storeWeight,
+          received_kg: row.reportedWeight,
+          dispositions: {
+            upcycled_kg: row.upcycledKg,
+            fibre_to_fibre_kg: row.fibreToFibreKg,
+            downcycled_kg: row.downcycledKg,
+            exported_kg: row.exportedKg,
+            landfilled_kg: row.landfilledKg,
+            incinerated_energy_recovery_kg: row.energyRecoveryKg,
+          },
+        })),
+      })
+      setImportResult(response)
+      setStep(3)
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Failed to save contractor report.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   const totalRows = validatedRows.length
   const verifiedCount = validatedRows.filter((row) => row.status === 'Verified').length
   const warningCount = validatedRows.filter((row) => row.status === 'Warning').length
   const errorCount = validatedRows.filter((row) => row.status === 'Error').length
+  const selectedSiteLabel =
+    sites.find((s) => s.id === selectedSiteId)?.name ?? `Site #${selectedSiteId}`
 
   return (
     <div className="w-full space-y-6">
       {/* 步骤条 */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {[
-          { num: 1, title: 'Step 1: Upload File', desc: 'CSV, XLS, XLSX' },
+          { num: 1, title: 'Step 1: Upload File', desc: 'CSV, XLSX + Site & Month' },
           { num: 2, title: 'Step 2: Review 6 Categories', desc: 'Verify weights & rules' },
-          { num: 3, title: 'Step 3: Save Report', desc: 'Finalize & record' },
+          { num: 3, title: 'Step 3: Save Report', desc: 'Persist to MySQL database' },
         ].map((s) => {
           const isActive = step === s.num
           const isDone = step > s.num
@@ -209,13 +372,131 @@ export default function ContractorReportImport() {
           <div className="space-y-6">
             <h3 className="text-sm font-bold text-slate-900">Upload File</h3>
 
+            {/* 门店、月份、承包商选择栏 (CR #16 Multi-site + Period) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <label htmlFor="site-select" className="text-xs font-semibold text-slate-700 block">
+                  Sorting Center (Site)
+                </label>
+                <select
+                  id="site-select"
+                  value={selectedSiteId}
+                  onChange={(e) => setSelectedSiteId(Number(e.target.value))}
+                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  {sites.length > 0 ? (
+                    sites.map((site) => (
+                      <option key={site.id} value={site.id}>
+                        {site.name} ({site.code})
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value={1}>Bangkok Sorting Center (DASH-BKK)</option>
+                      <option value={2}>Chiang Mai Sorting Center (DASH-CNX)</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="report-month-select"
+                  className="text-xs font-semibold text-slate-700 block"
+                >
+                  Report Month
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    aria-label="Report Year"
+                    value={reportMonth.split('-')[0] || '2026'}
+                    onChange={(e) => {
+                      const monthPart = reportMonth.split('-')[1] || '11'
+                      setReportMonth(`${e.target.value}-${monthPart}`)
+                    }}
+                    className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="2025">2025</option>
+                    <option value="2026">2026</option>
+                    <option value="2027">2027</option>
+                  </select>
+                  <select
+                    id="report-month-select"
+                    value={reportMonth.split('-')[1] || '11'}
+                    onChange={(e) => {
+                      const yearPart = reportMonth.split('-')[0] || '2026'
+                      setReportMonth(`${yearPart}-${e.target.value}`)
+                    }}
+                    className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="01">January</option>
+                    <option value="02">February</option>
+                    <option value="03">March</option>
+                    <option value="04">April</option>
+                    <option value="05">May</option>
+                    <option value="06">June</option>
+                    <option value="07">July</option>
+                    <option value="08">August</option>
+                    <option value="09">September</option>
+                    <option value="10">October</option>
+                    <option value="11">November</option>
+                    <option value="12">December</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="contractor-select"
+                  className="text-xs font-semibold text-slate-700 block"
+                >
+                  Contractor
+                </label>
+                <select
+                  id="contractor-select"
+                  value={selectedContractor}
+                  onChange={(e) => setSelectedContractor(e.target.value)}
+                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  {contractors.length > 0 ? (
+                    contractors.map((c) => (
+                      <option key={c.id} value={c.name}>
+                        {c.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="Dashboard GreenLoop Recycling">
+                        Dashboard GreenLoop Recycling
+                      </option>
+                      <option value="Dashboard Circular Fibre Co.">
+                        Dashboard Circular Fibre Co.
+                      </option>
+                    </>
+                  )}
+                </select>
+              </div>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.xlsx"
+              onChange={handleFileInputChange}
+              className="hidden"
+            />
+
             {/* 上传拖拽区域 */}
-            <div className="border-2 border-dashed border-emerald-300 hover:border-emerald-500 rounded-xl p-8 md:p-14 text-center transition bg-emerald-50/20">
+            <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+              className="border-2 border-dashed border-emerald-300 hover:border-emerald-500 rounded-xl p-8 md:p-14 text-center transition bg-emerald-50/20"
+            >
               {isProcessing ? (
                 <div className="py-6 space-y-3">
                   <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto" />
                   <p className="text-xs font-semibold text-slate-700">
-                    Validating spreadsheet format...
+                    Parsing spreadsheet & validating 6 disposition categories...
                   </p>
                 </div>
               ) : (
@@ -227,7 +508,7 @@ export default function ContractorReportImport() {
                     <p className="text-sm font-medium text-slate-700">Drag and drop file here or</p>
                     <button
                       type="button"
-                      onClick={handleStartReview}
+                      onClick={() => fileInputRef.current?.click()}
                       style={{ backgroundColor: '#047857', color: '#ffffff' }}
                       className="mt-3 px-5 py-2 text-xs font-bold rounded-lg shadow-sm hover:opacity-90 transition inline-flex items-center gap-1.5 cursor-pointer"
                     >
@@ -250,7 +531,7 @@ export default function ContractorReportImport() {
 
             {/* 文件限制说明 */}
             <div className="flex flex-col sm:flex-row justify-between text-[11px] text-slate-400 gap-1 border-b border-slate-100 pb-4">
-              <span>Supported Formats: CSV, XLS, XLSX</span>
+              <span>Supported Formats: CSV, XLSX (6 EPR disposition categories)</span>
               <div className="flex gap-4">
                 <span>Maximum File: 1</span>
                 <span>Maximum File Size: 100MB</span>
@@ -264,14 +545,13 @@ export default function ContractorReportImport() {
                 <div>
                   <p className="text-xs font-bold text-slate-800">Table Example Template</p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Download the attached example template and share to contractors to use as a
-                    starting point for their report files
+                    Download the CSV template containing all 6 required EPR disposition categories
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => alert('Downloading report template...')}
+                onClick={handleDownloadTemplate}
                 className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 shadow-xs shrink-0 self-start sm:self-auto cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5 text-slate-700" />
@@ -279,32 +559,14 @@ export default function ContractorReportImport() {
               </button>
             </div>
 
-            {/* Contractor 下拉选择 */}
-            <div className="space-y-1.5">
-              <label
-                htmlFor="contractor-select"
-                className="text-xs font-semibold text-slate-700 block"
-              >
-                Contractor
-              </label>
-              <select
-                id="contractor-select"
-                value={selectedContractor}
-                onChange={(e) => setSelectedContractor(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="Contractor 1">Contractor 1</option>
-                <option value="GreenSort Textiles">GreenSort Textiles</option>
-                <option value="ReWeave Recyclers">ReWeave Recyclers</option>
-              </select>
-            </div>
-
             {/* 底部按钮条 */}
             <div className="flex flex-col sm:flex-row items-center justify-between pt-4 border-t border-slate-100 gap-3">
               <button
                 type="button"
                 onClick={() =>
-                  alert('Formatting guide: Ensure all 6 disposition columns are included.')
+                  alert(
+                    'Formatting guide: Include bin_id, contractor, received_kg, and all 6 disposition categories (upcycled_kg, fibre_to_fibre_kg, downcycled_kg, exported_kg, landfilled_kg, incinerated_energy_recovery_kg).',
+                  )
                 }
                 className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 underline self-start sm:self-auto cursor-pointer"
               >
@@ -321,7 +583,7 @@ export default function ContractorReportImport() {
                 </button>
                 <button
                   type="button"
-                  onClick={handleStartReview}
+                  onClick={handleStartSampleReview}
                   style={{ backgroundColor: '#047857', color: '#ffffff' }}
                   className="px-5 py-2 text-xs font-bold rounded-lg shadow-sm hover:opacity-90 transition inline-flex items-center gap-1.5 cursor-pointer"
                 >
@@ -340,7 +602,9 @@ export default function ContractorReportImport() {
               <div>
                 <h3 className="text-sm font-bold text-slate-900">Review Report Validation</h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  File: <span className="font-semibold text-slate-700">{uploadedFileName}</span> (
+                  Site: <span className="font-semibold text-slate-700">{selectedSiteLabel}</span> |
+                  Month: <span className="font-semibold text-slate-700">{reportMonth}</span> | File:{' '}
+                  <span className="font-semibold text-slate-700">{uploadedFileName}</span> (
                   {selectedContractor})
                 </p>
               </div>
@@ -485,7 +749,17 @@ export default function ContractorReportImport() {
               </table>
             </div>
 
-            {/* 操作栏 - 彻底修好白色高亮文字 */}
+            {saveError ? (
+              <div
+                role="alert"
+                className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800"
+              >
+                <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                <span>{saveError}</span>
+              </div>
+            ) : null}
+
+            {/* 操作栏 */}
             <div className="flex flex-col sm:flex-row items-center justify-between pt-3 gap-3">
               <button
                 type="button"
@@ -496,34 +770,57 @@ export default function ContractorReportImport() {
               </button>
               <button
                 type="button"
-                onClick={() => setStep(3)}
+                disabled={isSaving || savableRows.length === 0}
+                onClick={() => void handleSaveRecords()}
                 style={{ backgroundColor: '#047857', color: '#ffffff' }}
-                className="w-full sm:w-auto px-6 py-2.5 text-xs font-bold rounded-lg shadow-sm hover:opacity-90 transition inline-flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full sm:w-auto px-6 py-2.5 text-xs font-bold rounded-lg shadow-sm hover:opacity-90 disabled:opacity-50 transition inline-flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span style={{ color: '#ffffff' }}>Save Valid Records ({verifiedCount})</span>
+                <span style={{ color: '#ffffff' }}>
+                  {isSaving
+                    ? 'Saving to Database...'
+                    : `Save Valid Records (${savableRows.length})`}
+                </span>
                 <ArrowRight className="w-3.5 h-3.5 text-white" />
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 3: Mock Completion */}
+        {/* Step 3: Database Persistence Completed */}
         {step === 3 && (
           <div className="p-8 md:p-12 text-center space-y-4 max-w-md mx-auto">
             <div className="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center mx-auto shadow-xs">
               <CheckCircle2 className="w-6 h-6 text-emerald-700" />
             </div>
-            <div className="space-y-1">
-              <h3 className="text-lg font-bold text-slate-900">Validation Completed</h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Mock import completed. Verified rows are staged for review and non-compliant records
-                have been flagged for contractor follow-up.
+            <div className="space-y-1.5">
+              <h3 className="text-lg font-bold text-slate-900">Report Saved to Database</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                {importResult?.message ??
+                  'Verified rows have been persisted to MySQL and linked to the compliance dashboard.'}
               </p>
+              {importResult ? (
+                <p className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg py-2 px-3 mt-2">
+                  {importResult.site_name} • Report #{importResult.report_id} •{' '}
+                  {importResult.imported_rows} row(s) •{' '}
+                  {importResult.total_categorized_weight_kg.toFixed(2)} kg recorded
+                </p>
+              ) : null}
             </div>
-            <div className="pt-4">
+            <div className="pt-4 flex flex-wrap items-center justify-center gap-3">
               <button
                 type="button"
-                onClick={() => setStep(1)}
+                onClick={() => navigate('/manager/compliance-dashboard')}
+                style={{ backgroundColor: '#047857', color: '#ffffff' }}
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-lg shadow-sm transition hover:opacity-90 cursor-pointer"
+              >
+                <span style={{ color: '#ffffff' }}>View Compliance Dashboard</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setImportResult(null)
+                  setStep(1)
+                }}
                 style={{ backgroundColor: '#0f172a', color: '#ffffff' }}
                 className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-lg shadow-sm transition hover:opacity-90 cursor-pointer"
               >

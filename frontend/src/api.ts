@@ -578,6 +578,117 @@ export async function deleteUser(token: string, userId: number): Promise<void> {
   }
 }
 
+export interface ContractorReportOptionItem {
+  id: number
+  code?: string | null
+  name: string
+}
+
+export interface ContractorReportOptionsResponse {
+  sites: ContractorReportOptionItem[]
+  contractors: ContractorReportOptionItem[]
+}
+
+export interface ContractorDispositionWeightsPayload {
+  upcycled_kg: number
+  fibre_to_fibre_kg: number
+  downcycled_kg: number
+  exported_kg: number
+  landfilled_kg: number
+  incinerated_energy_recovery_kg: number
+}
+
+export interface ContractorReportParsedRow {
+  row: number
+  bin_id: string
+  contractor: string
+  store_weight_kg: number
+  received_kg: number
+  dispositions: ContractorDispositionWeightsPayload
+  categorized_weight_kg: number
+  uncategorized_weight_kg: number
+  status: 'Verified' | 'Warning' | 'Error'
+  errors: string[]
+}
+
+export interface ContractorReportFileParseResponse {
+  filename: string
+  rows: ContractorReportParsedRow[]
+}
+
+export interface ContractorReportImportRequest {
+  site_id: number
+  contractor_name: string
+  report_month: string
+  source_filename: string
+  rows: Array<{
+    row: number
+    bin_id: string
+    contractor: string
+    store_weight_kg: number
+    received_kg: number
+    dispositions: ContractorDispositionWeightsPayload
+  }>
+}
+
+export interface ContractorReportImportResponse {
+  report_id: number
+  site_id: number
+  site_name: string
+  contractor_name: string
+  report_month: string
+  imported_rows: number
+  total_received_kg: number
+  total_categorized_weight_kg: number
+  message: string
+}
+
+const IMPORT_API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
+
+async function parseImportApiResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    let detail = `Request failed (${response.status})`
+    try {
+      const data = (await response.json()) as { detail?: string }
+      if (data.detail) {
+        detail = data.detail
+      }
+    } catch {
+      // keep default detail
+    }
+    throw new Error(detail)
+  }
+  return (await response.json()) as T
+}
+
+export async function fetchContractorReportOptions(): Promise<ContractorReportOptionsResponse> {
+  const response = await fetch(`${IMPORT_API_BASE}/api/contractor-reports/options`)
+  return parseImportApiResponse<ContractorReportOptionsResponse>(response)
+}
+
+export async function parseAndValidateContractorFile(
+  filename: string,
+  contentBase64: string,
+): Promise<ContractorReportFileParseResponse> {
+  const response = await fetch(`${IMPORT_API_BASE}/api/contractor-reports/parse-and-validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, content_base64: contentBase64 }),
+  })
+  return parseImportApiResponse<ContractorReportFileParseResponse>(response)
+}
+
+export async function importContractorReport(
+  payload: ContractorReportImportRequest,
+): Promise<ContractorReportImportResponse> {
+  const response = await fetch(`${IMPORT_API_BASE}/api/contractor-reports/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  return parseImportApiResponse<ContractorReportImportResponse>(response)
+}
+
 // Recycle bin handoff. Mirrors the "Recycle bin handoff" section of backend/app/schemas.py.
 
 export type HandoffRecordStatus = 'scheduled' | 'picked_up' | 'disputed' | 'approved' | 'closed'

@@ -447,6 +447,69 @@ class DashboardResponse(BaseModel):
     filters: DashboardFilterOptions
 
 
+class ContractorReportOptionItem(BaseModel):
+    id: int
+    code: str | None = None
+    name: str
+
+
+class ContractorReportOptionsResponse(BaseModel):
+    sites: list[ContractorReportOptionItem]
+    contractors: list[ContractorReportOptionItem]
+
+
+class ContractorReportFileParseRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    content_base64: str = Field(min_length=1)
+
+
+class ContractorReportParsedRow(BaseModel):
+    row: int = Field(ge=1)
+    bin_id: str
+    contractor: str
+    store_weight_kg: float = Field(ge=0)
+    received_kg: float = Field(ge=0)
+    dispositions: ContractorDispositionWeights
+    categorized_weight_kg: float = Field(ge=0)
+    uncategorized_weight_kg: float = Field(ge=0)
+    status: Literal["Verified", "Warning", "Error"]
+    errors: list[str]
+
+
+class ContractorReportFileParseResponse(BaseModel):
+    filename: str
+    rows: list[ContractorReportParsedRow]
+
+
+class ContractorReportImportRowRequest(BaseModel):
+    row: int = Field(ge=1)
+    bin_id: str = Field(min_length=1, max_length=64)
+    contractor: str = Field(min_length=1, max_length=160)
+    store_weight_kg: Decimal = Field(default=Decimal("0"), ge=0)
+    received_kg: Decimal = Field(ge=0)
+    dispositions: ContractorDispositionWeights
+
+
+class ContractorReportImportRequest(BaseModel):
+    site_id: int = Field(gt=0)
+    contractor_name: str = Field(min_length=1, max_length=160)
+    report_month: str = Field(pattern=r"^\d{4}-\d{2}(-\d{2})?$")
+    source_filename: str = Field(min_length=1, max_length=255)
+    rows: list[ContractorReportImportRowRequest] = Field(min_length=1)
+
+
+class ContractorReportImportResponse(BaseModel):
+    report_id: int
+    site_id: int
+    site_name: str
+    contractor_name: str
+    report_month: date
+    imported_rows: int
+    total_received_kg: float
+    total_categorized_weight_kg: float
+    message: str
+
+
 # -------------------------------------------------------------------------
 # Recycle bin handoff
 # -------------------------------------------------------------------------
