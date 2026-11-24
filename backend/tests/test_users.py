@@ -8,7 +8,7 @@ from sqlmodel.pool import StaticPool
 from app import database
 from app.auth import require_admin
 from app.main import app
-from app.models import User
+from app.models import Site, User
 
 
 @pytest.fixture
@@ -28,14 +28,36 @@ def client(monkeypatch):
     engine.dispose()
 
 
+def add_site(engine) -> int:
+    with Session(engine) as session:
+        site = Site(code="BKK", name="Bangkok")
+        session.add(site)
+        session.commit()
+        session.refresh(site)
+        return site.id
+
+
 @pytest.mark.parametrize("role", ["admin", "manager", "staff"])
 def test_create_and_read_user(client, role):
     http, engine = client
     payload = {"username": "USER@example.com", "password": "demo-password", "role": role}
+    store = None
+    if role == "staff":
+        site_id = add_site(engine)
+        payload["site_id"] = site_id
+        store = {"id": site_id, "code": "BKK", "name": "Bangkok"}
     response = http.post("/api/users", json=payload)
     assert response.status_code == 201
-    expected = {"id": response.json()["id"], "username": "user@example.com", "role": role}
-    assert response.json() == expected
+    expected = {
+        "id": response.json()["id"],
+        "username": "user@example.com",
+        "role": role,
+        "full_name": None,
+        "must_change_password": False,
+        "store": store,
+    }
+    # Creating with an explicit password never returns a temporary password.
+    assert response.json() == expected | {"temporary_password": None}
     assert http.get(f"/api/users/{expected['id']}").json() == expected
     assert http.get("/api/users").json() == [expected]
     assert http.get("/api/users?offset=1&limit=1").json() == []
@@ -53,8 +75,13 @@ def test_create_and_read_user(client, role):
 
 
 def test_duplicate_username(client):
-    http, _ = client
-    payload = {"username": "user@example.com", "password": "demo-password", "role": "staff"}
+    http, engine = client
+    payload = {
+        "username": "user@example.com",
+        "password": "demo-password",
+        "role": "staff",
+        "site_id": add_site(engine),
+    }
     assert http.post("/api/users", json=payload).status_code == 201
     payload["username"] = "USER@example.com"
     assert http.post("/api/users", json=payload).status_code == 409

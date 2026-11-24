@@ -147,3 +147,36 @@ def test_initial_migration_adopts_existing_users_table(tmp_path, monkeypatch) ->
     assert EXPECTED_TABLES == set(inspect(migrated_engine).get_table_names())
     migrated_engine.dispose()
     get_engine.cache_clear()
+
+
+def test_user_profile_migration_keeps_existing_users(tmp_path, monkeypatch) -> None:
+    database_path = tmp_path / "profile.db"
+    database_url = f"sqlite:///{database_path.as_posix()}"
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    get_engine.cache_clear()
+    command.upgrade(alembic_config(), "20261116_0001")
+
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (id, username, password_hash, role) "
+                "VALUES (1, 'existing@example.com', 'hash', 'staff')"
+            )
+        )
+
+    command.upgrade(alembic_config(), "head")
+    with engine.connect() as connection:
+        row = connection.execute(
+            text("SELECT username, full_name, must_change_password FROM users WHERE id = 1")
+        ).one()
+    # Existing people keep their account, have no name yet and are not forced to change password.
+    assert tuple(row) == ("existing@example.com", None, 0)
+
+    command.downgrade(alembic_config(), "20261116_0001")
+    columns = {column["name"] for column in inspect(engine).get_columns("users")}
+    assert columns == {"id", "username", "password_hash", "role"}
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT COUNT(*) FROM users")).scalar_one() == 1
+    engine.dispose()
+    get_engine.cache_clear()

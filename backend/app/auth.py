@@ -6,13 +6,15 @@ from sqlmodel import Session, select
 
 from .database import get_session
 from .models import User
-from .schemas import LoginRequest, TokenResponse, UserRead, UserRole
+from .schemas import ChangePasswordRequest, LoginRequest, TokenResponse, UserRead, UserRole
 from .security import (
     DUMMY_PASSWORD_HASH,
     create_access_token,
     decode_access_token,
+    hash_password,
     verify_password,
 )
+from .user_stores import to_user_read
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 SessionDependency = Annotated[Session, Depends(get_session)]
@@ -45,6 +47,9 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 def require_admin(user: CurrentUser) -> User:
     if user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Administrator access required")
+    if user.must_change_password:
+        # A temporary password only unlocks the change-password screen.
+        raise HTTPException(status_code=403, detail="Password change required")
     return user
 
 
@@ -63,10 +68,30 @@ def login(payload: LoginRequest, session: SessionDependency) -> TokenResponse:
         raise HTTPException(status_code=401, detail="Invalid username or password")
     return TokenResponse(
         access_token=create_access_token(user.id),
-        user=UserRead.model_validate(user),
+        user=to_user_read(session, user),
     )
 
 
 @router.get("/me", response_model=UserRead)
-def read_current_user(user: CurrentUser) -> User:
-    return user
+def read_current_user(user: CurrentUser, session: SessionDependency) -> UserRead:
+    return to_user_read(session, user)
+
+
+@router.post("/change-password", response_model=UserRead)
+def change_password(
+    payload: ChangePasswordRequest, user: CurrentUser, session: SessionDependency
+) -> UserRead:
+    # 400 rather than 401: the person is signed in, so the client must not treat this as an
+    # expired session.
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if payload.new_password == payload.current_password:
+        raise HTTPException(
+            status_code=400, detail="New password must be different from the current one"
+        )
+    user.password_hash = hash_password(payload.new_password)
+    user.must_change_password = False
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return to_user_read(session, user)

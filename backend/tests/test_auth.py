@@ -39,6 +39,15 @@ def add_user(engine, username, role, password=PASSWORD) -> int:
         return user.id
 
 
+def add_site(engine, code="BKK", name="Bangkok") -> int:
+    with Session(engine) as session:
+        site = Site(code=code, name=name)
+        session.add(site)
+        session.commit()
+        session.refresh(site)
+        return site.id
+
+
 def login(http, username, password=PASSWORD):
     return http.post("/api/auth/login", json={"username": username, "password": password})
 
@@ -54,8 +63,16 @@ def test_login_returns_token_and_user_without_secrets(env):
     assert response.status_code == 200
     body = response.json()
     assert body["token_type"] == "bearer"
-    assert body["user"] == {"id": user_id, "username": "boss@example.com", "role": "admin"}
-    assert "password" not in response.text and "scrypt" not in response.text
+    assert body["user"] == {
+        "id": user_id,
+        "username": "boss@example.com",
+        "role": "admin",
+        "full_name": None,
+        "must_change_password": False,
+        "store": None,
+    }
+    for secret in ("password_hash", "scrypt", PASSWORD):
+        assert secret not in response.text
 
 
 def test_login_username_is_case_insensitive(env):
@@ -137,12 +154,18 @@ def test_user_routes_require_an_administrator(env):
 def test_admin_user_lifecycle(env):
     http, engine = env
     add_user(engine, "boss@example.com", UserRole.ADMIN)
+    site_id = add_site(engine)
     admin = headers_for(http, "boss@example.com")
 
     created = http.post(
         "/api/users",
         headers=admin,
-        json={"username": "New@Example.com", "password": "first-password", "role": "staff"},
+        json={
+            "username": "New@Example.com",
+            "password": "first-password",
+            "role": "staff",
+            "site_id": site_id,
+        },
     )
     assert created.status_code == 201
     user_id = created.json()["id"]
@@ -154,7 +177,14 @@ def test_admin_user_lifecycle(env):
         json={"username": "Renamed@Example.com", "role": "manager", "password": "second-password"},
     )
     assert updated.status_code == 200
-    assert updated.json() == {"id": user_id, "username": "renamed@example.com", "role": "manager"}
+    assert updated.json() == {
+        "id": user_id,
+        "username": "renamed@example.com",
+        "role": "manager",
+        "full_name": None,
+        "must_change_password": True,
+        "store": {"id": site_id, "code": "BKK", "name": "Bangkok"},
+    }
     assert login(http, "renamed@example.com", "first-password").status_code == 401
     assert login(http, "renamed@example.com", "second-password").status_code == 200
 
@@ -198,13 +228,15 @@ def test_admin_cannot_delete_self(env):
 def test_last_administrator_cannot_be_demoted(env):
     http, engine = env
     admin_id = add_user(engine, "boss@example.com", UserRole.ADMIN)
+    site_id = add_site(engine)
     admin = headers_for(http, "boss@example.com")
-    blocked = http.patch(f"/api/users/{admin_id}", headers=admin, json={"role": "staff"})
+    demotion = {"role": "staff", "site_id": site_id}
+    blocked = http.patch(f"/api/users/{admin_id}", headers=admin, json=demotion)
     assert blocked.status_code == 400
     assert http.get(f"/api/users/{admin_id}", headers=admin).json()["role"] == "admin"
 
     add_user(engine, "second@example.com", UserRole.ADMIN)
-    allowed = http.patch(f"/api/users/{admin_id}", headers=admin, json={"role": "staff"})
+    allowed = http.patch(f"/api/users/{admin_id}", headers=admin, json=demotion)
     assert allowed.status_code == 200
 
 
@@ -212,10 +244,14 @@ def test_role_change_takes_effect_on_existing_token(env):
     http, engine = env
     add_user(engine, "boss@example.com", UserRole.ADMIN)
     target = add_user(engine, "second@example.com", UserRole.ADMIN)
+    site_id = add_site(engine)
     admin = headers_for(http, "boss@example.com")
     second = headers_for(http, "second@example.com")
     assert http.get("/api/users", headers=second).status_code == 200
-    http.patch(f"/api/users/{target}", headers=admin, json={"role": "staff"})
+    changed = http.patch(
+        f"/api/users/{target}", headers=admin, json={"role": "staff", "site_id": site_id}
+    )
+    assert changed.status_code == 200
     assert http.get("/api/users", headers=second).status_code == 403
 
 
