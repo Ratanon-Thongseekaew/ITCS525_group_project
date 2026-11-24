@@ -69,3 +69,14 @@ def decode_access_token(token: str) -> int | None:
         return int(claims["sub"])
     except (jwt.PyJWTError, ValueError):
         return None
+
+
+# Characters that are easy to confuse when read aloud or typed (0/O, 1/l/I) are left out.
+TEMPORARY_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+TEMPORARY_PASSWORD_LENGTH = 14
+
+
+def generate_temporary_password() -> str:
+    return "".join(
+        secrets.choice(TEMPORARY_PASSWORD_ALPHABET) for _ in range(TEMPORARY_PASSWORD_LENGTH)
+    )

@@ -133,6 +133,11 @@ class User(SQLModel, table=True):
     username: str = Field(max_length=254, unique=True, index=True)
     password_hash: str = Field(max_length=255, repr=False)
     role: UserRole = Field(sa_column=enum_column(UserRole, length=16))
+    full_name: str | None = Field(default=None, max_length=120)
+    must_change_password: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default="0"),
+    )
 
 
 class UserSite(SQLModel, table=True):

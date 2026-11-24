@@ -420,10 +420,24 @@ export async function getRecentGarments(limit = 15): Promise<GarmentItem[]> {
 
 export type UserRole = 'admin' | 'manager' | 'staff'
 
+export interface Store {
+  id: number
+  code: string
+  name: string
+}
+
 export interface User {
   id: number
   username: string
   role: UserRole
+  full_name: string | null
+  must_change_password: boolean
+  store: Store | null
+}
+
+// Returned once when the server generates a password; it is never returned again.
+export interface UserWithTemporaryPassword extends User {
+  temporary_password: string | null
 }
 
 export interface LoginResponse {
@@ -432,16 +446,24 @@ export interface LoginResponse {
   user: User
 }
 
+// Omit `password` to have the server generate a temporary one. Staff need a `site_id`,
+// managers may have one, administrators must not.
 export interface UserCreateRequest {
   username: string
-  password: string
+  password?: string
   role: UserRole
+  full_name?: string | null
+  site_id?: number | null
 }
 
+// Omitted fields are unchanged. `full_name: null` clears the name and `site_id: null`
+// removes the store (not allowed for staff).
 export interface UserUpdateRequest {
   username?: string
   password?: string
   role?: UserRole
+  full_name?: string | null
+  site_id?: number | null
 }
 
 function authHeaders(token: string, json = false): HeadersInit {
@@ -471,11 +493,43 @@ export async function listUsers(token: string, offset = 0, limit = 100): Promise
   return handleResponse<User[]>(response)
 }
 
-export async function createUser(token: string, payload: UserCreateRequest): Promise<User> {
+export async function createUser(
+  token: string,
+  payload: UserCreateRequest,
+): Promise<UserWithTemporaryPassword> {
   const response = await fetch(`${API_URL}/api/users`, {
     method: 'POST',
     headers: authHeaders(token, true),
     body: JSON.stringify(payload),
+  })
+  return handleResponse<UserWithTemporaryPassword>(response)
+}
+
+export async function resetUserPassword(
+  token: string,
+  userId: number,
+): Promise<UserWithTemporaryPassword> {
+  const response = await fetch(`${API_URL}/api/users/${userId}/reset-password`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  })
+  return handleResponse<UserWithTemporaryPassword>(response)
+}
+
+export async function listSites(token: string): Promise<Store[]> {
+  const response = await fetch(`${API_URL}/api/sites`, { headers: authHeaders(token) })
+  return handleResponse<Store[]>(response)
+}
+
+export async function changePassword(
+  token: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<User> {
+  const response = await fetch(`${API_URL}/api/auth/change-password`, {
+    method: 'POST',
+    headers: authHeaders(token, true),
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
   })
   return handleResponse<User>(response)
 }
