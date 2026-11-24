@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router'
 import { AppLayout } from './components/AppLayout'
 import { GarmentSortingWorkspace } from './components/GarmentSortingWorkspace'
+import { SortingOverviewPage } from './pages/SortingOverviewPage'
 import ResaleBinRecords from './components/ResaleBinRecords'
 import { Toaster } from './components/ui/sonner'
 import { ComplianceDashboardPage } from './pages/ComplianceDashboardPage'
@@ -28,6 +29,7 @@ function App() {
           <Route path="manager" element={<ManagerPage />} />
           <Route path="manager/compliance-dashboard" element={<ComplianceDashboardPage />} />
           <Route path="manager/import" element={<ContractorReportImportPage />} />
+          <Route path="manager/sorting" element={<SortingOverviewPage />} />
           <Route path="manager/resale-bins" element={<ResaleBinRecords />} />
           {/* <Route
             path="manager/recycle-bins"

@@ -272,7 +272,12 @@ const staffNavigation = [
   ['Recycle Bin Handoff', '/staff/recycle-bin-handoff'],
 ] as const
 
-const managerNavigation = ['Compliance Dashboard', 'Resale Bin Records', 'Import Data']
+const managerNavigation = [
+  'Compliance Dashboard',
+  'Sorting Overview',
+  'Resale Bin Records',
+  'Import Data',
+]
 
 test('shows the Figma navigation in the staff sidebar', () => {
   renderRoute('/staff/sorting')

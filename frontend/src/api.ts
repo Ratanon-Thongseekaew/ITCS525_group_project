@@ -28,6 +28,8 @@ export interface GarmentSortRequest {
 
 export interface GarmentItem {
   id: number
+  site_id: number
+  site_name: string
   condition: GarmentCondition
   category: string
   bin_id: number
@@ -39,6 +41,8 @@ export interface GarmentItem {
 
 export interface BinRecord {
   id: number
+  site_id: number
+  site_name: string
   bin_code: string
   bin_type: BinType
   status: BinStatus
@@ -388,19 +392,28 @@ function postJson<T>(path: string, body: unknown) {
   })
 }
 
-export function getSortingStats(siteId: number): Promise<SortingStatsResponse> {
-  return sortingRequest<SortingStatsResponse>(`/sorting/stats${buildQuery({ site_id: siteId })}`)
+// Reads name the acting user (`actor_id`). Staff only reach their own site; managers pick one of
+// their sites, or leave `siteId` out for all of them combined (the list endpoints only).
+export function getSortingStats(actorId: number, siteId?: number): Promise<SortingStatsResponse> {
+  return sortingRequest<SortingStatsResponse>(
+    `/sorting/stats${buildQuery({ actor_id: actorId, site_id: siteId })}`,
+  )
 }
 
-export function getActiveBins(siteId: number): Promise<ActiveBinsResponse> {
-  return sortingRequest<ActiveBinsResponse>(`/bins/active${buildQuery({ site_id: siteId })}`)
+export function getActiveBins(actorId: number, siteId?: number): Promise<ActiveBinsResponse> {
+  return sortingRequest<ActiveBinsResponse>(
+    `/bins/active${buildQuery({ actor_id: actorId, site_id: siteId })}`,
+  )
 }
 
 export function getBins(
-  siteId: number,
+  actorId: number,
+  siteId?: number,
   filters?: { bin_type?: BinType; status?: BinStatus },
 ): Promise<BinRecord[]> {
-  return sortingRequest<BinRecord[]>(`/bins${buildQuery({ site_id: siteId, ...filters })}`)
+  return sortingRequest<BinRecord[]>(
+    `/bins${buildQuery({ actor_id: actorId, site_id: siteId, ...filters })}`,
+  )
 }
 
 export function createBin(payload: BinCreateRequest): Promise<BinRecord> {
@@ -415,8 +428,14 @@ export function sortGarment(payload: GarmentSortRequest): Promise<SortGarmentRes
   return postJson<SortGarmentResponse>('/garments/sort', payload)
 }
 
-export function getRecentGarments(siteId: number, limit = 15): Promise<GarmentItem[]> {
-  return sortingRequest<GarmentItem[]>(`/garments/recent${buildQuery({ site_id: siteId, limit })}`)
+export function getRecentGarments(
+  actorId: number,
+  siteId?: number,
+  limit = 15,
+): Promise<GarmentItem[]> {
+  return sortingRequest<GarmentItem[]>(
+    `/garments/recent${buildQuery({ actor_id: actorId, site_id: siteId, limit })}`,
+  )
 }
 
 export type UserRole = 'admin' | 'manager' | 'staff'
