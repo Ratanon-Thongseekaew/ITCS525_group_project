@@ -486,7 +486,7 @@ export function EprReportManagementDialog({
       </DialogTrigger>
       <DialogContent
         overlayClassName="bg-black/20"
-        className="max-h-[calc(100svh-2rem)] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto rounded-2xl border-slate-200 bg-white p-5 text-slate-900 sm:rounded-2xl sm:p-6 [&>button]:cursor-pointer [&>button]:text-slate-600"
+        className="max-h-[calc(100svh-2rem)] w-[calc(100%-2rem)] sm:max-w-2xl overflow-y-auto rounded-2xl border-slate-200 bg-white p-5 text-slate-900 sm:rounded-2xl sm:p-6 [&>button]:cursor-pointer [&>button]:text-slate-600"
       >
         <DialogHeader className="pr-8 text-left">
           <DialogTitle>Manage EPR Report</DialogTitle>

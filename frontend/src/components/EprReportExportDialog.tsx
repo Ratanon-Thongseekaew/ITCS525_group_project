@@ -130,7 +130,7 @@ export function EprReportExportDialog({
       </DialogTrigger>
       <DialogContent
         overlayClassName="bg-black/20"
-        className="max-h-[calc(100svh-2rem)] w-[calc(100%-2rem)] max-w-md gap-0 overflow-y-auto rounded-2xl border-slate-200 bg-white p-0 text-slate-900 sm:rounded-2xl [&>button]:text-slate-600 [&>button]:focus-visible:ring-teal-600"
+        className="max-h-[calc(100svh-2rem)] w-[calc(100%-2rem)] sm:max-w-md gap-0 overflow-y-auto rounded-2xl border-slate-200 bg-white p-0 text-slate-900 sm:rounded-2xl [&>button]:text-slate-600 [&>button]:focus-visible:ring-teal-600"
       >
         <DialogHeader className="px-5 pt-5 pr-12 text-left sm:px-6 sm:pr-12">
           <DialogTitle>Export quarterly EPR report</DialogTitle>

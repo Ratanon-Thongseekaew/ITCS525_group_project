@@ -139,6 +139,9 @@ React Router owns client-side navigation. The current frontend routes are:
   database-backed compliance dashboard.
 - `/manager/epr-report/print` and `/admin/epr-report/print` render the standalone
   printable EPR report for the requested `year` and `quarter`.
+- `/design-system` renders the design system reference (tokens and every
+  primitive in light and dark). It is unlisted, outside `AppLayout`, and not in
+  the workspace navigation.
 - `/manager/import` renders the contractor monthly outcome report import page
   and is available from the manager workspace navigation.
 - `/manager/sorting` renders the read-only sorting overview across the manager's sites.
@@ -497,6 +500,85 @@ python -m ruff check backend
   browser at desktop width. Lint, types and tests do not catch it.
 - Keep reusable shadcn/ui primitives generic. Place application-specific login
   and workspace composition in `pages/` or non-`ui` components.
+
+#### Design system
+
+- **Tokens:** `frontend/src/styles.css` defines shadcn/ui's default neutral
+  theme as CSS variables (`--background`, `--foreground`, `--card`, `--popover`,
+  `--primary`, `--secondary`, `--muted`, `--accent`, `--destructive`,
+  `--border`, `--input`, `--ring`, `--chart-1` to `--chart-5`, `--sidebar-*`,
+  `--radius`) for `:root` and `.dark`, mapped to Tailwind colors in
+  `@theme inline`. The only change from shadcn's defaults is the primary brand
+  color: Tailwind teal-700 with near-white text in light mode, and teal-400 with
+  teal-950 text in dark mode. `--sidebar-primary` follows it.
+- **Using tokens:** style new UI with token utilities (`bg-background`,
+  `bg-card`, `text-foreground`, `text-muted-foreground`, `border`,
+  `bg-primary text-primary-foreground`, `text-primary`) and the primitives in
+  `components/ui/`, not palette classes such as `bg-white` or `text-slate-500`.
+  Token utilities switch with the theme; palette classes do not.
+- **Status colors:** `Badge` and `Alert` have project-specific `success`,
+  `warning`, and `info` variants (Alert also has `destructive`), each with a
+  light and `dark:` pair. Use them for states such as approved, disputed, or
+  awaiting pickup instead of hand-styled pills or boxes. Don't add new tokens
+  for status colors.
+- **Primitives:** alert, badge, button, card, chart, checkbox, dialog,
+  dropdown-menu, input, label, progress, radio-group, select, separator, sheet,
+  sidebar, skeleton, sonner, switch, table, tabs, textarea, toggle,
+  toggle-group, tooltip. They come from shadcn's `new-york-v4` registry and are
+  built on the `radix-ui` package. The `new-york` style in `components.json`
+  makes the shadcn CLI serve the old Tailwind 3 versions, so add new components
+  from `https://ui.shadcn.com/r/styles/new-york-v4/<name>.json`. Then change
+  `from "cn"` to `@/lib/utils` and `@/registry/new-york-v4/...` to the local
+  aliases, and run Prettier.
+- **Local changes to the primitives** (keep them when updating):
+  - `CardTitle` renders an `h2` and `AlertTitle` an `h5`, so titles stay headings.
+  - `Card` keeps the section-padding model: `CardHeader` is a `flex flex-col p-6`
+    column (pages make it a row with `flex-row justify-between`), and
+    `CardContent` and `CardFooter` use `p-6 pt-0`. Upstream uses `py-6 gap-6`
+    on the card instead, which would add space to every existing card.
+  - `SelectTrigger` is `w-full` rather than upstream's `w-fit`, as the forms
+    expect.
+  - `DialogContent` accepts `overlayClassName`.
+  - `Toaster` honors a forced theme.
+  - `SidebarMenuSkeleton` uses a fixed width, because the React Compiler lint
+    rules reject the upstream random width.
+  - `hooks/use-mobile.tsx` uses `useSyncExternalStore`.
+  - `chart.tsx` keeps the existing Recharts 2 version, with tokens for its
+    colors.
+- **Dialog widths:** v4 `DialogContent` sets `sm:max-w-lg`, so override the
+  width with an `sm:` class (for example `sm:max-w-2xl`). A plain `max-w-2xl`
+  doesn't override it on larger screens.
+- **Dark mode:** it is built but forced off. `ThemeProvider`
+  (`components/theme-provider.tsx`, using `next-themes` with the `.dark` class)
+  wraps the app in `main.tsx`, and `APP_FORCED_THEME` in `config/theme.ts`
+  holds the app in light mode while pages still use palette classes. When the
+  pages are migrated, set `APP_FORCED_THEME` to `null`, place `ModeToggle`
+  (Light, Dark, System) in the `AppLayout` header, and add a pre-paint script
+  to `index.html` so there's no flash of the wrong theme. `App.tsx` provides a
+  root `TooltipProvider`.
+- **Reference:** `/design-system` shows every token and primitive in a light and
+  a dark panel. A popup opened from the dark panel gets `className="dark"`
+  because it renders in a portal outside the panel.
+- **Legacy styles:** the BEM classes in `styles.css` (`.resale-*`,
+  `.dashboard`, `.not-found`, `.primary-button`, `.page-container`, …) and the
+  `--legacy-*` variables still style pages that haven't been migrated. When a
+  page moves to the design system, replace classes as follows and then delete
+  any legacy CSS that is no longer used:
+
+  | Replace                                     | With                                                 |
+  | ------------------------------------------- | ---------------------------------------------------- |
+  | `bg-white`, `bg-slate-50` surfaces          | `bg-card` / `Card`, `bg-background`, `bg-muted`      |
+  | `text-slate-900` / `-700` / `-500`          | `text-foreground` / `text-muted-foreground`          |
+  | `border-slate-200`                          | `border` (uses `--border`)                           |
+  | teal brand classes, `!text-white`           | `bg-primary text-primary-foreground`, `text-primary` |
+  | raw `button`, `select`, `label`, `textarea` | `Button`, `Select`, `Label`, `Textarea`              |
+  | chip toggles, radio-like buttons            | `ToggleGroup`, `RadioGroup`                          |
+  | raw `table`                                 | `Table` primitives                                   |
+  | hand-built error or info boxes              | `Alert` with a variant                               |
+  | status pills                                | `Badge` with a variant                               |
+  | custom overlays                             | `Dialog`                                             |
+  | spinners and loading placeholders           | `Skeleton`, `Progress`                               |
+
 - Keep workspace menu definitions in `config/workspace-navigation.ts` and use
   each item's optional `roles` list instead of duplicating sidebars per role.
 - Preserve the current unprotected workspace routes until database-backed
