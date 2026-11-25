@@ -19,6 +19,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from '@/components/ui/sidebar'
 import type { WorkspaceRole } from '@/types/workspace'
 
@@ -29,7 +30,16 @@ interface WorkspaceSidebarProps {
 
 export function WorkspaceSidebar({ role, items }: WorkspaceSidebarProps) {
   const location = useLocation()
+  const { isMobile, setOpen, setOpenMobile } = useSidebar()
   const navigationItems = items ?? getWorkspaceNavigation(role)
+
+  function collapseSidebar() {
+    if (isMobile) {
+      setOpenMobile(false)
+    } else {
+      setOpen(false)
+    }
+  }
 
   return (
     <Sidebar collapsible="offcanvas" className="border-r border-slate-200">
@@ -69,7 +79,7 @@ export function WorkspaceSidebar({ role, items }: WorkspaceSidebarProps) {
                       tooltip={item.label}
                       className="h-9 gap-3 rounded-md px-3 text-xs font-medium text-slate-600 hover:bg-teal-50 hover:text-teal-700 data-[active=true]:bg-teal-50 data-[active=true]:text-teal-700"
                     >
-                      <Link to={url}>
+                      <Link to={url} onClick={collapseSidebar}>
                         <item.icon strokeWidth={1.8} />
                         <span>{item.label}</span>
                       </Link>
@@ -90,7 +100,7 @@ export function WorkspaceSidebar({ role, items }: WorkspaceSidebarProps) {
               tooltip="Sign out"
               className="h-9 gap-3 bg-red-50 px-3 text-xs font-medium text-red-500 hover:bg-red-100 hover:text-red-600"
             >
-              <Link to="/login">
+              <Link to="/login" onClick={collapseSidebar}>
                 <LogOut strokeWidth={1.8} />
                 <span>Sign Out</span>
               </Link>
