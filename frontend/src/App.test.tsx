@@ -109,6 +109,15 @@ test('renders user management immediately when visited directly', () => {
   expect(screen.queryByRole('status', { name: 'loading...' })).not.toBeInTheDocument()
 })
 
+test('offers the theme picker in the workspace header and on the login page', () => {
+  renderRoute('/admin/users')
+  expect(screen.getByRole('button', { name: 'Change color theme' })).toBeInTheDocument()
+  cleanup()
+
+  renderRoute('/login')
+  expect(screen.getByRole('button', { name: 'Change color theme' })).toBeInTheDocument()
+})
+
 test('redirects the manager root to the compliance dashboard', () => {
   renderRoute('/manager')
 

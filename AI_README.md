@@ -540,7 +540,7 @@ text-resale-foreground`) for the sorting quick-tap buttons, and the soft pair
   colors. Other charts use `--chart-1` to `--chart-5`. To pass a token to an
   SVG, use `style={{ fill }}`, because a CSS variable doesn't resolve in a
   presentation attribute.
-- **Primitives:** alert, alert-dialog, badge, breadcrumb, button, card, chart,
+- **Primitives:** alert, alert-dialog, avatar, badge, breadcrumb, button, card, chart,
   checkbox, dialog, dropdown-menu, empty, field, input, input-group, label,
   progress, radio-group, select, separator, sheet,
   sidebar, skeleton, sonner, switch, table, tabs, textarea, toggle,
@@ -570,17 +570,21 @@ text-resale-foreground`) for the sorting quick-tap buttons, and the soft pair
 - **Dialog widths:** v4 `DialogContent` sets `sm:max-w-lg`, so override the
   width with an `sm:` class (for example `sm:max-w-2xl`). A plain `max-w-2xl`
   doesn't override it on larger screens.
-- **Dark mode:** it is built but forced off. `ThemeProvider`
-  (`components/theme-provider.tsx`, using `next-themes` with the `.dark` class)
-  wraps the app in `main.tsx`, and `APP_FORCED_THEME` in `config/theme.ts`
-  holds the app in light mode while pages still use palette classes. When the
-  pages are migrated, set `APP_FORCED_THEME` to `null`, place `ModeToggle`
-  (Light, Dark, System) in the `AppLayout` header, and add a pre-paint script
-  to `index.html` so there's no flash of the wrong theme. `App.tsx` provides a
-  root `TooltipProvider`.
+- **Dark mode:** on. `ThemeProvider` (`components/theme-provider.tsx`, using
+  `next-themes` with the class attribute) wraps the app in `main.tsx`, and
+  `ModeToggle` (Light, Dark, System) sits in the `AppLayout` header and on the
+  login page. The choice is stored in `localStorage` under `theme`. An inline
+  script in `frontend/index.html` applies the saved theme before the bundle
+  loads, so a dark page doesn't flash light. `APP_FORCED_THEME` in
+  `config/theme.ts` is `null`; set it to `'light'` or `'dark'` only to force one
+  theme everywhere. `App.tsx` provides a root `TooltipProvider`.
+- **Theme scopes:** the light tokens are defined on `:root` and `.light`, and
+  the dark ones on `.dark`. The `dark:` variant applies inside `.dark` except
+  inside a `.light` island, so an element with the `light` class always renders
+  light, even while the app is dark.
 - **Reference:** `/design-system` shows every token and primitive in a light and
-  a dark panel. A popup opened from the dark panel gets `className="dark"`
-  because it renders in a portal outside the panel.
+  a dark panel, whatever the app theme is. Popups render in a portal outside
+  the panel, so each popup gets the panel's `light` or `dark` class.
 - **Shared page components** in `components/` (use them before building your
   own):
   - `PageHeader`: breadcrumb, `h1`, description, optional eyebrow, and actions.
@@ -604,26 +608,28 @@ text-resale-foreground`) for the sorting quick-tap buttons, and the soft pair
     clickable.
   - `LoadState` and `ErrorState`: the loading status and a destructive alert
     with Retry. `EmptyState`: a dashed placeholder for an empty list.
+  - `SearchInput`: a search field with an icon, named by its `label`.
+  - `ConfirmDialog`: an `AlertDialog` for "are you sure" actions, with a
+    `destructive` option and room for extra content. Render it while the
+    question is open; confirming calls only `onConfirm`.
   - Staff-only: `staff/SortActionButton`, `staff/BinProgressCard`,
     `staff/NewBinDialog`, `staff/SealBinDialog`, and
     `staff/DirectResaleProcessDialog`. `staff/handoff-form.tsx` holds the
     handoff fields, `BinSummary`, and `HandoffDialogShell`, built on `field`
     and `input-group`.
+  - Admin-only: `admin/InviteUserForm`, `admin/EditUserDialog`,
+    `admin/DeleteUserDialog` (on `ConfirmDialog`), `admin/UserIdentity` (avatar,
+    name, email), and `admin/UserStatusBadge`.
   - Contractor import: `ContractorReportImport` holds the wizard state and
     renders `contractor-import/ImportUploadStep`, `ImportReviewStep`, and
     `ImportResultStep`.
-- **Migrated so far:** the app shell (`AppLayout`, `WorkspaceSidebar`,
-  `ApiStatus`), `TextileTrackLoader`, the login, 404, and contractor report
-  import wrapper pages, the whole staff workspace (Garment Sorting, Direct
-  Resale with its two subpages, and both Recycle Bin Handoff pages), and the
-  whole manager workspace (Compliance Dashboard, which admins share, the EPR
-  dialogs and print page, Sorting Overview, Resale Bin Records with the
-  Converge visual, and Import Data).
-- **Legacy styles:** only the admin `UserManagementPage` still uses palette
-  classes and inline styles. Once it is migrated, the last step is turning
-  dark mode on (see **Dark mode**). When a page moves to the design system,
-  replace classes as follows and then delete any legacy CSS that is no longer
-  used:
+- **Status:** every page uses the design system. Palette classes remain only
+  where they're intended: the `dark:`-paired status tints in `StatCard`, the
+  import review rows, and the Invited avatar, the login video scrim, the EPR
+  print overrides, and the `/design-system` swatches.
+  `lib/react-vibe/signal.tsx` is unused vendored code.
+- **Reviewing new code:** replace palette classes and hand-built controls as
+  follows:
 
   | Replace                                     | With                                                 |
   | ------------------------------------------- | ---------------------------------------------------- |

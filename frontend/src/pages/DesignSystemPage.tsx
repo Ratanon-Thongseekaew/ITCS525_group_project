@@ -29,6 +29,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import {
   Breadcrumb,
@@ -151,12 +152,12 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /**
- * Every primitive in one theme. Popups render in a portal outside the panel, so the dark panel
- * passes `dark` to each popup's content to keep it in the panel's theme.
+ * Every primitive in one theme, whatever the app theme is. The panel's `light` or `dark` class
+ * scopes the tokens. Popups render in a portal outside the panel, so each one gets the same class.
  */
 function ThemePanel({ theme }: { theme: PanelTheme }) {
   const id = useId()
-  const popup = theme === 'dark' ? 'dark' : undefined
+  const popup = theme
   const title = theme === 'dark' ? 'Dark' : 'Light'
 
   return (
@@ -514,6 +515,20 @@ function ThemePanel({ theme }: { theme: PanelTheme }) {
         </div>
       </Section>
 
+      <Section title="Avatar">
+        <div className="flex items-center gap-3">
+          <Avatar>
+            <AvatarFallback className="bg-primary/10 text-xs font-medium text-primary">
+              MN
+            </AvatarFallback>
+          </Avatar>
+          <Avatar>
+            <AvatarFallback className="text-xs font-medium">KP</AvatarFallback>
+          </Avatar>
+          <span className="text-xs text-muted-foreground">Initials fallback, no image</span>
+        </div>
+      </Section>
+
       <Section title="Empty">
         <EmptyState>No bins awaiting handoff.</EmptyState>
       </Section>
@@ -581,7 +596,7 @@ function ThemePanel({ theme }: { theme: PanelTheme }) {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Toasts follow the app theme, which stays light until dark mode is turned on.
+          Toasts follow the app theme. Change it with the theme button in the workspace header.
         </p>
       </Section>
     </div>

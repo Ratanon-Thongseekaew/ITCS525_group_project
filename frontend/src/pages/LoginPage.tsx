@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ModeToggle } from '@/components/ModeToggle'
 import { TextileTrackLoader } from '@/components/TextileTrackLoader'
 import { getWorkspaceHomeUrl } from '@/config/workspace-navigation'
 import {
@@ -90,6 +91,7 @@ export function LoginPage() {
           <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
           <span className="hidden capitalize min-[380px]:inline">{role} workspace</span>
           <span className="capitalize min-[380px]:hidden">{role}</span>
+          <ModeToggle />
         </div>
       </header>
 

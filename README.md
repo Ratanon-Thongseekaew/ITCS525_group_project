@@ -325,8 +325,9 @@ weight is returned as `uncategorized_weight_kg` for review on the import page.
 - Reusable shadcn/ui components live in `frontend/src/components/ui/`, themed
   by the tokens in `frontend/src/styles.css`. The theme is shadcn's neutral one
   with a teal-700 primary color. Open `/design-system` to see every component
-  in light and dark mode. Dark mode is built but stays off until every page
-  uses the tokens; see "Design system" in `AI_README.md`.
+  in light and dark mode. People choose Light, Dark, or System with the theme
+  button in the workspace header and on the login page; see "Design system" in
+  `AI_README.md`.
 - `WorkspaceSidebar` provides the responsive shared navigation for manager,
   staff, and admin workspaces. Menu definitions live in
   `frontend/src/config/workspace-navigation.ts`; add a `roles` list to a menu

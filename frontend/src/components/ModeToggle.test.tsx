@@ -54,9 +54,21 @@ test('switches the page to dark mode and remembers the choice', async () => {
   expect(window.localStorage.getItem('theme')).toBe('light')
 })
 
-test('keeps the app light while the theme is forced', async () => {
+test('lets the choice apply with the app default theme setting', async () => {
   render(
     <ThemeProvider>
+      <ModeToggle />
+    </ThemeProvider>,
+  )
+
+  chooseTheme('Dark')
+
+  await vi.waitFor(() => expect(document.documentElement).toHaveClass('dark'))
+})
+
+test('keeps the app light while the theme is forced', async () => {
+  render(
+    <ThemeProvider forcedTheme="light">
       <ModeToggle />
     </ThemeProvider>,
   )

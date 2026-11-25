@@ -16,7 +16,7 @@ const THEME_OPTIONS = [
   { value: 'system', label: 'System', icon: Laptop },
 ] as const
 
-/** Light, dark, or system theme picker. Not placed in the app yet; see `APP_FORCED_THEME`. */
+/** Light, dark, or system theme picker, in the workspace header and on the login page. */
 export function ModeToggle() {
   const { theme, setTheme } = useTheme()
 

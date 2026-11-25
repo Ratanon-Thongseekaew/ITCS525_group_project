@@ -1,5 +1,6 @@
 import { Outlet, useLocation } from 'react-router'
 import { ApiStatus } from './ApiStatus'
+import { ModeToggle } from './ModeToggle'
 import { WorkspaceSidebar } from './WorkspaceSidebar'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { isWorkspaceRole } from '@/types/workspace'
@@ -24,6 +25,7 @@ export function AppLayout() {
           </div>
 
           <ApiStatus />
+          <ModeToggle />
         </header>
 
         <main className="mx-auto w-full max-w-[1180px] px-4 py-12 sm:py-16 lg:py-24">
