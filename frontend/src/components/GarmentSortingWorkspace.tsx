@@ -31,6 +31,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/LoadState'
 import { PageHeader } from '@/components/PageHeader'
 import { StatCard } from '@/components/StatCard'
+import { TableCard } from '@/components/TableCard'
 import { BinProgressCard } from '@/components/staff/BinProgressCard'
 import { HandoffActorBar } from '@/components/staff/HandoffActorBar'
 import { NewBinDialog, type NewBinValues } from '@/components/staff/NewBinDialog'
@@ -499,111 +500,106 @@ export function GarmentSortingWorkspace() {
       </div>
 
       {/* Bin Records List & Management Table */}
-      <Card>
-        <CardHeader className="p-5 pb-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-col gap-1.5">
-              <CardTitle className="flex items-center gap-2 text-lg font-bold">
-                <Package className="size-4 text-primary" aria-hidden="true" />
-                Bin Records & History
-              </CardTitle>
-              <CardDescription>
-                Track open and completed bins for downstream resale and contractor handoff.
-              </CardDescription>
-            </div>
-            <ToggleGroup
-              type="single"
-              size="sm"
-              spacing={1}
-              value={binFilter}
-              onValueChange={(value) => value && setBinFilter(value as BinFilter)}
-              aria-label="Filter bins"
-              className="flex-wrap justify-start"
-            >
-              {BIN_FILTERS.map((filter) => (
-                <ToggleGroupItem
-                  key={filter.id}
-                  value={filter.id}
-                  className="bg-muted px-2.5 text-xs text-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
-                >
-                  {filter.label}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table className="text-xs">
-            <TableHeader className="bg-muted/50">
+      <TableCard
+        title={
+          <span className="flex items-center gap-2">
+            <Package className="size-4 text-primary" aria-hidden="true" />
+            Bin Records & History
+          </span>
+        }
+        description="Track open and completed bins for downstream resale and contractor handoff."
+        actions={
+          <ToggleGroup
+            type="single"
+            size="sm"
+            spacing={1}
+            value={binFilter}
+            onValueChange={(value) => value && setBinFilter(value as BinFilter)}
+            aria-label="Filter bins"
+            className="flex-wrap justify-start"
+          >
+            {BIN_FILTERS.map((filter) => (
+              <ToggleGroupItem
+                key={filter.id}
+                value={filter.id}
+                className="bg-muted px-2.5 text-xs text-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+              >
+                {filter.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        }
+      >
+        <Table className="text-xs">
+          <TableHeader className="bg-muted/50">
+            <TableRow>
+              <TableHead className="px-4">Bin Code</TableHead>
+              <TableHead className="px-4">Type</TableHead>
+              <TableHead className="px-4">Status</TableHead>
+              <TableHead className="px-4">Item Count</TableHead>
+              <TableHead className="px-4">Weight (kg)</TableHead>
+              <TableHead className="px-4">Created</TableHead>
+              <TableHead className="px-4">Closed</TableHead>
+              <TableHead className="px-4 text-right">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredBins.length === 0 ? (
               <TableRow>
-                <TableHead className="px-4">Bin Code</TableHead>
-                <TableHead className="px-4">Type</TableHead>
-                <TableHead className="px-4">Status</TableHead>
-                <TableHead className="px-4">Item Count</TableHead>
-                <TableHead className="px-4">Weight (kg)</TableHead>
-                <TableHead className="px-4">Created</TableHead>
-                <TableHead className="px-4">Closed</TableHead>
-                <TableHead className="px-4 text-right">Action</TableHead>
+                <TableCell colSpan={8} className="py-6 text-center text-muted-foreground">
+                  No bins found matching filter.
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredBins.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="py-6 text-center text-muted-foreground">
-                    No bins found matching filter.
+            ) : (
+              filteredBins.map((bin) => (
+                <TableRow key={bin.id}>
+                  <TableCell className="px-4 font-semibold">{bin.bin_code}</TableCell>
+                  <TableCell className="px-4">
+                    <Badge variant={BIN_TYPE_TONES[bin.bin_type].variant}>
+                      {BIN_TYPE_LABELS[bin.bin_type]}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="px-4">
+                    <Badge variant={BIN_STATUS_BADGE_VARIANTS[bin.status]}>
+                      {BIN_STATUS_LABELS[bin.status]}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="px-4 font-medium">
+                    {bin.item_count} / {bin.max_capacity}
+                  </TableCell>
+                  <TableCell className="px-4 text-muted-foreground">
+                    {bin.total_weight_kg} kg
+                  </TableCell>
+                  <TableCell className="px-4 text-muted-foreground">
+                    {formatTime(bin.created_at)}
+                  </TableCell>
+                  <TableCell className="px-4 text-muted-foreground">
+                    {bin.closed_at || bin.ready_at
+                      ? formatTime((bin.closed_at ?? bin.ready_at)!)
+                      : '—'}
+                  </TableCell>
+                  <TableCell className="px-4 text-right">
+                    {bin.status === 'active' ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => setClosingBinId(bin.id)}
+                      >
+                        Close Bin
+                      </Button>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        {bin.status === 'ready' ? 'Ready for handoff' : 'Sealed'}
+                      </span>
+                    )}
                   </TableCell>
                 </TableRow>
-              ) : (
-                filteredBins.map((bin) => (
-                  <TableRow key={bin.id}>
-                    <TableCell className="px-4 font-semibold">{bin.bin_code}</TableCell>
-                    <TableCell className="px-4">
-                      <Badge variant={BIN_TYPE_TONES[bin.bin_type].variant}>
-                        {BIN_TYPE_LABELS[bin.bin_type]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="px-4">
-                      <Badge variant={BIN_STATUS_BADGE_VARIANTS[bin.status]}>
-                        {BIN_STATUS_LABELS[bin.status]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="px-4 font-medium">
-                      {bin.item_count} / {bin.max_capacity}
-                    </TableCell>
-                    <TableCell className="px-4 text-muted-foreground">
-                      {bin.total_weight_kg} kg
-                    </TableCell>
-                    <TableCell className="px-4 text-muted-foreground">
-                      {formatTime(bin.created_at)}
-                    </TableCell>
-                    <TableCell className="px-4 text-muted-foreground">
-                      {bin.closed_at || bin.ready_at
-                        ? formatTime((bin.closed_at ?? bin.ready_at)!)
-                        : '—'}
-                    </TableCell>
-                    <TableCell className="px-4 text-right">
-                      {bin.status === 'active' ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => setClosingBinId(bin.id)}
-                        >
-                          Close Bin
-                        </Button>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          {bin.status === 'ready' ? 'Ready for handoff' : 'Sealed'}
-                        </span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </TableCard>
 
       {/* Live Recent Counter Log */}
       <Card>

@@ -100,6 +100,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { OUTCOME_CATEGORIES, OUTCOME_TONES } from '@/lib/outcome-tones'
 import { cn } from '@/lib/utils'
 
 type PanelTheme = 'light' | 'dark'
@@ -183,6 +184,29 @@ function ThemePanel({ theme }: { theme: PanelTheme }) {
               className={cn('flex h-10 flex-1 items-end rounded-md p-1 text-[10px] text-white', bg)}
             >
               chart-{index + 1}
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Outcome categories">
+        <p className="text-xs text-muted-foreground">
+          Contractor outcomes in charts and import tables, from the --outcome-* tokens.
+        </p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {OUTCOME_CATEGORIES.map((category) => (
+            <div
+              key={category}
+              className={cn(
+                'flex items-center gap-2 rounded-md p-2 text-xs font-medium',
+                OUTCOME_TONES[category].tint,
+              )}
+            >
+              <span
+                className={cn('size-3 shrink-0 rounded-full', OUTCOME_TONES[category].dot)}
+                aria-hidden="true"
+              />
+              {OUTCOME_TONES[category].label}
             </div>
           ))}
         </div>

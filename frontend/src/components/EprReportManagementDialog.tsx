@@ -10,6 +10,8 @@ import {
   type EprQuarterReport,
 } from '@/api'
 import { EprReportPeriodFields } from '@/components/EprReportPeriodFields'
+import { ErrorState } from '@/components/LoadState'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -19,6 +21,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -44,15 +47,10 @@ const metricLabels: Record<EprAdjustmentMetric, string> = {
 const metricOptions = Object.entries(metricLabels).map(([value, label]) => ({ value, label }))
 const numberFormat = new Intl.NumberFormat('en', { maximumFractionDigits: 4 })
 const dateFormat = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' })
-const primaryClass =
-  'cursor-pointer bg-teal-700 text-white! hover:bg-teal-800 focus-visible:ring-teal-600'
-const outlineClass =
-  'cursor-pointer border-slate-300 bg-white text-slate-700! hover:bg-slate-100 focus-visible:ring-teal-600'
-const fieldClass = 'border-slate-300 bg-white text-slate-900 focus-visible:ring-teal-600'
 
 function ReportTotals({ report, title }: { report: EprQuarterReport; title: string }) {
   return (
-    <section className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-3">
+    <section className="min-w-0 rounded-lg border bg-muted/50 p-3">
       <h3 className="mb-2 text-sm font-semibold">{title}</h3>
       <dl className="space-y-1.5 text-sm">
         {getEprReportRows(report).map(([label, value, unit]) => (
@@ -84,10 +82,8 @@ function ChoiceField({
 }) {
   const id = useId()
   return (
-    <div className="min-w-0 space-y-1">
-      <label className="text-sm font-medium" htmlFor={id}>
-        {label}
-      </label>
+    <Field className="min-w-0 gap-1.5">
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <Select value={value} onValueChange={onChange} disabled={disabled}>
         <SelectTrigger id={id} className="min-w-0 [&>span]:truncate">
           <SelectValue placeholder={`Select ${label.toLowerCase()}`} />
@@ -100,7 +96,7 @@ function ChoiceField({
           ))}
         </SelectContent>
       </Select>
-    </div>
+    </Field>
   )
 }
 
@@ -132,7 +128,7 @@ function AdjustmentForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-lg border border-slate-200 p-3">
+    <form onSubmit={submit} className="space-y-3 rounded-lg border p-3">
       <h3 className="text-sm font-semibold">Add adjustment</h3>
       <div className="grid gap-3 sm:grid-cols-2">
         <ChoiceField
@@ -142,23 +138,14 @@ function AdjustmentForm({
           disabled={pending}
           options={sites.map(({ id, label }) => ({ value: String(id), label }))}
         />
-        <div className="space-y-1">
-          <label htmlFor={`${id}-date`} className="text-sm font-medium">
-            Effective date
-          </label>
-          <Input
-            id={`${id}-date`}
-            name="effectiveDate"
-            type="date"
-            required
-            disabled={pending}
-            className={fieldClass}
-          />
-        </div>
+        <Field className="gap-1.5">
+          <FieldLabel htmlFor={`${id}-date`}>Effective date</FieldLabel>
+          <Input id={`${id}-date`} name="effectiveDate" type="date" required disabled={pending} />
+        </Field>
       </div>
       {lines.map((line, index) => (
         <div
-          className="grid gap-2 rounded-md bg-slate-50 p-2 sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-end"
+          className="grid gap-2 rounded-md bg-muted/50 p-2 sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-end"
           key={line.id}
         >
           <ChoiceField
@@ -177,10 +164,8 @@ function AdjustmentForm({
               )
             }
           />
-          <div className="space-y-1">
-            <label htmlFor={`${id}-kg-${line.id}`} className="text-sm font-medium">
-              Change (kg)
-            </label>
+          <Field className="gap-1.5">
+            <FieldLabel htmlFor={`${id}-kg-${line.id}`}>Change (kg)</FieldLabel>
             <Input
               id={`${id}-kg-${line.id}`}
               type="number"
@@ -188,7 +173,6 @@ function AdjustmentForm({
               required
               disabled={pending}
               value={line.amount}
-              className={fieldClass}
               onChange={(event) => {
                 const amount = event.target.value
                 setLines((previous) =>
@@ -196,12 +180,11 @@ function AdjustmentForm({
                 )
               }}
             />
-          </div>
+          </Field>
           {lines.length > 1 && (
             <Button
               type="button"
               variant="outline"
-              className={outlineClass}
               disabled={pending}
               aria-label={`Remove line ${index + 1}`}
               onClick={() => setLines((previous) => previous.filter((item) => item.id !== line.id))}
@@ -211,13 +194,12 @@ function AdjustmentForm({
           )}
         </div>
       ))}
-      <p className="text-xs text-slate-600">
+      <p className="text-xs text-muted-foreground">
         Use a negative number to subtract weight and a positive number to add weight.
       </p>
       <Button
         type="button"
         variant="outline"
-        className={outlineClass}
         disabled={pending || lines.length >= metricOptions.length}
         onClick={() => {
           const lineId = nextId.current++
@@ -226,30 +208,15 @@ function AdjustmentForm({
       >
         Add line
       </Button>
-      <div className="space-y-1">
-        <label htmlFor={`${id}-reason`} className="text-sm font-medium">
-          Reason
-        </label>
-        <Textarea
-          id={`${id}-reason`}
-          name="reason"
-          required
-          maxLength={500}
-          disabled={pending}
-          className={fieldClass}
-        />
-      </div>
+      <Field className="gap-1.5">
+        <FieldLabel htmlFor={`${id}-reason`}>Reason</FieldLabel>
+        <Textarea id={`${id}-reason`} name="reason" required maxLength={500} disabled={pending} />
+      </Field>
       <div className="flex flex-wrap justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          className={outlineClass}
-          disabled={pending}
-          onClick={onCancel}
-        >
+        <Button type="button" variant="outline" disabled={pending} onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" className={primaryClass} disabled={pending || !site || !linesValid}>
+        <Button type="submit" disabled={pending || !site || !linesValid}>
           {pending ? 'Saving…' : 'Save adjustment'}
         </Button>
       </div>
@@ -305,23 +272,15 @@ function ManagementPanel({
 
   if (!data) {
     return error ? (
-      <div className="space-y-2">
-        <p role="alert" className="text-sm text-rose-700">
-          {error}
-        </p>
-        <Button
-          variant="outline"
-          className={outlineClass}
-          onClick={() => {
-            setError('')
-            setAttempt((count) => count + 1)
-          }}
-        >
-          Retry
-        </Button>
-      </div>
+      <ErrorState
+        message={error}
+        onRetry={() => {
+          setError('')
+          setAttempt((count) => count + 1)
+        }}
+      />
     ) : (
-      <p role="status" className="text-sm text-slate-600">
+      <p role="status" className="text-sm text-muted-foreground">
         Loading EPR report.
       </p>
     )
@@ -330,7 +289,7 @@ function ManagementPanel({
   const submitted = data.status === 'submitted'
   return (
     <div className="space-y-4">
-      <p role="status" className="text-sm font-semibold text-teal-800">
+      <p role="status" className="text-sm font-semibold text-primary">
         {submitted ? 'Submitted and locked' : 'Draft'}
         {data.submitted_at && ` · ${dateFormat.format(new Date(data.submitted_at))}`}
         {data.submitted_by && ` · ${data.submitted_by}`}
@@ -348,23 +307,20 @@ function ManagementPanel({
         <section className="space-y-2">
           <h3 className="text-sm font-semibold">Adjustment history</h3>
           {data.adjustments.length === 0 && (
-            <p className="text-sm text-slate-600">No adjustments recorded.</p>
+            <p className="text-sm text-muted-foreground">No adjustments recorded.</p>
           )}
           {data.adjustments.map((entry) => (
-            <div
-              key={entry.id}
-              className="break-words rounded-lg border border-slate-200 p-3 text-sm"
-            >
+            <div key={entry.id} className="rounded-lg border p-3 text-sm break-words">
               <p className="font-medium">
                 {metricLabels[entry.metric]} · {entry.weight_delta_kg > 0 && '+'}
                 {numberFormat.format(entry.weight_delta_kg)} kg
               </p>
-              <p className="text-slate-600">
+              <p className="text-muted-foreground">
                 Effective {entry.effective_date} ·{' '}
                 {data.sites.find((site) => site.id === entry.site_id)?.label}
               </p>
               <p>{entry.reason}</p>
-              <p className="text-xs text-slate-600">
+              <p className="text-xs text-muted-foreground">
                 Recorded {dateFormat.format(new Date(entry.created_at))} by {entry.recorded_by}
               </p>
             </div>
@@ -378,40 +334,32 @@ function ManagementPanel({
         disabled={pending}
         options={data.actors.map(({ id, label }) => ({ value: String(id), label }))}
       />
-      <p className="text-xs text-slate-600">
+      <FieldDescription className="-mt-2 text-xs">
         {data.actors.length
           ? 'Select the account to record in this demo.'
           : 'Create a manager or admin account to record changes.'}
-      </p>
-      {error && (
-        <p role="alert" className="text-sm text-rose-700">
-          {error}
-        </p>
-      )}
+      </FieldDescription>
+      {error && <ErrorState message={error} />}
       {action === 'confirm-submit' && (
-        <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-          <p className="text-sm">
-            Submit Q{quarter} {year} for all sites? The original totals will be locked. Future
-            corrections require an adjustment.
-          </p>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              variant="outline"
-              className={outlineClass}
-              disabled={pending}
-              onClick={() => setAction(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              className={primaryClass}
-              disabled={pending || !actor}
-              onClick={() => void save(() => submitEprQuarter(year, quarter, Number(actor)))}
-            >
-              {pending ? 'Submitting…' : 'Confirm submit and lock'}
-            </Button>
-          </div>
-        </div>
+        <Alert variant="warning" role="group" aria-label="Confirm submit">
+          <AlertDescription className="flex w-full flex-col gap-3">
+            <p className="text-sm text-foreground">
+              Submit Q{quarter} {year} for all sites? The original totals will be locked. Future
+              corrections require an adjustment.
+            </p>
+            <div className="flex flex-wrap justify-end gap-2 self-stretch">
+              <Button variant="outline" disabled={pending} onClick={() => setAction(null)}>
+                Cancel
+              </Button>
+              <Button
+                disabled={pending || !actor}
+                onClick={() => void save(() => submitEprQuarter(year, quarter, Number(actor)))}
+              >
+                {pending ? 'Submitting…' : 'Confirm submit and lock'}
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
       )}
       {action === 'adjustment' && (
         <AdjustmentForm
@@ -437,7 +385,6 @@ function ManagementPanel({
       {action === null && (
         <div className="flex justify-end">
           <Button
-            className={primaryClass}
             disabled={!actor || (submitted && !data.sites.length)}
             onClick={() => {
               setError('')
@@ -479,18 +426,15 @@ export function EprReportManagementDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className={outlineClass}>
+        <Button variant="outline" size="sm">
           <ClipboardList aria-hidden="true" />
           Manage EPR Report
         </Button>
       </DialogTrigger>
-      <DialogContent
-        overlayClassName="bg-black/20"
-        className="max-h-[calc(100svh-2rem)] w-[calc(100%-2rem)] sm:max-w-2xl overflow-y-auto rounded-2xl border-slate-200 bg-white p-5 text-slate-900 sm:rounded-2xl sm:p-6 [&>button]:cursor-pointer [&>button]:text-slate-600"
-      >
+      <DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader className="pr-8 text-left">
           <DialogTitle>Manage EPR Report</DialogTitle>
-          <DialogDescription className="text-slate-600">
+          <DialogDescription>
             Review, submit, and adjust quarterly reports for all sites.
           </DialogDescription>
         </DialogHeader>

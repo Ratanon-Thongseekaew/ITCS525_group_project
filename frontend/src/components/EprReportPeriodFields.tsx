@@ -1,5 +1,6 @@
 import { useId } from 'react'
 
+import { Field, FieldLabel } from '@/components/ui/field'
 import {
   Select,
   SelectContent,
@@ -30,10 +31,8 @@ export function EprReportPeriodFields({
 
   return (
     <div className="grid grid-cols-2 gap-3">
-      <div className="space-y-1.5">
-        <label htmlFor={`${id}-year`} className="text-sm font-medium">
-          Year
-        </label>
+      <Field className="gap-1.5">
+        <FieldLabel htmlFor={`${id}-year`}>Year</FieldLabel>
         <Select
           value={String(year)}
           onValueChange={(value) => onYearChange(Number(value))}
@@ -50,11 +49,9 @@ export function EprReportPeriodFields({
             ))}
           </SelectContent>
         </Select>
-      </div>
-      <div className="space-y-1.5">
-        <label htmlFor={`${id}-quarter`} className="text-sm font-medium">
-          Quarter
-        </label>
+      </Field>
+      <Field className="gap-1.5">
+        <FieldLabel htmlFor={`${id}-quarter`}>Quarter</FieldLabel>
         <Select
           value={String(quarter)}
           onValueChange={(value) => onQuarterChange(Number(value))}
@@ -71,7 +68,7 @@ export function EprReportPeriodFields({
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </Field>
     </div>
   )
 }

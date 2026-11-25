@@ -1,22 +1,15 @@
-import { useCallback, useId, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { Link } from 'react-router'
 import { getHandoffs } from '@/api'
 import { EmptyState } from '@/components/EmptyState'
+import { FilterSelect, type FilterOption } from '@/components/FilterSelect'
 import { LoadState } from '@/components/LoadState'
 import { PageHeader } from '@/components/PageHeader'
 import { PageSection } from '@/components/PageSection'
 import { HandoffActorBar } from '@/components/staff/HandoffActorBar'
 import { HandoffRecordCard } from '@/components/staff/HandoffRecordCard'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { getVisibleRecords } from '@/lib/handoff-records'
 import { useApiResource } from '@/lib/use-api-resource'
 import { useHandoffWorkspace } from '@/lib/use-handoff-workspace'
@@ -27,44 +20,12 @@ import {
   type HandoffRecordSort,
 } from '@/types/handoff'
 
-interface RecordsControlProps<Value extends string> {
-  label: string
-  value: Value
-  options: Record<Value, string>
-  minWidthClass: string
-  onChange: (value: Value) => void
+function toOptions(labels: Record<string, string>): FilterOption[] {
+  return Object.entries(labels).map(([value, label]) => ({ value, label }))
 }
 
-function RecordsControl<Value extends string>({
-  label,
-  value,
-  options,
-  minWidthClass,
-  onChange,
-}: RecordsControlProps<Value>) {
-  const id = useId()
-
-  return (
-    <div className="flex items-center gap-2">
-      <Label htmlFor={id} className="font-normal whitespace-nowrap text-muted-foreground">
-        {label}
-      </Label>
-      <Select value={value} onValueChange={(next) => onChange(next as Value)}>
-        {/* Grows with its value so longer options like "Outcomes Received" don't clip. */}
-        <SelectTrigger id={id} className={`w-auto font-medium whitespace-nowrap ${minWidthClass}`}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {Object.entries<string>(options).map(([optionValue, optionLabel]) => (
-            <SelectItem key={optionValue} value={optionValue}>
-              {optionLabel}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  )
-}
+const filterOptions = toOptions(handoffRecordFilterLabels)
+const sortOptions = toOptions(handoffRecordSortLabels)
 
 export function HandoffRecordsPage() {
   const workspace = useHandoffWorkspace()
@@ -112,19 +73,21 @@ export function HandoffRecordsPage() {
         bordered
         actions={
           <div className="flex flex-wrap gap-x-4 gap-y-2">
-            <RecordsControl
+            <FilterSelect
               label="Filtered by:"
+              labelMode="inline"
               value={filter}
-              options={handoffRecordFilterLabels}
-              minWidthClass="min-w-[96px]"
-              onChange={setFilter}
+              items={filterOptions}
+              onValueChange={(value) => setFilter(value as HandoffRecordFilter)}
+              className="min-w-[96px]"
             />
-            <RecordsControl
+            <FilterSelect
               label="Sort by:"
+              labelMode="inline"
               value={sort}
-              options={handoffRecordSortLabels}
-              minWidthClass="min-w-[112px]"
-              onChange={setSort}
+              items={sortOptions}
+              onValueChange={(value) => setSort(value as HandoffRecordSort)}
+              className="min-w-[112px]"
             />
           </div>
         }

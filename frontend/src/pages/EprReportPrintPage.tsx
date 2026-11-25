@@ -39,10 +39,7 @@ function PrintableReport({
   return (
     <>
       <div className="mb-5 print:hidden">
-        <Button
-          className="cursor-pointer bg-teal-700 text-white! hover:bg-teal-800 focus-visible:ring-teal-600"
-          onClick={() => window.print()}
-        >
+        <Button onClick={() => window.print()}>
           <Printer aria-hidden="true" />
           Print report
         </Button>
@@ -54,7 +51,7 @@ function PrintableReport({
       <p className="mt-2 text-sm">{getEprSourceNote(report)}</p>
       <table className="mt-5 w-full border-collapse text-sm">
         <thead>
-          <tr className="border-b border-slate-400">
+          <tr className="border-b border-foreground/40 print:border-black/40">
             <th scope="col" className="py-2 text-left">
               Metric
             </th>
@@ -65,7 +62,7 @@ function PrintableReport({
         </thead>
         <tbody>
           {getEprReportRows(report).map(([label, value, unit]) => (
-            <tr key={label} className="break-inside-avoid border-b border-slate-200">
+            <tr key={label} className="break-inside-avoid border-b print:border-black/15">
               <th scope="row" className="py-2 text-left font-medium">
                 {label}
               </th>
@@ -98,11 +95,11 @@ export function EprReportPrintPage() {
     quarter <= 4
 
   return (
-    <main className="mx-auto max-w-2xl p-5 text-slate-950 sm:p-8 print:max-w-none print:p-0 print:text-black">
+    <main className="mx-auto max-w-2xl bg-background p-5 text-foreground sm:p-8 print:max-w-none print:bg-white print:p-0 print:text-black">
       <Link
         to="../../compliance-dashboard"
         relative="path"
-        className="mb-5 inline-block cursor-pointer rounded-sm text-sm font-medium text-teal-700 underline underline-offset-4 transition-colors hover:text-teal-900 hover:decoration-2 focus-visible:ring-2 focus-visible:ring-teal-600 print:hidden"
+        className="mb-5 inline-block rounded-sm text-sm font-medium text-primary underline underline-offset-4 transition-colors outline-none hover:decoration-2 focus-visible:ring-[3px] focus-visible:ring-ring/50 print:hidden"
       >
         Back to Compliance Dashboard
       </Link>

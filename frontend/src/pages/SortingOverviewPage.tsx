@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Info, MapPin, UserRound } from 'lucide-react'
+import { MapPin, UserRound } from 'lucide-react'
 
 import {
   getBins,
@@ -11,8 +11,12 @@ import {
   type HandoffActorOption,
   type SortingStatsResponse,
 } from '@/api'
+import { ErrorState } from '@/components/LoadState'
+import { PageHeader } from '@/components/PageHeader'
+import { StatCard } from '@/components/StatCard'
+import { TableCard } from '@/components/TableCard'
+import { TemporaryAccountPicker } from '@/components/TemporaryAccountPicker'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -21,9 +25,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { BIN_TYPE_TONES } from '@/lib/bin-type-tones'
-import { useApiResource } from '@/lib/use-api-resource'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { BIN_STATUS_BADGE_VARIANTS, BIN_TYPE_TONES } from '@/lib/bin-type-tones'
 import { BIN_STATUS_LABELS, BIN_TYPE_LABELS, CONDITION_LABELS } from '@/lib/sorting-labels'
+import { useApiResource } from '@/lib/use-api-resource'
 
 // Until managers sign in, the page asks which manager (or administrator) is looking. The choice
 // is remembered per browser; storage can be unavailable, so it is optional.
@@ -113,213 +125,175 @@ export function SortingOverviewPage() {
   const error = options.error ?? overview.error
   const data = overview.data
 
+  let pickerMessage: string | null = null
+  if (!options.isLoading && !actor && !options.error) {
+    pickerMessage = managers.length
+      ? 'Choose your manager account to see sorting data.'
+      : 'No manager accounts exist yet.'
+  }
+
   return (
-    <div className="space-y-6">
-      <div>
-        <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600">
-          Store Operations • Read only
-        </span>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Sorting Overview</h1>
-        <p className="text-sm text-slate-500">
-          Garment intake and bins for one site, or all of your sites together.
-        </p>
-      </div>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Store Operations • Read only"
+        title="Sorting Overview"
+        description="Garment intake and bins for one site, or all of your sites together."
+      />
 
-      <div className="flex flex-col gap-3 rounded-[10px] border border-dashed border-amber-300 bg-amber-50/40 px-4 py-3">
-        <p className="flex items-start gap-2 text-xs text-amber-800">
-          <Info className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-          <span>
-            <span className="mr-1.5 inline-flex rounded-full bg-amber-100 px-1.5 py-px font-medium">
-              Temporary
-            </span>
-            Manager login isn’t available yet, so choose your account here. This picker will be
-            replaced by signing in.
-          </span>
-        </p>
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-x-6">
-          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
-            <Label
-              htmlFor="overview-actor"
-              className="flex items-center gap-1.5 text-sm font-normal text-slate-500"
+      <TemporaryAccountPicker
+        role="Manager"
+        noticeId="overview-actor-notice"
+        message={pickerMessage}
+      >
+        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+          <Label
+            htmlFor="overview-actor"
+            className="flex items-center gap-1.5 font-normal text-muted-foreground"
+          >
+            <UserRound className="size-4" aria-hidden="true" />
+            Manager
+          </Label>
+          <Select
+            value={actor ? String(actor.id) : ''}
+            onValueChange={chooseActor}
+            disabled={options.isLoading || managers.length === 0}
+          >
+            <SelectTrigger
+              id="overview-actor"
+              aria-describedby="overview-actor-notice"
+              className="bg-background sm:w-auto sm:min-w-[240px]"
             >
-              <UserRound className="size-4" aria-hidden="true" />
-              Manager
-            </Label>
-            <Select
-              value={actor ? String(actor.id) : ''}
-              onValueChange={chooseActor}
-              disabled={options.isLoading || managers.length === 0}
-            >
-              <SelectTrigger id="overview-actor" className="h-9 w-full min-w-[240px] sm:w-auto">
-                <SelectValue placeholder={options.isLoading ? 'Loading…' : 'Choose your account'} />
-              </SelectTrigger>
-              <SelectContent>
-                {managers.map((manager) => (
-                  <SelectItem key={manager.id} value={String(manager.id)}>
-                    {manager.username}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
-            <Label
-              htmlFor="overview-site"
-              className="flex items-center gap-1.5 text-sm font-normal text-slate-500"
-            >
-              <MapPin className="size-4" aria-hidden="true" />
-              Site
-            </Label>
-            <Select value={siteChoice} onValueChange={setSiteChoice} disabled={actor === null}>
-              <SelectTrigger id="overview-site" className="h-9 w-full min-w-[200px] sm:w-auto">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_SITES}>All sites</SelectItem>
-                {sites.map((site) => (
-                  <SelectItem key={site.id} value={String(site.id)}>
-                    {site.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              <SelectValue placeholder={options.isLoading ? 'Loading…' : 'Choose your account'} />
+            </SelectTrigger>
+            <SelectContent>
+              {managers.map((manager) => (
+                <SelectItem key={manager.id} value={String(manager.id)}>
+                  {manager.username}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        {!options.isLoading && !actor && !options.error ? (
-          <p className="text-xs text-amber-700">
-            {managers.length
-              ? 'Choose your manager account to see sorting data.'
-              : 'No manager accounts exist yet.'}
-          </p>
-        ) : null}
-      </div>
+        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+          <Label
+            htmlFor="overview-site"
+            className="flex items-center gap-1.5 font-normal text-muted-foreground"
+          >
+            <MapPin className="size-4" aria-hidden="true" />
+            Site
+          </Label>
+          <Select value={siteChoice} onValueChange={setSiteChoice} disabled={actor === null}>
+            <SelectTrigger id="overview-site" className="bg-background sm:w-auto sm:min-w-[200px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_SITES}>All sites</SelectItem>
+              {sites.map((site) => (
+                <SelectItem key={site.id} value={String(site.id)}>
+                  {site.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </TemporaryAccountPicker>
 
-      {error ? (
-        <div
-          role="alert"
-          className="rounded-[10px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"
-        >
-          {error}
-        </div>
-      ) : null}
+      {error ? <ErrorState message={error} /> : null}
 
       {data ? (
         <>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {[
-              ['Sorted today', data.stats.total_sorted_today],
-              ['Resale', data.stats.resale_count],
-              ['Recycle', data.stats.recycle_count],
-              ['Repair / Upcycle', data.stats.repair_count],
-            ].map(([label, value]) => (
-              <Card key={label} className="border-slate-200">
-                <CardHeader className="p-4 pb-2">
-                  <CardDescription className="text-xs font-medium">{label}</CardDescription>
-                  <CardTitle className="text-2xl font-bold text-slate-900">{value}</CardTitle>
-                </CardHeader>
-              </Card>
-            ))}
-          </div>
+          <dl className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <StatCard label="Sorted today" value={data.stats.total_sorted_today} />
+            <StatCard label="Resale" value={data.stats.resale_count} tone="resale" />
+            <StatCard label="Recycle" value={data.stats.recycle_count} tone="recycle" />
+            <StatCard label="Repair / Upcycle" value={data.stats.repair_count} tone="repair" />
+          </dl>
 
-          <Card className="border-slate-200">
-            <CardHeader className="p-5 pb-3">
-              <CardTitle className="text-lg font-bold text-slate-900">Bins</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-y border-slate-200 bg-slate-50 font-semibold text-slate-600">
-                      <th className="px-4 py-2.5">Site</th>
-                      <th className="px-4 py-2.5">Bin Code</th>
-                      <th className="px-4 py-2.5">Type</th>
-                      <th className="px-4 py-2.5">Status</th>
-                      <th className="px-4 py-2.5">Items</th>
-                      <th className="px-4 py-2.5">Weight (kg)</th>
-                      <th className="px-4 py-2.5">Created</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {data.bins.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="py-6 text-center text-slate-500">
-                          No bins found.
-                        </td>
-                      </tr>
-                    ) : (
-                      data.bins.map((bin) => (
-                        <tr key={bin.id}>
-                          <td className="px-4 py-2.5 text-slate-700">{bin.site_name}</td>
-                          <td className="px-4 py-2.5 font-semibold text-slate-900">
-                            {bin.bin_code}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <Badge variant={BIN_TYPE_TONES[bin.bin_type].variant}>
-                              {BIN_TYPE_LABELS[bin.bin_type]}
-                            </Badge>
-                          </td>
-                          <td className="px-4 py-2.5">{BIN_STATUS_LABELS[bin.status]}</td>
-                          <td className="px-4 py-2.5">
-                            {bin.item_count} / {bin.max_capacity}
-                          </td>
-                          <td className="px-4 py-2.5">{bin.total_weight_kg}</td>
-                          <td className="px-4 py-2.5 text-slate-500">
-                            {formatDateTime(bin.created_at)}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+          <TableCard title="Bins">
+            <Table className="text-xs">
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead className="px-4">Site</TableHead>
+                  <TableHead className="px-4">Bin Code</TableHead>
+                  <TableHead className="px-4">Type</TableHead>
+                  <TableHead className="px-4">Status</TableHead>
+                  <TableHead className="px-4">Items</TableHead>
+                  <TableHead className="px-4">Weight (kg)</TableHead>
+                  <TableHead className="px-4">Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.bins.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-6 text-center text-muted-foreground">
+                      No bins found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  data.bins.map((bin) => (
+                    <TableRow key={bin.id}>
+                      <TableCell className="px-4">{bin.site_name}</TableCell>
+                      <TableCell className="px-4 font-semibold">{bin.bin_code}</TableCell>
+                      <TableCell className="px-4">
+                        <Badge variant={BIN_TYPE_TONES[bin.bin_type].variant}>
+                          {BIN_TYPE_LABELS[bin.bin_type]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="px-4">
+                        <Badge variant={BIN_STATUS_BADGE_VARIANTS[bin.status]}>
+                          {BIN_STATUS_LABELS[bin.status]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="px-4">
+                        {bin.item_count} / {bin.max_capacity}
+                      </TableCell>
+                      <TableCell className="px-4">{bin.total_weight_kg}</TableCell>
+                      <TableCell className="px-4 text-muted-foreground">
+                        {formatDateTime(bin.created_at)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableCard>
 
-          <Card className="border-slate-200">
-            <CardHeader className="p-5 pb-3">
-              <CardTitle className="text-lg font-bold text-slate-900">Recent garments</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-y border-slate-200 bg-slate-50 font-semibold text-slate-600">
-                      <th className="px-4 py-2.5">Site</th>
-                      <th className="px-4 py-2.5">Received</th>
-                      <th className="px-4 py-2.5">Category</th>
-                      <th className="px-4 py-2.5">Condition</th>
-                      <th className="px-4 py-2.5">Bin</th>
-                      <th className="px-4 py-2.5">Weight (kg)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {data.garments.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="py-6 text-center text-slate-500">
-                          No garments sorted yet.
-                        </td>
-                      </tr>
-                    ) : (
-                      data.garments.map((garment) => (
-                        <tr key={garment.id}>
-                          <td className="px-4 py-2.5 text-slate-700">{garment.site_name}</td>
-                          <td className="px-4 py-2.5 text-slate-500">
-                            {formatDateTime(garment.created_at)}
-                          </td>
-                          <td className="px-4 py-2.5 font-semibold text-slate-900">
-                            {garment.category}
-                          </td>
-                          <td className="px-4 py-2.5">{CONDITION_LABELS[garment.condition]}</td>
-                          <td className="px-4 py-2.5 font-mono text-[11px]">{garment.bin_code}</td>
-                          <td className="px-4 py-2.5">{garment.weight_kg ?? '—'}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+          <TableCard title="Recent garments">
+            <Table className="text-xs">
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead className="px-4">Site</TableHead>
+                  <TableHead className="px-4">Received</TableHead>
+                  <TableHead className="px-4">Category</TableHead>
+                  <TableHead className="px-4">Condition</TableHead>
+                  <TableHead className="px-4">Bin</TableHead>
+                  <TableHead className="px-4">Weight (kg)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.garments.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-6 text-center text-muted-foreground">
+                      No garments sorted yet.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  data.garments.map((garment) => (
+                    <TableRow key={garment.id}>
+                      <TableCell className="px-4">{garment.site_name}</TableCell>
+                      <TableCell className="px-4 text-muted-foreground">
+                        {formatDateTime(garment.created_at)}
+                      </TableCell>
+                      <TableCell className="px-4 font-semibold">{garment.category}</TableCell>
+                      <TableCell className="px-4">{CONDITION_LABELS[garment.condition]}</TableCell>
+                      <TableCell className="px-4 font-mono">{garment.bin_code}</TableCell>
+                      <TableCell className="px-4">{garment.weight_kg ?? '—'}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableCard>
         </>
       ) : null}
     </div>

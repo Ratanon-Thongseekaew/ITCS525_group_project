@@ -55,6 +55,13 @@
   --repair-foreground: oklch(0.985 0 0);
   --repair-soft: oklch(0.951 0.026 236.824); /* sky-100 */
   --repair-soft-foreground: oklch(0.443 0.11 240.79); /* sky-800 */
+  /* Contractor outcome categories, for charts and outcome columns. */
+  --outcome-upcycled: oklch(0.6 0.118 184.704); /* teal-600 */
+  --outcome-fibre-to-fibre: oklch(0.623 0.214 259.815); /* blue-500 */
+  --outcome-downcycled: oklch(0.379 0.146 265.522); /* blue-900 */
+  --outcome-exported: oklch(0.769 0.188 70.08); /* amber-500 */
+  --outcome-landfilled: oklch(0.554 0.046 257.417); /* slate-500 */
+  --outcome-incinerated: oklch(0.586 0.253 17.585); /* rose-600 */
 }
 
 .dark {
@@ -101,6 +108,12 @@
   --repair-foreground: oklch(0.293 0.066 243.157); /* sky-950 */
   --repair-soft: oklch(0.293 0.066 243.157); /* sky-950 */
   --repair-soft-foreground: oklch(0.828 0.111 230.318); /* sky-300 */
+  --outcome-upcycled: oklch(0.777 0.152 181.912); /* teal-400 */
+  --outcome-fibre-to-fibre: oklch(0.707 0.165 254.624); /* blue-400 */
+  --outcome-downcycled: oklch(0.785 0.115 274.713); /* indigo-300 */
+  --outcome-exported: oklch(0.828 0.189 84.429); /* amber-400 */
+  --outcome-landfilled: oklch(0.704 0.04 256.788); /* slate-400 */
+  --outcome-incinerated: oklch(0.712 0.194 13.428); /* rose-400 */
 }
 
 @theme inline {
@@ -151,6 +164,12 @@
   --color-repair-foreground: var(--repair-foreground);
   --color-repair-soft: var(--repair-soft);
   --color-repair-soft-foreground: var(--repair-soft-foreground);
+  --color-outcome-upcycled: var(--outcome-upcycled);
+  --color-outcome-fibre-to-fibre: var(--outcome-fibre-to-fibre);
+  --color-outcome-downcycled: var(--outcome-downcycled);
+  --color-outcome-exported: var(--outcome-exported);
+  --color-outcome-landfilled: var(--outcome-landfilled);
+  --color-outcome-incinerated: var(--outcome-incinerated);
 }
 
 @layer base {

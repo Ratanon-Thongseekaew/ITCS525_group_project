@@ -530,6 +530,16 @@ text-resale-foreground`) for the sorting quick-tap buttons, and the soft pair
   `lib/bin-type-tones.ts` maps each `BinType` to its classes (badge variant,
   solid, soft, fill, progress, and toggle-on) and each bin status to a badge
   variant. `lib/handoff-records.ts` does the same for handoff statuses.
+- **Outcome colors:** the six contractor outcome categories have their own
+  tokens: `--outcome-upcycled`, `--outcome-fibre-to-fibre`,
+  `--outcome-downcycled`, `--outcome-exported`, `--outcome-landfilled`, and
+  `--outcome-incinerated`, each with light and dark values.
+  `lib/outcome-tones.ts` maps each API outcome category to its label, chart
+  color (`var(--outcome-…)`, for a Recharts `ChartConfig`), dot class, and
+  column tint. Use it for charts and outcome table columns instead of hex
+  colors. Other charts use `--chart-1` to `--chart-5`. To pass a token to an
+  SVG, use `style={{ fill }}`, because a CSS variable doesn't resolve in a
+  presentation attribute.
 - **Primitives:** alert, alert-dialog, badge, breadcrumb, button, card, chart,
   checkbox, dialog, dropdown-menu, empty, field, input, input-group, label,
   progress, radio-group, select, separator, sheet,
@@ -579,7 +589,15 @@ text-resale-foreground`) for the sorting quick-tap buttons, and the soft pair
   - `PageSection`: a titled `section` with an actions slot (filters), a footer
     slot (record counts), and an optional `headingRef` for returning focus.
   - `StatCard`: one summary metric as a `dt`/`dd` pair inside a `dl` grid,
-    with `default`, `destructive`, `resale`, `recycle`, and `repair` tones.
+    with `default`, `success`, `warning`, `info`, `destructive`, `resale`,
+    `recycle`, and `repair` tones.
+  - `TableCard`: a titled card around a `Table`, with actions and footer slots.
+  - `FilterSelect`: a compact list filter. `labelMode="hidden"` names it with
+    `aria-label`; `"inline"` shows a label before it. Long values truncate
+    with a `title` tooltip.
+  - `TemporaryAccountPicker`: the dashed "Temporary" notice that holds an
+    account picker until login exists. Remove it with real login.
+  - `Stepper`: progress through a multi-step flow (`aria-current="step"`).
   - `RecordCard` and `RecordDetail`: a bin or record row with an icon tile,
     identity, a `dl` of details, a status slot, and optional children. With
     `onSelect`, the title becomes a stretched button so the whole card is
@@ -591,13 +609,21 @@ text-resale-foreground`) for the sorting quick-tap buttons, and the soft pair
     `staff/DirectResaleProcessDialog`. `staff/handoff-form.tsx` holds the
     handoff fields, `BinSummary`, and `HandoffDialogShell`, built on `field`
     and `input-group`.
+  - Contractor import: `ContractorReportImport` holds the wizard state and
+    renders `contractor-import/ImportUploadStep`, `ImportReviewStep`, and
+    `ImportResultStep`.
 - **Migrated so far:** the app shell (`AppLayout`, `WorkspaceSidebar`,
   `ApiStatus`), `TextileTrackLoader`, the login, 404, and contractor report
-  import wrapper pages, and the whole staff workspace (Garment Sorting, Direct
-  Resale with its two subpages, and both Recycle Bin Handoff pages).
-- **Legacy styles:** the manager and admin pages still use palette classes.
-  When a page moves to the design system, replace classes as follows and then
-  delete any legacy CSS that is no longer used:
+  import wrapper pages, the whole staff workspace (Garment Sorting, Direct
+  Resale with its two subpages, and both Recycle Bin Handoff pages), and the
+  whole manager workspace (Compliance Dashboard, which admins share, the EPR
+  dialogs and print page, Sorting Overview, Resale Bin Records with the
+  Converge visual, and Import Data).
+- **Legacy styles:** only the admin `UserManagementPage` still uses palette
+  classes and inline styles. Once it is migrated, the last step is turning
+  dark mode on (see **Dark mode**). When a page moves to the design system,
+  replace classes as follows and then delete any legacy CSS that is no longer
+  used:
 
   | Replace                                     | With                                                 |
   | ------------------------------------------- | ---------------------------------------------------- |
