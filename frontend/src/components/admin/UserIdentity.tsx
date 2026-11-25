@@ -31,7 +31,7 @@ export function UserIdentity({ user, title, meta, className }: UserIdentityProps
             'text-xs font-medium',
             user.status === 'Active'
               ? 'bg-primary/10 text-primary'
-              : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
+              : 'bg-warning-soft text-warning-soft-foreground',
           )}
         >
           {getInitials(user.name)}

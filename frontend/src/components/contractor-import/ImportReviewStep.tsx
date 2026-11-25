@@ -45,7 +45,7 @@ function ValidationStatus({ row }: { row: ReportRow }) {
       </Badge>
       <p
         className={cn(
-          'text-[11px] font-medium whitespace-normal',
+          'text-xs font-medium whitespace-normal',
           isError ? 'text-destructive' : 'text-muted-foreground',
         )}
       >
@@ -138,7 +138,7 @@ export function ImportReviewStep({
                 key={row.row}
                 className={cn(
                   row.status === 'Error' && 'bg-destructive/5 hover:bg-destructive/10',
-                  row.status === 'Warning' && 'bg-amber-50/50 dark:bg-amber-950/20',
+                  row.status === 'Warning' && 'bg-warning-soft/50',
                 )}
               >
                 <TableCell className="px-3 font-semibold text-muted-foreground">

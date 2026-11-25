@@ -53,7 +53,7 @@ export function WorkspaceSidebar({ role, items }: WorkspaceSidebarProps) {
 
       <SidebarContent>
         <SidebarGroup className="px-3">
-          <SidebarGroupLabel className="px-2 text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+          <SidebarGroupLabel className="px-2 text-2xs font-semibold tracking-[0.12em] text-muted-foreground uppercase">
             Workspace
           </SidebarGroupLabel>
           <SidebarGroupContent>

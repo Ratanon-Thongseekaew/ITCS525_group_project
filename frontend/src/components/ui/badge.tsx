@@ -16,12 +16,10 @@ const badgeVariants = cva(
           'border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
         ghost: '[a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
         link: 'text-primary underline-offset-4 [a&]:hover:underline',
-        // Project addition: status variants with light and dark pairs (see AI_README.md).
-        success:
-          'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 [a&]:hover:bg-emerald-200 dark:[a&]:hover:bg-emerald-900',
-        warning:
-          'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 [a&]:hover:bg-amber-200 dark:[a&]:hover:bg-amber-900',
-        info: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 [a&]:hover:bg-sky-200 dark:[a&]:hover:bg-sky-900',
+        // Project addition: status variants built on the --success, --warning and --info tokens.
+        success: 'bg-success-soft text-success-soft-foreground [a&]:hover:bg-success-soft/80',
+        warning: 'bg-warning-soft text-warning-soft-foreground [a&]:hover:bg-warning-soft/80',
+        info: 'bg-info-soft text-info-soft-foreground [a&]:hover:bg-info-soft/80',
         // Project addition: bin-type variants built on the --resale, --recycle and --repair tokens.
         resale: 'bg-resale-soft text-resale-soft-foreground [a&]:hover:bg-resale-soft/80',
         recycle: 'bg-recycle-soft text-recycle-soft-foreground [a&]:hover:bg-recycle-soft/80',

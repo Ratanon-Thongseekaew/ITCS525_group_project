@@ -36,7 +36,7 @@ export function SortActionButton({
       )}
     >
       <span
-        className="absolute top-3 right-3 rounded bg-black/20 px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase"
+        className="absolute top-3 right-3 rounded bg-black/20 px-2 py-0.5 text-2xs font-bold tracking-wider uppercase"
         aria-hidden="true"
       >
         Key: {shortcut}

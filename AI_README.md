@@ -516,11 +516,18 @@ python -m ruff check backend
   `bg-primary text-primary-foreground`, `text-primary`) and the primitives in
   `components/ui/`, not palette classes such as `bg-white` or `text-slate-500`.
   Token utilities switch with the theme; palette classes do not.
-- **Status colors:** `Badge` and `Alert` have project-specific `success`,
-  `warning`, and `info` variants (Alert also has `destructive`), each with a
-  light and `dark:` pair. Use them for states such as approved, disputed, or
-  awaiting pickup instead of hand-styled pills or boxes. Don't add new tokens
-  for status colors.
+- **Status colors:** `--success` (emerald), `--warning` (amber), and `--info`
+  (sky) tokens, each with `-foreground`, `-soft`, and `-soft-foreground`, in
+  light and dark. `Badge` and `Alert` have matching `success`, `warning`, and
+  `info` variants (Alert also has `destructive`), and `StatCard` has the same
+  tones. Use them for states such as approved, disputed, or awaiting pickup
+  instead of hand-styled pills or boxes, and use the soft tokens directly
+  (`bg-warning-soft`) for other tinted surfaces. Never write status colors as
+  palette classes with `dark:` pairs.
+- **Text sizes:** use the Tailwind scale. `text-2xs` (10px, defined in
+  `styles.css` and registered with `tailwind-merge` in `lib/utils.ts`) is the
+  smallest size, for chart legends and meta labels only. Avoid arbitrary sizes
+  such as `text-[11px]`.
 - **Bin-type colors:** bin types are categories, not statuses, so they have
   their own tokens: `--resale` (teal), `--recycle` (amber), and `--repair`
   (sky), each with `-foreground`, `-soft`, and `-soft-foreground`, in light
@@ -553,7 +560,7 @@ text-resale-foreground`) for the sorting quick-tap buttons, and the soft pair
 - **Local changes to the primitives** (keep them when updating):
   - `CardTitle` renders an `h2` and `AlertTitle` an `h5`, so titles stay headings.
   - `Badge` and `Alert` add the `success`, `warning`, `info`, `resale`,
-    `recycle`, and `repair` variants.
+    `recycle`, and `repair` variants, built on the status and bin-type tokens.
   - `Card` keeps the section-padding model: `CardHeader` is a `flex flex-col p-6`
     column (pages make it a row with `flex-row justify-between`), and
     `CardContent` and `CardFooter` use `p-6 pt-0`. Upstream uses `py-6 gap-6`
@@ -623,11 +630,13 @@ text-resale-foreground`) for the sorting quick-tap buttons, and the soft pair
   - Contractor import: `ContractorReportImport` holds the wizard state and
     renders `contractor-import/ImportUploadStep`, `ImportReviewStep`, and
     `ImportResultStep`.
-- **Status:** every page uses the design system. Palette classes remain only
-  where they're intended: the `dark:`-paired status tints in `StatCard`, the
-  import review rows, and the Invited avatar, the login video scrim, the EPR
-  print overrides, and the `/design-system` swatches.
-  `lib/react-vibe/signal.tsx` is unused vendored code.
+- **Status:** every page uses the design system. Palette classes and raw
+  colors remain only where they're intended: the login video scrim and its
+  teal glow (photo treatment, the same in both themes), the EPR print
+  overrides (black on white on paper), the `bg-black/20` key chip on the
+  sorting buttons, and the `/design-system` swatch labels.
+  `WorkspaceFeaturePlaceholderPage` is kept, already migrated, for the
+  commented-out Recycle Bin Records route.
 - **Reviewing new code:** replace palette classes and hand-built controls as
   follows:
 

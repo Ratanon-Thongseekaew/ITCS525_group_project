@@ -120,6 +120,12 @@ const COLOR_TOKENS = [
   ['ring', 'bg-ring', 'text-foreground'],
 ] as const
 
+const STATUS_TOKENS = [
+  ['success', 'bg-success text-success-foreground', 'bg-success-soft text-success-soft-foreground'],
+  ['warning', 'bg-warning text-warning-foreground', 'bg-warning-soft text-warning-soft-foreground'],
+  ['info', 'bg-info text-info-foreground', 'bg-info-soft text-info-soft-foreground'],
+] as const
+
 const BIN_TYPE_TOKENS = [
   ['resale', 'bg-resale text-resale-foreground', 'bg-resale-soft text-resale-soft-foreground'],
   ['recycle', 'bg-recycle text-recycle-foreground', 'bg-recycle-soft text-recycle-soft-foreground'],
@@ -182,9 +188,24 @@ function ThemePanel({ theme }: { theme: PanelTheme }) {
           {CHART_TOKENS.map((bg, index) => (
             <div
               key={bg}
-              className={cn('flex h-10 flex-1 items-end rounded-md p-1 text-[10px] text-white', bg)}
+              className={cn('flex h-10 flex-1 items-end rounded-md p-1 text-2xs text-white', bg)}
             >
               chart-{index + 1}
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Status">
+        <p className="text-xs text-muted-foreground">
+          States such as approved, disputed, or pending: soft for badges, alerts, and tinted
+          surfaces, solid for emphasis.
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {STATUS_TOKENS.map(([name, solid, soft]) => (
+            <div key={name} className="grid gap-1 text-xs font-medium">
+              <div className={cn('rounded-md p-3', solid)}>{name}</div>
+              <div className={cn('rounded-md p-3', soft)}>{name}-soft</div>
             </div>
           ))}
         </div>
@@ -620,7 +641,7 @@ export function DesignSystemPage() {
         <Card>
           <CardContent className="grid gap-3 p-4 text-sm sm:grid-cols-2">
             <div>
-              <p className="font-medium text-emerald-700 dark:text-emerald-400">Do</p>
+              <p className="font-medium text-success">Do</p>
               <p className="text-muted-foreground">
                 Use <code>Button</code>, <code>Select</code>, <code>Table</code>, <code>Alert</code>{' '}
                 and <code>Badge</code> with tokens like <code>bg-card</code>,{' '}

@@ -7,21 +7,20 @@ export type StatCardTone =
 
 const toneClasses: Record<StatCardTone, { card: string; label: string; value: string }> = {
   default: { card: '', label: 'text-muted-foreground', value: 'text-foreground' },
-  // Same light and dark pairs as the Badge and Alert status variants.
   success: {
-    card: 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/40',
-    label: 'text-emerald-800 dark:text-emerald-300',
-    value: 'text-emerald-800 dark:text-emerald-300',
+    card: 'border-success/30 bg-success-soft/60',
+    label: 'text-success-soft-foreground',
+    value: 'text-success-soft-foreground',
   },
   warning: {
-    card: 'border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/40',
-    label: 'text-amber-800 dark:text-amber-300',
-    value: 'text-amber-800 dark:text-amber-300',
+    card: 'border-warning/30 bg-warning-soft/60',
+    label: 'text-warning-soft-foreground',
+    value: 'text-warning-soft-foreground',
   },
   info: {
-    card: 'border-sky-200 bg-sky-50/60 dark:border-sky-900 dark:bg-sky-950/40',
-    label: 'text-sky-800 dark:text-sky-300',
-    value: 'text-sky-800 dark:text-sky-300',
+    card: 'border-info/30 bg-info-soft/60',
+    label: 'text-info-soft-foreground',
+    value: 'text-info-soft-foreground',
   },
   destructive: {
     card: 'border-destructive/30 bg-destructive/5',

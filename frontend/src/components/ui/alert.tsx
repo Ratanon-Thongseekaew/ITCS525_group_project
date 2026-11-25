@@ -10,12 +10,12 @@ const alertVariants = cva(
         default: 'bg-card text-card-foreground',
         destructive:
           'bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 [&>svg]:text-current',
-        // Project addition: status variants with light and dark pairs (see AI_README.md).
+        // Project addition: status variants built on the --success, --warning and --info tokens.
         success:
-          'border-emerald-200 bg-emerald-50 text-emerald-900 *:data-[slot=alert-description]:text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200 dark:*:data-[slot=alert-description]:text-emerald-300',
+          'border-success/30 bg-success-soft/60 text-success-soft-foreground *:data-[slot=alert-description]:text-success-soft-foreground/90',
         warning:
-          'border-amber-200 bg-amber-50 text-amber-900 *:data-[slot=alert-description]:text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200 dark:*:data-[slot=alert-description]:text-amber-300',
-        info: 'border-sky-200 bg-sky-50 text-sky-900 *:data-[slot=alert-description]:text-sky-800 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-200 dark:*:data-[slot=alert-description]:text-sky-300',
+          'border-warning/30 bg-warning-soft/60 text-warning-soft-foreground *:data-[slot=alert-description]:text-warning-soft-foreground/90',
+        info: 'border-info/30 bg-info-soft/60 text-info-soft-foreground *:data-[slot=alert-description]:text-info-soft-foreground/90',
         // Project addition: bin-type variants built on the --resale, --recycle and --repair tokens.
         resale:
           'border-resale/30 bg-resale-soft text-resale-soft-foreground *:data-[slot=alert-description]:text-resale-soft-foreground/90',

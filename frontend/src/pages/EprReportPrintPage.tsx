@@ -4,6 +4,14 @@ import { Link, useLocation, useSearchParams } from 'react-router'
 
 import { getEprQuarterReport, type EprQuarterReport } from '@/api'
 import { Button } from '@/components/ui/button'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { getEprReportRows, getEprSourceNote } from '@/lib/epr-report'
 
 const numberFormatter = new Intl.NumberFormat('en', { maximumFractionDigits: 4 })
@@ -49,31 +57,34 @@ function PrintableReport({
         Q{quarter} {year} · All sites
       </p>
       <p className="mt-2 text-sm">{getEprSourceNote(report)}</p>
-      <table className="mt-5 w-full border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-foreground/40 print:border-black/40">
-            <th scope="col" className="py-2 text-left">
+      <Table className="mt-5">
+        <TableHeader>
+          <TableRow className="border-foreground/40 hover:bg-transparent print:border-black/40">
+            <TableHead scope="col" className="px-0">
               Metric
-            </th>
-            <th scope="col" className="py-2 pl-2 text-right">
+            </TableHead>
+            <TableHead scope="col" className="pr-0 pl-2 text-right">
               Value
-            </th>
-          </tr>
-        </thead>
-        <tbody>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {getEprReportRows(report).map(([label, value, unit]) => (
-            <tr key={label} className="break-inside-avoid border-b print:border-black/15">
-              <th scope="row" className="py-2 text-left font-medium">
+            <TableRow
+              key={label}
+              className="break-inside-avoid hover:bg-transparent print:border-black/15"
+            >
+              <TableHead scope="row" className="px-0 text-foreground print:text-black">
                 {label}
-              </th>
-              <td className="whitespace-nowrap py-2 pl-2 text-right tabular-nums">
+              </TableHead>
+              <TableCell className="pr-0 pl-2 text-right tabular-nums">
                 {numberFormatter.format(value)}
                 {unit === '%' ? '%' : ` ${unit}`}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </>
   )
 }

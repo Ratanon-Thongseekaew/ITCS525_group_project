@@ -190,7 +190,7 @@ export default function Converge({
               }}
             />
 
-            <span className="mb-0.5 font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
+            <span className="mb-0.5 font-mono text-2xs tracking-widest text-muted-foreground uppercase">
               {hubTopText}
             </span>
             <span

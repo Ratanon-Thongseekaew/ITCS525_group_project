@@ -170,7 +170,7 @@ function OutcomeDonut({
                   ))}
                 </Pie>
                 <ChartLegend
-                  content={<ChartLegendContent className="flex-wrap gap-x-4 gap-y-2 text-[10px]" />}
+                  content={<ChartLegendContent className="flex-wrap gap-x-4 gap-y-2 text-2xs" />}
                 />
               </PieChart>
             </ChartContainer>
@@ -178,7 +178,7 @@ function OutcomeDonut({
               <strong className="block text-2xl tracking-tight text-foreground">
                 {numberFormatter.format(recoveryRate)}%
               </strong>
-              <span className="text-[10px] text-muted-foreground">Recovery</span>
+              <span className="text-2xs text-muted-foreground">Recovery</span>
             </div>
           </div>
         ) : (
@@ -200,7 +200,7 @@ function MonthlyOutcomeChart({
     <Card>
       <CardHeader className="flex-row items-start justify-between gap-4 p-4 pb-1">
         <CardTitle className="text-sm">Contractor Outcomes in {year}</CardTitle>
-        <p className="text-right text-[10px] text-muted-foreground">Annual monthly trend</p>
+        <p className="text-right text-2xs text-muted-foreground">Annual monthly trend</p>
       </CardHeader>
       <CardContent className="p-2 sm:p-4 sm:pt-2">
         {data.length ? (
@@ -212,7 +212,7 @@ function MonthlyOutcomeChart({
                 <YAxis tickLine={false} axisLine={false} tickMargin={8} width={44} />
                 <ChartTooltip content={<ChartTooltipContent indicator="dot" />} />
                 <ChartLegend
-                  content={<ChartLegendContent className="flex-wrap gap-x-4 gap-y-2 text-[10px]" />}
+                  content={<ChartLegendContent className="flex-wrap gap-x-4 gap-y-2 text-2xs" />}
                 />
                 {OUTCOME_CATEGORIES.map((category, index) => (
                   <Bar
@@ -251,7 +251,7 @@ function ExceptionTable({ exceptions }: { exceptions: DashboardException[] }) {
   return (
     <TableCard
       title="Pending and Disputed Handoffs"
-      actions={<span className="text-[10px] text-muted-foreground">Exceptions</span>}
+      actions={<span className="text-2xs text-muted-foreground">Exceptions</span>}
       footer={`Showing ${exceptions.length} exception${exceptions.length === 1 ? '' : 's'}`}
     >
       <Table className="min-w-[900px] text-xs">
@@ -480,7 +480,7 @@ export function ComplianceDashboardPage() {
           <PageSection
             title="Period overview"
             actions={
-              <span className="text-[10px] text-muted-foreground">{dashboard.period_label}</span>
+              <span className="text-2xs text-muted-foreground">{dashboard.period_label}</span>
             }
           >
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1.08fr)_minmax(300px,0.92fr)]">

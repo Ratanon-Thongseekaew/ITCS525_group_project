@@ -87,7 +87,7 @@ export function LoginPage() {
           <span className="text-sm font-semibold tracking-tight sm:text-base">Textile Track</span>
         </div>
 
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground sm:text-xs">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
           <span className="hidden capitalize min-[380px]:inline">{role} workspace</span>
           <span className="capitalize min-[380px]:hidden">{role}</span>
@@ -117,7 +117,7 @@ export function LoginPage() {
           }}
         />
 
-        <Card className="relative w-full max-w-[410px] shadow-[0_16px_45px_rgba(15,23,42,0.07)] sm:max-w-[430px]">
+        <Card className="relative w-full max-w-[410px] shadow-lg sm:max-w-[430px]">
           <CardHeader className="space-y-2 px-5 pt-6 pb-5 sm:px-8 sm:pt-8">
             <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary">
               {roleDetails[role].access}

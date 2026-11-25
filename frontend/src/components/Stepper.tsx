@@ -55,7 +55,7 @@ export function Stepper({ steps, current, className }: StepperProps) {
               {step.description ? (
                 <span
                   className={cn(
-                    'mt-0.5 text-[11px]',
+                    'mt-0.5 text-xs',
                     isCurrent ? 'text-primary-foreground/80' : 'text-muted-foreground',
                   )}
                 >
