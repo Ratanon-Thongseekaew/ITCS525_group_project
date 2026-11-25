@@ -5,6 +5,15 @@ import type {
   HandoffRecordSort,
   HandoffRecordStatus,
 } from '@/types/handoff'
+import type { BadgeVariant } from '@/lib/bin-type-tones'
+
+export const HANDOFF_STATUS_BADGE_VARIANTS: Record<HandoffRecordStatus, BadgeVariant> = {
+  scheduled: 'secondary',
+  picked_up: 'warning',
+  disputed: 'destructive',
+  approved: 'success',
+  closed: 'success',
+}
 
 // Rounded so summed decimal weights can't carry floating-point noise.
 function roundWeight(value: number) {

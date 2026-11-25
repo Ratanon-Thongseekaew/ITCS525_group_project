@@ -139,6 +139,9 @@ React Router owns client-side navigation. The current frontend routes are:
   database-backed compliance dashboard.
 - `/manager/epr-report/print` and `/admin/epr-report/print` render the standalone
   printable EPR report for the requested `year` and `quarter`.
+- `/design-system` renders the design system reference (tokens and every
+  primitive in light and dark). It is unlisted, outside `AppLayout`, and not in
+  the workspace navigation.
 - `/manager/import` renders the contractor monthly outcome report import page
   and is available from the manager workspace navigation.
 - `/manager/sorting` renders the read-only sorting overview across the manager's sites.
@@ -497,6 +500,160 @@ python -m ruff check backend
   browser at desktop width. Lint, types and tests do not catch it.
 - Keep reusable shadcn/ui primitives generic. Place application-specific login
   and workspace composition in `pages/` or non-`ui` components.
+
+#### Design system
+
+- **Tokens:** `frontend/src/styles.css` defines shadcn/ui's default neutral
+  theme as CSS variables (`--background`, `--foreground`, `--card`, `--popover`,
+  `--primary`, `--secondary`, `--muted`, `--accent`, `--destructive`,
+  `--border`, `--input`, `--ring`, `--chart-1` to `--chart-5`, `--sidebar-*`,
+  `--radius`) for `:root` and `.dark`, mapped to Tailwind colors in
+  `@theme inline`. The only change from shadcn's defaults is the primary brand
+  color: Tailwind teal-700 with near-white text in light mode, and teal-400 with
+  teal-950 text in dark mode. `--sidebar-primary` follows it.
+- **Using tokens:** style new UI with token utilities (`bg-background`,
+  `bg-card`, `text-foreground`, `text-muted-foreground`, `border`,
+  `bg-primary text-primary-foreground`, `text-primary`) and the primitives in
+  `components/ui/`, not palette classes such as `bg-white` or `text-slate-500`.
+  Token utilities switch with the theme; palette classes do not.
+- **Status colors:** `--success` (emerald), `--warning` (amber), and `--info`
+  (sky) tokens, each with `-foreground`, `-soft`, and `-soft-foreground`, in
+  light and dark. `Badge` and `Alert` have matching `success`, `warning`, and
+  `info` variants (Alert also has `destructive`), and `StatCard` has the same
+  tones. Use them for states such as approved, disputed, or awaiting pickup
+  instead of hand-styled pills or boxes, and use the soft tokens directly
+  (`bg-warning-soft`) for other tinted surfaces. Never write status colors as
+  palette classes with `dark:` pairs.
+- **Text sizes:** use the Tailwind scale. `text-2xs` (10px, defined in
+  `styles.css` and registered with `tailwind-merge` in `lib/utils.ts`) is the
+  smallest size, for chart legends and meta labels only. Avoid arbitrary sizes
+  such as `text-[11px]`.
+- **Bin-type colors:** bin types are categories, not statuses, so they have
+  their own tokens: `--resale` (teal), `--recycle` (amber), and `--repair`
+  (sky), each with `-foreground`, `-soft`, and `-soft-foreground`, in light
+  (-700 solids) and dark (-400 solids). Use the solid pair (`bg-resale
+text-resale-foreground`) for the sorting quick-tap buttons, and the soft pair
+  through the `resale`, `recycle`, and `repair` variants of `Badge` and `Alert`.
+  `lib/bin-type-tones.ts` maps each `BinType` to its classes (badge variant,
+  solid, soft, fill, progress, and toggle-on) and each bin status to a badge
+  variant. `lib/handoff-records.ts` does the same for handoff statuses.
+- **Outcome colors:** the six contractor outcome categories have their own
+  tokens: `--outcome-upcycled`, `--outcome-fibre-to-fibre`,
+  `--outcome-downcycled`, `--outcome-exported`, `--outcome-landfilled`, and
+  `--outcome-incinerated`, each with light and dark values.
+  `lib/outcome-tones.ts` maps each API outcome category to its label, chart
+  color (`var(--outcome-…)`, for a Recharts `ChartConfig`), dot class, and
+  column tint. Use it for charts and outcome table columns instead of hex
+  colors. Other charts use `--chart-1` to `--chart-5`. To pass a token to an
+  SVG, use `style={{ fill }}`, because a CSS variable doesn't resolve in a
+  presentation attribute.
+- **Primitives:** alert, alert-dialog, avatar, badge, breadcrumb, button, card, chart,
+  checkbox, dialog, dropdown-menu, empty, field, input, input-group, label,
+  progress, radio-group, select, separator, sheet,
+  sidebar, skeleton, sonner, switch, table, tabs, textarea, toggle,
+  toggle-group, tooltip. They come from shadcn's `new-york-v4` registry and are
+  built on the `radix-ui` package. The `new-york` style in `components.json`
+  makes the shadcn CLI serve the old Tailwind 3 versions, so add new components
+  from `https://ui.shadcn.com/r/styles/new-york-v4/<name>.json`. Then change
+  `from "cn"` to `@/lib/utils` and `@/registry/new-york-v4/...` to the local
+  aliases, and run Prettier.
+- **Local changes to the primitives** (keep them when updating):
+  - `CardTitle` renders an `h2` and `AlertTitle` an `h5`, so titles stay headings.
+  - `Badge` and `Alert` add the `success`, `warning`, `info`, `resale`,
+    `recycle`, and `repair` variants, built on the status and bin-type tokens.
+  - `Card` keeps the section-padding model: `CardHeader` is a `flex flex-col p-6`
+    column (pages make it a row with `flex-row justify-between`), and
+    `CardContent` and `CardFooter` use `p-6 pt-0`. Upstream uses `py-6 gap-6`
+    on the card instead, which would add space to every existing card.
+  - `SelectTrigger` is `w-full` rather than upstream's `w-fit`, as the forms
+    expect.
+  - `DialogContent` accepts `overlayClassName`.
+  - `Toaster` honors a forced theme.
+  - `SidebarMenuSkeleton` uses a fixed width, because the React Compiler lint
+    rules reject the upstream random width.
+  - `hooks/use-mobile.tsx` uses `useSyncExternalStore`.
+  - `chart.tsx` keeps the existing Recharts 2 version, with tokens for its
+    colors.
+- **Dialog widths:** v4 `DialogContent` sets `sm:max-w-lg`, so override the
+  width with an `sm:` class (for example `sm:max-w-2xl`). A plain `max-w-2xl`
+  doesn't override it on larger screens.
+- **Dark mode:** on. `ThemeProvider` (`components/theme-provider.tsx`, using
+  `next-themes` with the class attribute) wraps the app in `main.tsx`, and
+  `ModeToggle` (Light, Dark, System) sits in the `AppLayout` header and on the
+  login page. The choice is stored in `localStorage` under `theme`. An inline
+  script in `frontend/index.html` applies the saved theme before the bundle
+  loads, so a dark page doesn't flash light. `APP_FORCED_THEME` in
+  `config/theme.ts` is `null`; set it to `'light'` or `'dark'` only to force one
+  theme everywhere. `App.tsx` provides a root `TooltipProvider`.
+- **Theme scopes:** the light tokens are defined on `:root` and `.light`, and
+  the dark ones on `.dark`. The `dark:` variant applies inside `.dark` except
+  inside a `.light` island, so an element with the `light` class always renders
+  light, even while the app is dark.
+- **Reference:** `/design-system` shows every token and primitive in a light and
+  a dark panel, whatever the app theme is. Popups render in a portal outside
+  the panel, so each popup gets the panel's `light` or `dark` class.
+- **Shared page components** in `components/` (use them before building your
+  own):
+  - `PageHeader`: breadcrumb, `h1`, description, optional eyebrow, and actions.
+    Breadcrumbs with a `to` render as router links, and the last one is the
+    current page (`aria-current`, not a link).
+  - `PageSection`: a titled `section` with an actions slot (filters), a footer
+    slot (record counts), and an optional `headingRef` for returning focus.
+  - `StatCard`: one summary metric as a `dt`/`dd` pair inside a `dl` grid,
+    with `default`, `success`, `warning`, `info`, `destructive`, `resale`,
+    `recycle`, and `repair` tones.
+  - `TableCard`: a titled card around a `Table`, with actions and footer slots.
+  - `FilterSelect`: a compact list filter. `labelMode="hidden"` names it with
+    `aria-label`; `"inline"` shows a label before it. Long values truncate
+    with a `title` tooltip.
+  - `TemporaryAccountPicker`: the dashed "Temporary" notice that holds an
+    account picker until login exists. Remove it with real login.
+  - `Stepper`: progress through a multi-step flow (`aria-current="step"`).
+  - `RecordCard` and `RecordDetail`: a bin or record row with an icon tile,
+    identity, a `dl` of details, a status slot, and optional children. With
+    `onSelect`, the title becomes a stretched button so the whole card is
+    clickable.
+  - `LoadState` and `ErrorState`: the loading status and a destructive alert
+    with Retry. `EmptyState`: a dashed placeholder for an empty list.
+  - `SearchInput`: a search field with an icon, named by its `label`.
+  - `ConfirmDialog`: an `AlertDialog` for "are you sure" actions, with a
+    `destructive` option and room for extra content. Render it while the
+    question is open; confirming calls only `onConfirm`.
+  - Staff-only: `staff/SortActionButton`, `staff/BinProgressCard`,
+    `staff/NewBinDialog`, `staff/SealBinDialog`, and
+    `staff/DirectResaleProcessDialog`. `staff/handoff-form.tsx` holds the
+    handoff fields, `BinSummary`, and `HandoffDialogShell`, built on `field`
+    and `input-group`.
+  - Admin-only: `admin/InviteUserForm`, `admin/EditUserDialog`,
+    `admin/DeleteUserDialog` (on `ConfirmDialog`), `admin/UserIdentity` (avatar,
+    name, email), and `admin/UserStatusBadge`.
+  - Contractor import: `ContractorReportImport` holds the wizard state and
+    renders `contractor-import/ImportUploadStep`, `ImportReviewStep`, and
+    `ImportResultStep`.
+- **Status:** every page uses the design system. Palette classes and raw
+  colors remain only where they're intended: the login video scrim and its
+  teal glow (photo treatment, the same in both themes), the EPR print
+  overrides (black on white on paper), the `bg-black/20` key chip on the
+  sorting buttons, and the `/design-system` swatch labels.
+  `WorkspaceFeaturePlaceholderPage` is kept, already migrated, for the
+  commented-out Recycle Bin Records route.
+- **Reviewing new code:** replace palette classes and hand-built controls as
+  follows:
+
+  | Replace                                     | With                                                 |
+  | ------------------------------------------- | ---------------------------------------------------- |
+  | `bg-white`, `bg-slate-50` surfaces          | `bg-card` / `Card`, `bg-background`, `bg-muted`      |
+  | `text-slate-900` / `-700` / `-500`          | `text-foreground` / `text-muted-foreground`          |
+  | `border-slate-200`                          | `border` (uses `--border`)                           |
+  | teal brand classes, `!text-white`           | `bg-primary text-primary-foreground`, `text-primary` |
+  | raw `button`, `select`, `label`, `textarea` | `Button`, `Select`, `Label`, `Textarea`              |
+  | chip toggles, radio-like buttons            | `ToggleGroup`, `RadioGroup`                          |
+  | raw `table`                                 | `Table` primitives                                   |
+  | hand-built error or info boxes              | `Alert` with a variant                               |
+  | status pills                                | `Badge` with a variant                               |
+  | custom overlays                             | `Dialog`                                             |
+  | spinners and loading placeholders           | `Skeleton`, `Progress`                               |
+
 - Keep workspace menu definitions in `config/workspace-navigation.ts` and use
   each item's optional `roles` list instead of duplicating sidebars per role.
 - Preserve the current unprotected workspace routes until database-backed

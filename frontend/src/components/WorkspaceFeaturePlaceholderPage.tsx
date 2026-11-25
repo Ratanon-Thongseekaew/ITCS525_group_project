@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/PageHeader'
 import type { WorkspaceRole } from '@/types/workspace'
 
 interface WorkspaceFeaturePlaceholderPageProps {
@@ -12,14 +13,10 @@ export function WorkspaceFeaturePlaceholderPage({
   description,
 }: WorkspaceFeaturePlaceholderPageProps) {
   return (
-    <section className="dashboard">
-      <header className="dashboard__header">
-        <div>
-          <span className="eyebrow capitalize">{role} workspace</span>
-          <h1>{title}</h1>
-          <p>{description}</p>
-        </div>
-      </header>
-    </section>
+    <PageHeader
+      eyebrow={<span className="capitalize">{role} workspace</span>}
+      title={title}
+      description={description}
+    />
   )
 }

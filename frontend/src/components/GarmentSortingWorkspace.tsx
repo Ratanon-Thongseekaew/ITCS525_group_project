@@ -1,7 +1,5 @@
 import * as React from 'react'
 import {
-  Archive,
-  ArrowRight,
   CheckCircle2,
   Clock,
   Package,
@@ -18,7 +16,6 @@ import {
 import {
   type ActiveBinsResponse,
   type BinRecord,
-  type BinType,
   closeBin,
   createBin,
   getActiveBins,
@@ -30,18 +27,37 @@ import {
   type SortingStatsResponse,
   sortGarment,
 } from '@/api'
+import { EmptyState } from '@/components/EmptyState'
+import { ErrorState } from '@/components/LoadState'
+import { PageHeader } from '@/components/PageHeader'
+import { StatCard } from '@/components/StatCard'
+import { TableCard } from '@/components/TableCard'
+import { BinProgressCard } from '@/components/staff/BinProgressCard'
+import { HandoffActorBar } from '@/components/staff/HandoffActorBar'
+import { NewBinDialog, type NewBinValues } from '@/components/staff/NewBinDialog'
+import { SealBinDialog } from '@/components/staff/SealBinDialog'
+import { SortActionButton } from '@/components/staff/SortActionButton'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { Label } from '@/components/ui/label'
-import { HandoffActorBar } from '@/components/staff/HandoffActorBar'
-import { useHandoffWorkspace } from '@/lib/use-handoff-workspace'
 import {
-  BIN_STATUS_LABELS,
-  BIN_TYPE_LABELS,
-  BIN_TYPE_STYLES,
-  CONDITION_LABELS,
-} from '@/lib/sorting-labels'
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { BIN_STATUS_BADGE_VARIANTS, BIN_TYPE_TONES } from '@/lib/bin-type-tones'
+import { useHandoffWorkspace } from '@/lib/use-handoff-workspace'
+import { BIN_STATUS_LABELS, BIN_TYPE_LABELS, CONDITION_LABELS } from '@/lib/sorting-labels'
+import { cn } from '@/lib/utils'
 
 const CATEGORIES = ['Tops', 'Bottoms', 'Outerwear', 'Dresses', 'Accessories', 'Other']
 
@@ -51,13 +67,24 @@ const FEEDBACK_TYPE_BY_CONDITION: Record<GarmentCondition, 'resale' | 'recycle' 
   repair_upcycle: 'repair',
 }
 
-const BIN_CODE_PREFIXES: Record<BinType, string> = { resale: 'RS', recycle: 'RC', repair: 'RP' }
+const BIN_FILTERS = [
+  { id: 'all', label: 'All Bins' },
+  { id: 'active', label: 'Active' },
+  { id: 'closed', label: 'Sealed' },
+  { id: 'resale', label: 'Resale' },
+  { id: 'recycle', label: 'Recycle' },
+  { id: 'repair', label: 'Repair' },
+] as const
 
-const FEEDBACK_STYLES = {
-  resale: 'bg-emerald-50 text-emerald-900 border-emerald-300',
-  recycle: 'bg-amber-50 text-amber-900 border-amber-300',
-  repair: 'bg-sky-50 text-sky-900 border-sky-300',
-} as const
+type BinFilter = (typeof BIN_FILTERS)[number]['id']
+
+function formatTime(value: string, withSeconds = false) {
+  return new Date(value).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    ...(withSeconds ? { second: '2-digit' } : {}),
+  })
+}
 
 interface WorkspaceSnapshot {
   siteId: number
@@ -79,97 +106,6 @@ async function loadWorkspaceSnapshot(actorId: number, siteId: number): Promise<W
 
 function errorMessage(err: unknown, fallback: string) {
   return err instanceof Error ? err.message : fallback
-}
-
-const BIN_CARD_THEMES: Record<
-  BinType,
-  { badge: string; bar: string; title: string; destination: string; empty: string }
-> = {
-  resale: {
-    badge: 'text-emerald-700 bg-emerald-100',
-    bar: 'bg-emerald-600',
-    title: 'Direct Resale Bin',
-    destination: 'Destined for Feature 3 Resale Processing',
-    empty: 'No active resale bin. Sort an item or click "New Bin Record" to start one.',
-  },
-  recycle: {
-    badge: 'text-amber-700 bg-amber-100',
-    bar: 'bg-amber-600',
-    title: 'Recycling Bin',
-    destination: 'Destined for Feature 4 Contractor Handoff',
-    empty: 'No active recycling bin. Sort an item or click "New Bin Record" to start one.',
-  },
-  repair: {
-    badge: 'text-sky-700 bg-sky-100',
-    bar: 'bg-sky-600',
-    title: 'Repair Bin',
-    destination: 'For the repair partner',
-    empty: 'No active repair bin. Sort a Repair / Upcycle item to start one.',
-  },
-}
-
-function BinProgressCard({
-  type,
-  bin,
-  onSeal,
-}: {
-  type: BinType
-  bin: BinRecord | null
-  onSeal: (binId: number) => void
-}) {
-  const theme = BIN_CARD_THEMES[type]
-  const percent = bin ? Math.min(100, Math.round((bin.item_count / bin.max_capacity) * 100)) : 0
-
-  return (
-    <Card className="border-slate-200">
-      <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
-        <div>
-          <span
-            className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${theme.badge}`}
-          >
-            {theme.title}
-          </span>
-          <CardTitle className="text-lg font-bold text-slate-900 mt-1">
-            {bin?.bin_code ?? 'None Active'}
-          </CardTitle>
-        </div>
-        {bin && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onSeal(bin.id)}
-            className="text-xs border-slate-300 hover:bg-slate-100 flex items-center gap-1"
-          >
-            <Archive className="size-3.5 text-slate-600" />
-            Seal / Close Bin
-          </Button>
-        )}
-      </CardHeader>
-      <CardContent className="p-4 pt-1 space-y-2">
-        {bin ? (
-          <>
-            <div className="flex justify-between text-xs text-slate-600 font-medium">
-              <span>
-                Capacity: {bin.item_count} / {bin.max_capacity} items
-              </span>
-              <span>{percent}%</span>
-            </div>
-            <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-              <div
-                className={`${theme.bar} h-2.5 rounded-full transition-all`}
-                style={{ width: `${percent}%` }}
-              />
-            </div>
-            <p className="text-[11px] text-slate-500">
-              Total Weight: {bin.total_weight_kg} kg • {theme.destination}
-            </p>
-          </>
-        ) : (
-          <p className="text-xs text-slate-500 py-3">{theme.empty}</p>
-        )}
-      </CardContent>
-    </Card>
-  )
 }
 
 export function GarmentSortingWorkspace() {
@@ -203,16 +139,9 @@ export function GarmentSortingWorkspace() {
   } | null>(null)
 
   // Bin filter & creation modal state
-  const [binFilter, setBinFilter] = React.useState<
-    'all' | 'active' | 'closed' | 'resale' | 'recycle' | 'repair'
-  >('all')
+  const [binFilter, setBinFilter] = React.useState<BinFilter>('all')
   const [showNewBinModal, setShowNewBinModal] = React.useState(false)
-  const [newBinType, setNewBinType] = React.useState<BinType>('resale')
-  const [newBinCode, setNewBinCode] = React.useState('')
-  const [newBinCapacity, setNewBinCapacity] = React.useState('50')
-  const [newBinNotes, setNewBinNotes] = React.useState('')
   const [closingBinId, setClosingBinId] = React.useState<number | null>(null)
-  const [closeNotes, setCloseNotes] = React.useState('')
 
   const refreshData = React.useCallback(async () => {
     if (siteId === null || actorId === null) return
@@ -300,12 +229,10 @@ export function GarmentSortingWorkspace() {
     const handleKeyDown = (e: KeyboardEvent) => {
       // A held key repeats, and Ctrl/Cmd+C or Cmd+U are browser shortcuts: neither is a sort.
       if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return
-      if (
-        document.activeElement?.tagName === 'INPUT' ||
-        document.activeElement?.tagName === 'TEXTAREA'
-      ) {
-        return
-      }
+      const focused = document.activeElement
+      if (focused?.tagName === 'INPUT' || focused?.tagName === 'TEXTAREA') return
+      // Keys typed in an open dialog belong to the dialog, even when a button there has focus.
+      if (focused?.closest('[role="dialog"], [role="alertdialog"]')) return
       if (e.key === 'r' || e.key === 'R' || e.key === '1') {
         e.preventDefault()
         void handleSortRef.current('good_reusable')
@@ -322,21 +249,12 @@ export function GarmentSortingWorkspace() {
   }, [])
 
   // Create new bin
-  const handleCreateBin = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleCreateBin = async (values: NewBinValues) => {
     if (actorId === null) return
     try {
       setActionError(null)
-      await createBin({
-        actor_id: actorId,
-        bin_type: newBinType,
-        bin_code: newBinCode.trim() || undefined,
-        max_capacity: parseInt(newBinCapacity, 10) || 50,
-        notes: newBinNotes.trim() || undefined,
-      })
+      await createBin({ actor_id: actorId, ...values })
       setShowNewBinModal(false)
-      setNewBinCode('')
-      setNewBinNotes('')
       await refreshData()
     } catch (err) {
       console.error('Failed to create bin:', err)
@@ -346,13 +264,12 @@ export function GarmentSortingWorkspace() {
   }
 
   // Close bin
-  const handleCloseBin = async (binId: number) => {
+  const handleCloseBin = async (binId: number, closeNotes: string | undefined) => {
     if (actorId === null) return
     try {
       setActionError(null)
-      await closeBin(binId, actorId, closeNotes.trim() || undefined)
+      await closeBin(binId, actorId, closeNotes)
       setClosingBinId(null)
-      setCloseNotes('')
       await refreshData()
     } catch (err) {
       console.error('Failed to close bin:', err)
@@ -374,238 +291,177 @@ export function GarmentSortingWorkspace() {
   }, [allBins, binFilter])
 
   return (
-    <div className="space-y-6">
-      {/* Header with feature title and test-compatible heading */}
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600">
-            Store Operations • Garment Counter Intake
-          </span>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-            Garment Sorting & Bin Records
-          </h1>
-          <h2 className="text-sm font-medium text-slate-500">Your work, clearly organized.</h2>
-          <p className="text-xs text-slate-400 mt-0.5">Rapid counter triage and bin tracking.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void refreshData()}
-            disabled={loading || siteId === null}
-            className="flex items-center gap-1.5"
-          >
-            <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-          <Button
-            size="sm"
-            disabled={actorId === null}
-            onClick={() => setShowNewBinModal(true)}
-            className="flex items-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
-          >
-            <Plus className="size-4" />
-            New Bin Record
-          </Button>
-        </div>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-2">
+        <PageHeader
+          eyebrow="Store Operations • Garment Counter Intake"
+          title="Garment Sorting & Bin Records"
+          actions={
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void refreshData()}
+                disabled={loading || siteId === null}
+              >
+                <RefreshCw className={cn(loading && 'animate-spin')} aria-hidden="true" />
+                Refresh
+              </Button>
+              <Button
+                size="sm"
+                disabled={actorId === null}
+                onClick={() => setShowNewBinModal(true)}
+              >
+                <Plus aria-hidden="true" />
+                New Bin Record
+              </Button>
+            </>
+          }
+        />
+        <h2 className="text-sm font-medium text-muted-foreground">Your work, clearly organized.</h2>
+        <p className="text-xs text-muted-foreground">Rapid counter triage and bin tracking.</p>
       </div>
 
       <HandoffActorBar workspace={workspace} />
 
-      {(loadError || actionError) && (
-        <div
-          role="alert"
-          className="rounded-[10px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"
-        >
-          {actionError ?? loadError}
-        </div>
-      )}
+      {loadError || actionError ? <ErrorState message={(actionError ?? loadError)!} /> : null}
 
       {/* KPI / Session Metrics */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-slate-200">
-          <CardHeader className="p-4 pb-2">
-            <CardDescription className="flex items-center justify-between text-xs font-medium">
-              <span>Total Sorted Today</span>
-              <Shirt className="size-4 text-slate-400" />
-            </CardDescription>
-            <CardTitle className="text-2xl font-bold text-slate-900">
-              {stats?.total_sorted_today ?? 0}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-0 text-xs text-slate-500">
-            Recorded during current shift
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200">
-          <CardHeader className="p-4 pb-2">
-            <CardDescription className="flex items-center justify-between text-xs font-medium">
-              <span>Resale Capture Rate</span>
-              <TrendingUp className="size-4 text-emerald-600" />
-            </CardDescription>
-            <CardTitle className="text-2xl font-bold text-emerald-700">
-              {stats?.resale_percentage ?? 0}%
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-0 text-xs text-slate-500">
-            {stats?.resale_count ?? 0} garments saved for direct resale
-          </CardContent>
-        </Card>
-
-        <Card className="border-emerald-200 bg-emerald-50/40">
-          <CardHeader className="p-4 pb-2">
-            <CardDescription className="flex items-center justify-between text-xs font-medium text-emerald-800">
-              <span>Active Resale Bin</span>
-              <Sparkles className="size-4 text-emerald-600" />
-            </CardDescription>
-            <CardTitle className="text-xl font-bold text-emerald-950">
-              {activeBins?.resale_bin?.bin_code ?? 'No active bin'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-0 text-xs text-emerald-700">
-            {activeBins?.resale_bin
+      <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="Total Sorted Today"
+          icon={<Shirt />}
+          value={stats?.total_sorted_today ?? 0}
+          hint="Recorded during current shift"
+        />
+        <StatCard
+          label="Resale Capture Rate"
+          icon={<TrendingUp />}
+          value={`${stats?.resale_percentage ?? 0}%`}
+          hint={`${stats?.resale_count ?? 0} garments saved for direct resale`}
+        />
+        <StatCard
+          label="Active Resale Bin"
+          tone="resale"
+          icon={<Sparkles />}
+          value={activeBins?.resale_bin?.bin_code ?? 'No active bin'}
+          hint={
+            activeBins?.resale_bin
               ? `${activeBins.resale_bin.item_count} / ${activeBins.resale_bin.max_capacity} items (${activeBins.resale_bin.total_weight_kg} kg)`
-              : 'Click New Bin to create'}
-          </CardContent>
-        </Card>
-
-        <Card className="border-amber-200 bg-amber-50/40">
-          <CardHeader className="p-4 pb-2">
-            <CardDescription className="flex items-center justify-between text-xs font-medium text-amber-800">
-              <span>Active Recycling Bin</span>
-              <Recycle className="size-4 text-amber-600" />
-            </CardDescription>
-            <CardTitle className="text-xl font-bold text-amber-950">
-              {activeBins?.recycle_bin?.bin_code ?? 'No active bin'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-0 text-xs text-amber-700">
-            {activeBins?.recycle_bin
+              : 'Click New Bin to create'
+          }
+        />
+        <StatCard
+          label="Active Recycling Bin"
+          tone="recycle"
+          icon={<Recycle />}
+          value={activeBins?.recycle_bin?.bin_code ?? 'No active bin'}
+          hint={
+            activeBins?.recycle_bin
               ? `${activeBins.recycle_bin.item_count} / ${activeBins.recycle_bin.max_capacity} items (${activeBins.recycle_bin.total_weight_kg} kg)`
-              : 'Click New Bin to create'}
-          </CardContent>
-        </Card>
-      </div>
+              : 'Click New Bin to create'
+          }
+        />
+      </dl>
 
       {/* Main Section: Quick-Tap Intake Counter */}
-      <Card className="border-2 border-slate-300 shadow-md">
-        <CardHeader className="bg-slate-50/70 pb-3">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle className="text-xl text-slate-900 flex items-center gap-2">
-                <Shirt className="size-5 text-emerald-600" />
+      <Card className="border-2">
+        <CardHeader className="border-b bg-muted/50 pb-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-1.5">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <Shirt className="size-5 text-primary" aria-hidden="true" />
                 Quick-Tap Garment Intake Counter
               </CardTitle>
               <CardDescription>
                 Designed for sub-10-second condition triage. Tap button or use keyboard shortcuts.
               </CardDescription>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-slate-500 bg-white px-2.5 py-1 rounded border border-slate-200">
-              <Clock className="size-3.5 text-slate-400" />
-              <span>Target: &lt;10s / garment</span>
-            </div>
+            <Badge variant="outline" className="bg-background text-muted-foreground">
+              <Clock aria-hidden="true" />
+              Target: &lt;10s / garment
+            </Badge>
           </div>
         </CardHeader>
-        <CardContent className="p-6 space-y-6">
-          {/* Recent Action Feedback Alert */}
-          {lastFeedback && (
-            <div
-              className={`flex items-center gap-2.5 p-3 rounded-lg text-sm border font-medium transition-all ${
-                FEEDBACK_STYLES[lastFeedback.type]
-              }`}
-            >
-              <CheckCircle2 className="size-4 shrink-0" />
-              <span>{lastFeedback.message}</span>
-            </div>
-          )}
+        <CardContent className="space-y-6 p-6">
+          {lastFeedback ? (
+            <Alert variant={lastFeedback.type} role="status">
+              <CheckCircle2 aria-hidden="true" />
+              <AlertDescription className="font-medium text-current">
+                {lastFeedback.message}
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
-          {/* Optional Category Chips */}
-          <div>
-            <Label className="text-xs font-semibold uppercase text-slate-600 tracking-wider">
+          <div className="flex flex-col gap-2">
+            <Label
+              id="garment-category-label"
+              className="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+            >
               Garment Category (Optional)
             </Label>
-            <div className="flex flex-wrap gap-2 mt-1.5">
-              {CATEGORIES.map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all ${
-                    selectedCategory === cat
-                      ? 'bg-slate-900 !text-white border-slate-900 shadow-sm'
-                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
-                  }`}
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm"
+              spacing={2}
+              value={selectedCategory}
+              onValueChange={(value) => value && setSelectedCategory(value)}
+              aria-labelledby="garment-category-label"
+              className="flex-wrap justify-start"
+            >
+              {CATEGORIES.map((category) => (
+                <ToggleGroupItem
+                  key={category}
+                  value={category}
+                  className="rounded-full px-3 text-xs data-[state=on]:border-primary data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
                 >
-                  {cat}
-                </button>
+                  {category}
+                </ToggleGroupItem>
               ))}
-            </div>
+            </ToggleGroup>
           </div>
 
-          {/* Quick-Tap Buttons: Resale vs Recycle */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-            {/* Button 1: Good / Reusable (Resale) */}
-            <button
-              type="button"
+          <div className="grid grid-cols-1 gap-4 pt-2 md:grid-cols-3">
+            <SortActionButton
+              type="resale"
+              icon={<Sparkles />}
+              label="Good / Reusable"
+              hint={`Route directly to Resale Bin (${activeBins?.resale_bin?.bin_code ?? 'Auto'})`}
+              shortcut="[R] or [1]"
               disabled={sortingInProgress || actorId === null}
               onClick={() => void handleSort('good_reusable')}
-              className="group relative flex flex-col items-center justify-center p-6 rounded-xl border-2 border-emerald-500 bg-emerald-600 !text-white hover:bg-emerald-700 active:scale-[0.98] transition-all shadow-md focus:outline-none focus:ring-4 focus:ring-emerald-300 disabled:opacity-50"
-            >
-              <div className="absolute top-3 right-3 flex items-center gap-1 bg-emerald-800/80 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded">
-                Key: [R] or [1]
-              </div>
-              <Sparkles className="size-10 mb-2 transition-transform group-hover:scale-110" />
-              <span className="text-2xl font-extrabold tracking-tight">Good / Reusable</span>
-              <span className="text-xs text-emerald-100 mt-1 font-medium">
-                Route directly to Resale Bin ({activeBins?.resale_bin?.bin_code ?? 'Auto'})
-              </span>
-            </button>
-
-            {/* Button 2: Worn / Recyclable (Recycle) */}
-            <button
-              type="button"
+            />
+            <SortActionButton
+              type="recycle"
+              icon={<Recycle />}
+              label="Worn / Recyclable"
+              hint={`Route to Contractor Recycling Bin (${activeBins?.recycle_bin?.bin_code ?? 'Auto'})`}
+              shortcut="[C] or [2]"
               disabled={sortingInProgress || actorId === null}
               onClick={() => void handleSort('worn_recyclable')}
-              className="group relative flex flex-col items-center justify-center p-6 rounded-xl border-2 border-amber-600 bg-amber-600 !text-white hover:bg-amber-700 active:scale-[0.98] transition-all shadow-md focus:outline-none focus:ring-4 focus:ring-amber-300 disabled:opacity-50"
-            >
-              <div className="absolute top-3 right-3 flex items-center gap-1 bg-amber-800/80 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded">
-                Key: [C] or [2]
-              </div>
-              <Recycle className="size-10 mb-2 transition-transform group-hover:scale-110" />
-              <span className="text-2xl font-extrabold tracking-tight">Worn / Recyclable</span>
-              <span className="text-xs text-amber-100 mt-1 font-medium">
-                Route to Contractor Recycling Bin ({activeBins?.recycle_bin?.bin_code ?? 'Auto'})
-              </span>
-            </button>
-
-            {/* Button 3: Repair / Upcycle (Repair) */}
-            <button
-              type="button"
+            />
+            <SortActionButton
+              type="repair"
+              icon={<Wrench />}
+              label="Repair / Upcycle"
+              hint={`Route to Repair Bin (${activeBins?.repair_bin?.bin_code ?? 'Auto'})`}
+              shortcut="[U] or [3]"
               disabled={sortingInProgress || actorId === null}
               onClick={() => void handleSort('repair_upcycle')}
-              className="group relative flex flex-col items-center justify-center p-6 rounded-xl border-2 border-sky-600 bg-sky-600 !text-white hover:bg-sky-700 active:scale-[0.98] transition-all shadow-md focus:outline-none focus:ring-4 focus:ring-sky-300 disabled:opacity-50"
-            >
-              <div className="absolute top-3 right-3 flex items-center gap-1 bg-sky-800/80 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded">
-                Key: [U] or [3]
-              </div>
-              <Wrench className="size-10 mb-2 transition-transform group-hover:scale-110" />
-              <span className="text-2xl font-extrabold tracking-tight">Repair / Upcycle</span>
-              <span className="text-xs text-sky-100 mt-1 font-medium">
-                Route to Repair Bin ({activeBins?.repair_bin?.bin_code ?? 'Auto'})
-              </span>
-            </button>
+            />
           </div>
 
-          {/* Collapsible / Optional Details Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs">
-            <div>
-              <Label htmlFor="weight-input" className="text-xs text-slate-600">
+          <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-2">
+            <Field className="gap-1.5">
+              <FieldLabel htmlFor="weight-input" className="text-xs text-muted-foreground">
                 Estimated Weight (kg, optional)
-              </Label>
-              <div className="relative mt-1">
-                <Scale className="absolute left-2.5 top-2.5 size-3.5 text-slate-400" />
-                <Input
+              </FieldLabel>
+              <InputGroup>
+                <InputGroupAddon>
+                  <Scale aria-hidden="true" />
+                </InputGroupAddon>
+                <InputGroupInput
                   id="weight-input"
                   type="number"
                   step="0.05"
@@ -613,28 +469,26 @@ export function GarmentSortingWorkspace() {
                   placeholder="e.g. 0.40"
                   value={weightKg}
                   onChange={(e) => setWeightKg(e.target.value)}
-                  className="pl-8 text-xs h-8"
                 />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="notes-input" className="text-xs text-slate-600">
+              </InputGroup>
+            </Field>
+            <Field className="gap-1.5">
+              <FieldLabel htmlFor="notes-input" className="text-xs text-muted-foreground">
                 Staff Note (optional)
-              </Label>
+              </FieldLabel>
               <Input
                 id="notes-input"
                 placeholder="e.g. Designer tag, minor stain"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="mt-1 text-xs h-8"
               />
-            </div>
+            </Field>
           </div>
         </CardContent>
       </Card>
 
       {/* Active Bins Status Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {(['resale', 'recycle', 'repair'] as const).map((type) => (
           <BinProgressCard
             key={type}
@@ -646,140 +500,112 @@ export function GarmentSortingWorkspace() {
       </div>
 
       {/* Bin Records List & Management Table */}
-      <Card className="border-slate-200">
-        <CardHeader className="p-5 pb-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Package className="size-4 text-emerald-600" />
-                Bin Records & History
-              </CardTitle>
-              <CardDescription>
-                Track open and completed bins for downstream resale and contractor handoff.
-              </CardDescription>
-            </div>
-            {/* Filter Pills */}
-            <div className="flex flex-wrap gap-1">
-              {(
-                [
-                  { id: 'all', label: 'All Bins' },
-                  { id: 'active', label: 'Active' },
-                  { id: 'closed', label: 'Sealed' },
-                  { id: 'resale', label: 'Resale' },
-                  { id: 'recycle', label: 'Recycle' },
-                  { id: 'repair', label: 'Repair' },
-                ] as const
-              ).map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setBinFilter(f.id)}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
-                    binFilter === f.id
-                      ? 'bg-slate-900 !text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-y border-slate-200 bg-slate-50 text-slate-600 font-semibold">
-                  <th className="py-2.5 px-4">Bin Code</th>
-                  <th className="py-2.5 px-4">Type</th>
-                  <th className="py-2.5 px-4">Status</th>
-                  <th className="py-2.5 px-4">Item Count</th>
-                  <th className="py-2.5 px-4">Weight (kg)</th>
-                  <th className="py-2.5 px-4">Created</th>
-                  <th className="py-2.5 px-4">Closed</th>
-                  <th className="py-2.5 px-4 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredBins.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="py-6 text-center text-slate-500">
-                      No bins found matching filter.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredBins.map((bin) => (
-                    <tr key={bin.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-2.5 px-4 font-semibold text-slate-900">{bin.bin_code}</td>
-                      <td className="py-2.5 px-4">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${BIN_TYPE_STYLES[bin.bin_type]}`}
-                        >
-                          {BIN_TYPE_LABELS[bin.bin_type]}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-4">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${
-                            bin.status === 'active'
-                              ? 'bg-blue-100 text-blue-800'
-                              : bin.status === 'ready'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-slate-100 text-slate-600'
-                          }`}
-                        >
-                          {BIN_STATUS_LABELS[bin.status]}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-4 font-medium text-slate-800">
-                        {bin.item_count} / {bin.max_capacity}
-                      </td>
-                      <td className="py-2.5 px-4 text-slate-600">{bin.total_weight_kg} kg</td>
-                      <td className="py-2.5 px-4 text-slate-500">
-                        {new Date(bin.created_at).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </td>
-                      <td className="py-2.5 px-4 text-slate-500">
-                        {bin.closed_at || bin.ready_at
-                          ? new Date(bin.closed_at ?? bin.ready_at!).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : '—'}
-                      </td>
-                      <td className="py-2.5 px-4 text-right">
-                        {bin.status === 'active' ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setClosingBinId(bin.id)}
-                            className="h-7 text-[11px] px-2 text-slate-700 hover:text-slate-900"
-                          >
-                            Close Bin
-                          </Button>
-                        ) : (
-                          <span className="text-[11px] text-slate-400">
-                            {bin.status === 'ready' ? 'Ready for handoff' : 'Sealed'}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+      <TableCard
+        title={
+          <span className="flex items-center gap-2">
+            <Package className="size-4 text-primary" aria-hidden="true" />
+            Bin Records & History
+          </span>
+        }
+        description="Track open and completed bins for downstream resale and contractor handoff."
+        actions={
+          <ToggleGroup
+            type="single"
+            size="sm"
+            spacing={1}
+            value={binFilter}
+            onValueChange={(value) => value && setBinFilter(value as BinFilter)}
+            aria-label="Filter bins"
+            className="flex-wrap justify-start"
+          >
+            {BIN_FILTERS.map((filter) => (
+              <ToggleGroupItem
+                key={filter.id}
+                value={filter.id}
+                className="bg-muted px-2.5 text-xs text-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+              >
+                {filter.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        }
+      >
+        <Table className="text-xs">
+          <TableHeader className="bg-muted/50">
+            <TableRow>
+              <TableHead className="px-4">Bin Code</TableHead>
+              <TableHead className="px-4">Type</TableHead>
+              <TableHead className="px-4">Status</TableHead>
+              <TableHead className="px-4">Item Count</TableHead>
+              <TableHead className="px-4">Weight (kg)</TableHead>
+              <TableHead className="px-4">Created</TableHead>
+              <TableHead className="px-4">Closed</TableHead>
+              <TableHead className="px-4 text-right">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredBins.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8} className="py-6 text-center text-muted-foreground">
+                  No bins found matching filter.
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredBins.map((bin) => (
+                <TableRow key={bin.id}>
+                  <TableCell className="px-4 font-semibold">{bin.bin_code}</TableCell>
+                  <TableCell className="px-4">
+                    <Badge variant={BIN_TYPE_TONES[bin.bin_type].variant}>
+                      {BIN_TYPE_LABELS[bin.bin_type]}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="px-4">
+                    <Badge variant={BIN_STATUS_BADGE_VARIANTS[bin.status]}>
+                      {BIN_STATUS_LABELS[bin.status]}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="px-4 font-medium">
+                    {bin.item_count} / {bin.max_capacity}
+                  </TableCell>
+                  <TableCell className="px-4 text-muted-foreground">
+                    {bin.total_weight_kg} kg
+                  </TableCell>
+                  <TableCell className="px-4 text-muted-foreground">
+                    {formatTime(bin.created_at)}
+                  </TableCell>
+                  <TableCell className="px-4 text-muted-foreground">
+                    {bin.closed_at || bin.ready_at
+                      ? formatTime((bin.closed_at ?? bin.ready_at)!)
+                      : '—'}
+                  </TableCell>
+                  <TableCell className="px-4 text-right">
+                    {bin.status === 'active' ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => setClosingBinId(bin.id)}
+                      >
+                        Close Bin
+                      </Button>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        {bin.status === 'ready' ? 'Ready for handoff' : 'Sealed'}
+                      </span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </TableCard>
 
       {/* Live Recent Counter Log */}
-      <Card className="border-slate-200">
+      <Card>
         <CardHeader className="p-4 pb-2">
-          <CardTitle className="text-sm font-semibold text-slate-900 flex items-center gap-1.5">
-            <Clock className="size-4 text-slate-500" />
+          <CardTitle className="flex items-center gap-1.5 text-sm font-semibold">
+            <Clock className="size-4 text-muted-foreground" aria-hidden="true" />
             Recent Garments Intake Feed
           </CardTitle>
           <CardDescription className="text-xs">
@@ -787,218 +613,57 @@ export function GarmentSortingWorkspace() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-1">
-          <div className="space-y-2">
-            {recentGarments.length === 0 ? (
-              <p className="text-xs text-slate-400 py-2">No garments sorted yet.</p>
-            ) : (
-              recentGarments.map((item) => (
-                <div
+          {recentGarments.length === 0 ? (
+            <EmptyState>No garments sorted yet.</EmptyState>
+          ) : (
+            <ul className="space-y-2">
+              {recentGarments.map((item) => (
+                <li
                   key={item.id}
-                  className="flex items-center justify-between text-xs p-2 rounded bg-slate-50 border border-slate-100"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/50 p-2 text-xs"
                 >
                   <div className="flex items-center gap-2">
                     <span
-                      className={`inline-block size-2 rounded-full ${
-                        item.condition === 'good_reusable'
-                          ? 'bg-emerald-500'
-                          : item.condition === 'repair_upcycle'
-                            ? 'bg-sky-500'
-                            : 'bg-amber-500'
-                      }`}
+                      className={cn(
+                        'inline-block size-2 rounded-full',
+                        BIN_TYPE_TONES[FEEDBACK_TYPE_BY_CONDITION[item.condition]].fill,
+                      )}
+                      aria-hidden="true"
                     />
-                    <span className="font-semibold text-slate-800">{item.category}</span>
-                    <span className="text-slate-500">{CONDITION_LABELS[item.condition]}</span>
-                    {item.weight_kg && (
-                      <span className="text-slate-400 text-[11px]">({item.weight_kg} kg)</span>
-                    )}
+                    <span className="font-semibold text-foreground">{item.category}</span>
+                    <span className="text-muted-foreground">
+                      {CONDITION_LABELS[item.condition]}
+                    </span>
+                    {item.weight_kg ? (
+                      <span className="text-muted-foreground">({item.weight_kg} kg)</span>
+                    ) : null}
                   </div>
-                  <div className="flex items-center gap-2 text-slate-500">
-                    <span className="font-mono text-[11px] bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <span className="rounded border bg-background px-1.5 py-0.5 font-mono">
                       {item.bin_code}
                     </span>
-                    <span className="text-[11px]">
-                      {new Date(item.created_at).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                      })}
-                    </span>
+                    <span>{formatTime(item.created_at, true)}</span>
                   </div>
-                </div>
-              ))
-            )}
-          </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
 
-      {/* Modal: New Bin Record */}
-      {showNewBinModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <Card className="w-full max-w-md shadow-2xl border-slate-300">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Create New Bin Record</CardTitle>
-              <CardDescription>Register an empty bin for counter sorting.</CardDescription>
-            </CardHeader>
-            <form onSubmit={handleCreateBin}>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label className="text-xs">Bin Destination Type</Label>
-                  <div className="grid grid-cols-3 gap-2 mt-1">
-                    <button
-                      type="button"
-                      onClick={() => setNewBinType('resale')}
-                      className={`p-2.5 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 ${
-                        newBinType === 'resale'
-                          ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
-                          : 'border-slate-200 bg-white text-slate-600'
-                      }`}
-                    >
-                      <Sparkles className="size-4" />
-                      Direct Resale
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNewBinType('recycle')}
-                      className={`p-2.5 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 ${
-                        newBinType === 'recycle'
-                          ? 'border-amber-600 bg-amber-50 text-amber-800'
-                          : 'border-slate-200 bg-white text-slate-600'
-                      }`}
-                    >
-                      <Recycle className="size-4" />
-                      Recycling
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNewBinType('repair')}
-                      className={`p-2.5 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 ${
-                        newBinType === 'repair'
-                          ? 'border-sky-600 bg-sky-50 text-sky-800'
-                          : 'border-slate-200 bg-white text-slate-600'
-                      }`}
-                    >
-                      <Wrench className="size-4" />
-                      Repair
-                    </button>
-                  </div>
-                </div>
+      {showNewBinModal ? (
+        <NewBinDialog
+          onCreate={(values) => void handleCreateBin(values)}
+          onCancel={() => setShowNewBinModal(false)}
+        />
+      ) : null}
 
-                <div>
-                  <Label htmlFor="modal-bincode" className="text-xs">
-                    Custom Bin Code (optional)
-                  </Label>
-                  <Input
-                    id="modal-bincode"
-                    placeholder={`e.g. BIN-${BIN_CODE_PREFIXES[newBinType]}-005`}
-                    value={newBinCode}
-                    onChange={(e) => setNewBinCode(e.target.value)}
-                    className="text-xs"
-                  />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Leave blank to auto-generate sequentially.
-                  </p>
-                </div>
-
-                <div>
-                  <Label htmlFor="modal-capacity" className="text-xs">
-                    Target Max Capacity (items)
-                  </Label>
-                  <Input
-                    id="modal-capacity"
-                    type="number"
-                    min="1"
-                    max="500"
-                    value={newBinCapacity}
-                    onChange={(e) => setNewBinCapacity(e.target.value)}
-                    className="text-xs"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="modal-notes" className="text-xs">
-                    Notes / Location (optional)
-                  </Label>
-                  <Input
-                    id="modal-notes"
-                    placeholder="e.g. Counter station 2"
-                    value={newBinNotes}
-                    onChange={(e) => setNewBinNotes(e.target.value)}
-                    className="text-xs"
-                  />
-                </div>
-              </CardContent>
-              <div className="flex items-center justify-end gap-2 p-4 pt-0">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowNewBinModal(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  className="bg-emerald-600 text-white hover:bg-emerald-700"
-                >
-                  Create Bin
-                </Button>
-              </div>
-            </form>
-          </Card>
-        </div>
-      )}
-
-      {/* Modal: Close / Seal Bin Confirmation */}
-      {closingBinId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <Card className="w-full max-w-md shadow-2xl border-slate-300">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Archive className="size-5 text-amber-600" />
-                Seal and Close Bin
-              </CardTitle>
-              <CardDescription>
-                Mark this bin as completed. It will no longer accept new items and becomes ready for
-                downstream processing.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <Label htmlFor="close-notes" className="text-xs">
-                  Closure Notes (optional)
-                </Label>
-                <Input
-                  id="close-notes"
-                  placeholder="e.g. Full capacity reached, shifted to backroom"
-                  value={closeNotes}
-                  onChange={(e) => setCloseNotes(e.target.value)}
-                  className="text-xs"
-                />
-              </div>
-            </CardContent>
-            <div className="flex items-center justify-end gap-2 p-4 pt-0">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setClosingBinId(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => void handleCloseBin(closingBinId)}
-                className="bg-amber-600 text-white hover:bg-amber-700 flex items-center gap-1.5"
-              >
-                <ArrowRight className="size-4" />
-                Confirm & Seal
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
+      {closingBinId !== null ? (
+        <SealBinDialog
+          onConfirm={(closeNotes) => void handleCloseBin(closingBinId, closeNotes)}
+          onCancel={() => setClosingBinId(null)}
+        />
+      ) : null}
     </div>
   )
 }

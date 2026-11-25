@@ -4,7 +4,9 @@ import { GarmentSortingWorkspace } from './components/GarmentSortingWorkspace'
 import { SortingOverviewPage } from './pages/SortingOverviewPage'
 import ResaleBinRecords from './components/ResaleBinRecords'
 import { Toaster } from './components/ui/sonner'
+import { TooltipProvider } from './components/ui/tooltip'
 import { ComplianceDashboardPage } from './pages/ComplianceDashboardPage'
+import { DesignSystemPage } from './pages/DesignSystemPage'
 import { DirectResalePage } from './pages/DirectResalePage'
 import { EprReportPrintPage } from './pages/EprReportPrintPage'
 import { HandoffRecordsPage } from './pages/HandoffRecordsPage'
@@ -19,12 +21,13 @@ import ContractorReportImportPage from './pages/ContractorReportImportPage'
 
 function App() {
   return (
-    <>
+    <TooltipProvider>
       <Routes>
         <Route index element={<LoginPage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="manager/epr-report/print" element={<EprReportPrintPage />} />
         <Route path="admin/epr-report/print" element={<EprReportPrintPage />} />
+        <Route path="design-system" element={<DesignSystemPage />} />
         <Route element={<AppLayout />}>
           <Route path="manager" element={<ManagerPage />} />
           <Route path="manager/compliance-dashboard" element={<ComplianceDashboardPage />} />
@@ -62,7 +65,7 @@ function App() {
         </Route>
       </Routes>
       <Toaster position="top-right" richColors closeButton />
-    </>
+    </TooltipProvider>
   )
 }
 

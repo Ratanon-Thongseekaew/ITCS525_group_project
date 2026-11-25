@@ -4,6 +4,7 @@ import { Link } from 'react-router'
 
 import { getEprQuarterReport, type EprQuarterReport } from '@/api'
 import { EprReportPeriodFields } from '@/components/EprReportPeriodFields'
+import { ErrorState } from '@/components/LoadState'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -20,11 +21,6 @@ interface EprReportExportDialogProps {
   defaultQuarter: number
   years: number[]
 }
-
-const outlineButtonClass =
-  'cursor-pointer border-slate-300 bg-white text-slate-700! hover:border-slate-400 hover:bg-slate-100 focus-visible:ring-teal-600'
-const primaryButtonClass =
-  'cursor-pointer bg-teal-700 text-white! hover:bg-teal-800 focus-visible:ring-teal-600'
 
 function ExportActions({ year, quarter }: { year: number; quarter: number }) {
   const [report, setReport] = useState<EprQuarterReport>()
@@ -45,35 +41,26 @@ function ExportActions({ year, quarter }: { year: number; quarter: number }) {
 
   if (failed) {
     return (
-      <div className="space-y-2">
-        <p role="alert" className="text-sm text-rose-700">
-          The EPR report could not be loaded.
-        </p>
-        <Button
-          variant="outline"
-          className={outlineButtonClass}
-          onClick={() => {
-            setFailed(false)
-            setAttempt((count) => count + 1)
-          }}
-        >
-          Retry
-        </Button>
-      </div>
+      <ErrorState
+        message="The EPR report could not be loaded."
+        onRetry={() => {
+          setFailed(false)
+          setAttempt((count) => count + 1)
+        }}
+      />
     )
   }
 
   return (
     <>
       {!report && (
-        <p role="status" className="text-sm text-slate-600">
+        <p role="status" className="text-sm text-muted-foreground">
           Loading EPR report…
         </p>
       )}
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
         <Button
           variant="outline"
-          className={outlineButtonClass}
           disabled={!report}
           onClick={() => report && downloadEprCsv(report)}
         >
@@ -81,7 +68,7 @@ function ExportActions({ year, quarter }: { year: number; quarter: number }) {
           Download CSV
         </Button>
         {report ? (
-          <Button asChild className={primaryButtonClass}>
+          <Button asChild>
             <Link
               to={`../epr-report/print?year=${year}&quarter=${quarter}`}
               relative="path"
@@ -92,7 +79,7 @@ function ExportActions({ year, quarter }: { year: number; quarter: number }) {
             </Link>
           </Button>
         ) : (
-          <Button disabled className={primaryButtonClass}>
+          <Button disabled>
             <Printer aria-hidden="true" />
             Open printable report
           </Button>
@@ -123,18 +110,15 @@ export function EprReportExportDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button size="sm" className={primaryButtonClass}>
+        <Button size="sm">
           <Download aria-hidden="true" />
           Export EPR Report
         </Button>
       </DialogTrigger>
-      <DialogContent
-        overlayClassName="bg-black/20"
-        className="max-h-[calc(100svh-2rem)] w-[calc(100%-2rem)] max-w-md gap-0 overflow-y-auto rounded-2xl border-slate-200 bg-white p-0 text-slate-900 sm:rounded-2xl [&>button]:text-slate-600 [&>button]:focus-visible:ring-teal-600"
-      >
+      <DialogContent className="max-h-[calc(100svh-2rem)] gap-0 overflow-y-auto p-0 sm:max-w-md">
         <DialogHeader className="px-5 pt-5 pr-12 text-left sm:px-6 sm:pr-12">
           <DialogTitle>Export quarterly EPR report</DialogTitle>
-          <DialogDescription className="text-slate-600">
+          <DialogDescription>
             Choose the reporting period. The report covers all sites.
           </DialogDescription>
         </DialogHeader>
@@ -147,7 +131,7 @@ export function EprReportExportDialog({
             onQuarterChange={setQuarter}
           />
         </div>
-        <div className="space-y-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
+        <div className="space-y-3 border-t bg-muted/50 px-5 py-4 sm:px-6">
           {open && <ExportActions key={`${year}-${quarter}`} year={year} quarter={quarter} />}
         </div>
       </DialogContent>

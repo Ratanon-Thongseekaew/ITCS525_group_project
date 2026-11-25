@@ -1,5 +1,6 @@
 import { Outlet, useLocation } from 'react-router'
 import { ApiStatus } from './ApiStatus'
+import { ModeToggle } from './ModeToggle'
 import { WorkspaceSidebar } from './WorkspaceSidebar'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { isWorkspaceRole } from '@/types/workspace'
@@ -13,20 +14,21 @@ export function AppLayout() {
     <SidebarProvider>
       <WorkspaceSidebar role={role} />
 
-      <SidebarInset className="min-w-0 bg-slate-50">
-        <header className="sticky top-0 z-20 flex min-h-14 items-center gap-3 border-b border-slate-200 bg-white/90 px-4 backdrop-blur sm:px-6">
-          <SidebarTrigger className="-ml-1 text-slate-600" />
+      <SidebarInset className="min-w-0 bg-muted/40">
+        <header className="sticky top-0 z-20 flex min-h-14 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur sm:px-6">
+          <SidebarTrigger className="-ml-1 text-muted-foreground" />
 
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold text-slate-700 capitalize">
+            <p className="truncate text-xs font-semibold text-foreground capitalize">
               {role} workspace
             </p>
           </div>
 
           <ApiStatus />
+          <ModeToggle />
         </header>
 
-        <main className="page-container">
+        <main className="mx-auto w-full max-w-[1180px] px-4 py-12 sm:py-16 lg:py-24">
           <Outlet />
         </main>
       </SidebarInset>

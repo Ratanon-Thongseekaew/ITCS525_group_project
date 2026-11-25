@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import '@testing-library/jest-dom/vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { toast } from 'sonner'
 import { afterEach, expect, test, vi } from 'vitest'
@@ -74,6 +74,11 @@ function fixtureFor(url: string) {
   return { message: 'Hello from FastAPI!' }
 }
 
+/** The workspace sidebar, so its links aren't confused with a page's breadcrumb links. */
+function sidebar() {
+  return within(document.querySelector<HTMLElement>('[data-sidebar="sidebar"]')!)
+}
+
 function renderRoute(route: string) {
   vi.spyOn(globalThis, 'fetch').mockImplementation((input) =>
     Promise.resolve(
@@ -102,6 +107,15 @@ test('renders user management immediately when visited directly', () => {
 
   expect(screen.getByRole('heading', { name: 'User Management' })).toBeInTheDocument()
   expect(screen.queryByRole('status', { name: 'loading...' })).not.toBeInTheDocument()
+})
+
+test('offers the theme picker in the workspace header and on the login page', () => {
+  renderRoute('/admin/users')
+  expect(screen.getByRole('button', { name: 'Change color theme' })).toBeInTheDocument()
+  cleanup()
+
+  renderRoute('/login')
+  expect(screen.getByRole('button', { name: 'Change color theme' })).toBeInTheDocument()
 })
 
 test('redirects the manager root to the compliance dashboard', () => {
@@ -377,7 +391,7 @@ test('returns to New Bins for Handoff from Handoff Records', async () => {
 test('keeps Recycle Bin Handoff active on its sub-routes', () => {
   renderRoute('/staff/recycle-bin-handoff/handoff-records')
 
-  expect(screen.getByRole('link', { name: 'Recycle Bin Handoff' })).toHaveAttribute(
+  expect(sidebar().getByRole('link', { name: 'Recycle Bin Handoff' })).toHaveAttribute(
     'data-active',
     'true',
   )
