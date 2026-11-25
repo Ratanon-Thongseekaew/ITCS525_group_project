@@ -490,6 +490,11 @@ python -m ruff check backend
 - Follow the existing Tailwind CSS responsive approach. Full-page entry screens
   should use the small-viewport unit (`min-h-svh`) with an appropriate fallback
   and must remain usable at widths down to 320px.
+- This project uses Tailwind CSS 4. Write CSS variables in utilities as `w-(--sidebar-width)`,
+  never the Tailwind 3 form `w-[--sidebar-width]`: v4 turns the old form into invalid CSS such as
+  `width: --sidebar-width`, which the browser silently drops (this once made the sidebar cover
+  every page). Convert shadcn/ui components copied from older docs, and check the page in a
+  browser at desktop width. Lint, types and tests do not catch it.
 - Keep reusable shadcn/ui primitives generic. Place application-specific login
   and workspace composition in `pages/` or non-`ui` components.
 - Keep workspace menu definitions in `config/workspace-navigation.ts` and use
