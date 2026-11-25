@@ -44,5 +44,5 @@ test('shows every primitive in a light and a dark panel at /design-system', () =
   expect(screen.getAllByRole('table')).toHaveLength(2)
   expect(screen.getAllByText('Disputed')).toHaveLength(2)
   // The page is unlisted, so the workspace sidebar is not rendered.
-  expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
+  expect(screen.queryByRole('link', { name: 'Textile Track dashboard' })).not.toBeInTheDocument()
 })

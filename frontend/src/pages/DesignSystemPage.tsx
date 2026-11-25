@@ -1,9 +1,43 @@
 import { useId, type ReactNode } from 'react'
-import { Bold, Check, Info, Italic, Mail, Plus, TriangleAlert, Underline, X } from 'lucide-react'
+import {
+  Bold,
+  Check,
+  Info,
+  Italic,
+  Mail,
+  Plus,
+  Recycle,
+  Sparkles,
+  TriangleAlert,
+  Underline,
+  Wrench,
+  X,
+} from 'lucide-react'
 import { toast } from 'sonner'
 
+import { EmptyState } from '@/components/EmptyState'
+import { SortActionButton } from '@/components/staff/SortActionButton'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -32,7 +66,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from '@/components/ui/input-group'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
@@ -75,6 +116,12 @@ const COLOR_TOKENS = [
   ['border', 'bg-border', 'text-foreground'],
   ['input', 'bg-input', 'text-foreground'],
   ['ring', 'bg-ring', 'text-foreground'],
+] as const
+
+const BIN_TYPE_TOKENS = [
+  ['resale', 'bg-resale text-resale-foreground', 'bg-resale-soft text-resale-soft-foreground'],
+  ['recycle', 'bg-recycle text-recycle-foreground', 'bg-recycle-soft text-recycle-soft-foreground'],
+  ['repair', 'bg-repair text-repair-foreground', 'bg-repair-soft text-repair-soft-foreground'],
 ] as const
 
 const CHART_TOKENS = ['bg-chart-1', 'bg-chart-2', 'bg-chart-3', 'bg-chart-4', 'bg-chart-5'] as const
@@ -138,6 +185,46 @@ function ThemePanel({ theme }: { theme: PanelTheme }) {
               chart-{index + 1}
             </div>
           ))}
+        </div>
+      </Section>
+
+      <Section title="Bin types">
+        <p className="text-xs text-muted-foreground">
+          Categories, not statuses: solid for quick-tap buttons, soft for badges and alerts.
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {BIN_TYPE_TOKENS.map(([name, solid, soft]) => (
+            <div key={name} className="grid gap-1 text-xs font-medium">
+              <div className={cn('rounded-md p-3', solid)}>{name}</div>
+              <div className={cn('rounded-md p-3', soft)}>{name}-soft</div>
+            </div>
+          ))}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <SortActionButton
+            type="resale"
+            icon={<Sparkles />}
+            label="Resale"
+            hint="Solid quick-tap button"
+            shortcut="[R]"
+            onClick={() => {}}
+          />
+          <SortActionButton
+            type="recycle"
+            icon={<Recycle />}
+            label="Recycle"
+            hint="Solid quick-tap button"
+            shortcut="[C]"
+            onClick={() => {}}
+          />
+          <SortActionButton
+            type="repair"
+            icon={<Wrench />}
+            label="Repair"
+            hint="Solid quick-tap button"
+            shortcut="[U]"
+            onClick={() => {}}
+          />
         </div>
       </Section>
 
@@ -206,6 +293,21 @@ function ThemePanel({ theme }: { theme: PanelTheme }) {
             <Label htmlFor={`${id}-disabled`}>Disabled</Label>
             <Input id={`${id}-disabled`} disabled placeholder="Not editable" />
           </div>
+          <Field>
+            <FieldLabel htmlFor={`${id}-revenue`}>Potential revenue</FieldLabel>
+            <InputGroup>
+              <InputGroupInput id={`${id}-revenue`} type="number" defaultValue="15000" />
+              <InputGroupAddon align="inline-end">
+                <InputGroupText>฿</InputGroupText>
+              </InputGroupAddon>
+            </InputGroup>
+            <FieldDescription>Field with an input group addon.</FieldDescription>
+          </Field>
+          <Field data-invalid>
+            <FieldLabel htmlFor={`${id}-driver`}>Driver weight (kg)</FieldLabel>
+            <Input id={`${id}-driver`} aria-invalid defaultValue="" />
+            <FieldError>Enter the driver's weight.</FieldError>
+          </Field>
           <div className="grid gap-2 sm:col-span-2">
             <Label htmlFor={`${id}-notes`}>Notes</Label>
             <Textarea id={`${id}-notes`} placeholder="Optional notes" />
@@ -287,6 +389,21 @@ function ThemePanel({ theme }: { theme: PanelTheme }) {
             <AlertTitle>Info</AlertTitle>
             <AlertDescription>Pickup scheduled for tomorrow.</AlertDescription>
           </Alert>
+          <Alert variant="resale" role="status">
+            <Check />
+            <AlertTitle>Resale</AlertTitle>
+            <AlertDescription>Item sorted into BIN-RS-004.</AlertDescription>
+          </Alert>
+          <Alert variant="recycle" role="status">
+            <Check />
+            <AlertTitle>Recycle</AlertTitle>
+            <AlertDescription>Item sorted into BIN-RC-002.</AlertDescription>
+          </Alert>
+          <Alert variant="repair" role="status">
+            <Check />
+            <AlertTitle>Repair</AlertTitle>
+            <AlertDescription>Item sorted into BIN-RP-001.</AlertDescription>
+          </Alert>
         </div>
       </Section>
 
@@ -299,7 +416,26 @@ function ThemePanel({ theme }: { theme: PanelTheme }) {
           <Badge variant="success">Success</Badge>
           <Badge variant="warning">Warning</Badge>
           <Badge variant="info">Info</Badge>
+          <Badge variant="resale">Resale</Badge>
+          <Badge variant="recycle">Recycle</Badge>
+          <Badge variant="repair">Repair</Badge>
         </div>
+      </Section>
+
+      <Section title="Breadcrumb">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>Operations</BreadcrumbItem>
+            <BreadcrumbSeparator>/</BreadcrumbSeparator>
+            <BreadcrumbItem>
+              <BreadcrumbLink href="#">Direct Resale</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator>/</BreadcrumbSeparator>
+            <BreadcrumbItem>
+              <BreadcrumbPage className="font-medium">Processed Bin Records</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
       </Section>
 
       <Section title="Table">
@@ -354,6 +490,10 @@ function ThemePanel({ theme }: { theme: PanelTheme }) {
         </div>
       </Section>
 
+      <Section title="Empty">
+        <EmptyState>No bins awaiting handoff.</EmptyState>
+      </Section>
+
       <Section title="Overlays">
         <div className="flex flex-wrap gap-2">
           <Dialog>
@@ -377,6 +517,23 @@ function ThemePanel({ theme }: { theme: PanelTheme }) {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline">Open alert dialog</Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent className={popup}>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Seal and close bin?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  The bin stops accepting items and becomes ready for handoff.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction>Confirm & Seal</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline">Open menu</Button>

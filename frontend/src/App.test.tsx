@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import '@testing-library/jest-dom/vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { toast } from 'sonner'
 import { afterEach, expect, test, vi } from 'vitest'
@@ -72,6 +72,11 @@ function fixtureFor(url: string) {
     return { handoffs: url.includes('status=disputed') ? [] : handoffRecords }
   }
   return { message: 'Hello from FastAPI!' }
+}
+
+/** The workspace sidebar, so its links aren't confused with a page's breadcrumb links. */
+function sidebar() {
+  return within(document.querySelector<HTMLElement>('[data-sidebar="sidebar"]')!)
 }
 
 function renderRoute(route: string) {
@@ -377,7 +382,7 @@ test('returns to New Bins for Handoff from Handoff Records', async () => {
 test('keeps Recycle Bin Handoff active on its sub-routes', () => {
   renderRoute('/staff/recycle-bin-handoff/handoff-records')
 
-  expect(screen.getByRole('link', { name: 'Recycle Bin Handoff' })).toHaveAttribute(
+  expect(sidebar().getByRole('link', { name: 'Recycle Bin Handoff' })).toHaveAttribute(
     'data-active',
     'true',
   )

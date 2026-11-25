@@ -238,7 +238,7 @@ describe('GarmentSortingWorkspace', () => {
     render(<GarmentSortingWorkspace />)
     await waitFor(() => expect(screen.getAllByText('BIN-RP-001').length).toBeGreaterThan(0))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Repair' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Repair' }))
 
     expect(screen.queryByText('BIN-RS-000')).not.toBeInTheDocument()
     expect(screen.getAllByText('BIN-RP-001').length).toBeGreaterThan(0)
@@ -292,6 +292,21 @@ describe('GarmentSortingWorkspace', () => {
     fireEvent.click(cancelBtn)
 
     expect(screen.queryByText('Create New Bin Record')).not.toBeInTheDocument()
+  })
+
+  test('ignores sorting shortcuts while a dialog has focus', async () => {
+    render(<GarmentSortingWorkspace />)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /New Bin Record/i })).toBeEnabled(),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /New Bin Record/i }))
+    const recycling = screen.getByRole('radio', { name: 'Recycling' })
+    recycling.focus()
+    fireEvent.keyDown(recycling, { key: 'r' })
+    fireEvent.keyDown(recycling, { key: '2' })
+
+    expect(api.sortGarment).not.toHaveBeenCalled()
   })
 
   test('responds to keyboard shortcut for quick intake', async () => {

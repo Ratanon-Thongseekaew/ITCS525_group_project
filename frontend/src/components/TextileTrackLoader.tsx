@@ -27,8 +27,8 @@ export function TextileTrackLoader({
   return (
     <div
       className={cn(
-        'grid place-items-center content-center gap-4 text-[var(--legacy-muted)]',
-        fullScreen && 'min-h-screen min-h-svh w-full bg-[#f8fafc] text-[var(--legacy-muted)]',
+        'grid place-items-center content-center gap-4 text-muted-foreground',
+        fullScreen && 'min-h-screen min-h-svh w-full bg-background',
         className,
       )}
       role="status"

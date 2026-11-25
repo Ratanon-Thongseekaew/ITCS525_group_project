@@ -74,8 +74,8 @@ export function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen min-h-svh w-full flex-col bg-white text-slate-950">
-      <header className="flex min-h-16 shrink-0 items-center justify-between border-b border-slate-100 px-5 py-4 sm:min-h-20 sm:px-8 lg:px-12">
+    <main className="flex min-h-screen min-h-svh w-full flex-col bg-background text-foreground">
+      <header className="flex min-h-16 shrink-0 items-center justify-between border-b px-5 py-4 sm:min-h-20 sm:px-8 lg:px-12">
         <div className="flex items-center gap-2.5" aria-label="Textile Track">
           <img
             src={textileTrackLogo}
@@ -86,13 +86,14 @@ export function LoginPage() {
           <span className="text-sm font-semibold tracking-tight sm:text-base">Textile Track</span>
         </div>
 
-        <div className="flex items-center gap-2 text-[11px] text-slate-500 sm:text-xs">
-          <span className="size-1.5 rounded-full bg-teal-700" aria-hidden="true" />
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground sm:text-xs">
+          <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
           <span className="hidden capitalize min-[380px]:inline">{role} workspace</span>
           <span className="capitalize min-[380px]:hidden">{role}</span>
         </div>
       </header>
 
+      {/* The video, scrim, and teal glow are photo treatment, so they stay the same in every theme. */}
       <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-slate-900 px-4 py-8 sm:px-6 sm:py-12 lg:px-10">
         <video
           className="absolute inset-0 size-full object-cover motion-reduce:hidden"
@@ -116,7 +117,7 @@ export function LoginPage() {
 
         <Card className="relative w-full max-w-[410px] shadow-[0_16px_45px_rgba(15,23,42,0.07)] sm:max-w-[430px]">
           <CardHeader className="space-y-2 px-5 pt-6 pb-5 sm:px-8 sm:pt-8">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-teal-700">
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary">
               {roleDetails[role].access}
             </p>
             <CardTitle className="text-xl sm:text-2xl">Login</CardTitle>
@@ -125,10 +126,7 @@ export function LoginPage() {
           <CardContent className="px-5 pb-6 sm:px-8 sm:pb-8">
             <form className="space-y-4 sm:space-y-5" onSubmit={handleSubmit}>
               {loginError ? (
-                <Alert
-                  variant="destructive"
-                  className="border-rose-200 bg-rose-50 text-rose-700 [&>svg]:text-rose-600"
-                >
+                <Alert variant="destructive">
                   <CircleAlert aria-hidden="true" />
                   <AlertTitle>Login failed</AlertTitle>
                   <AlertDescription>{loginError}</AlertDescription>
@@ -152,7 +150,7 @@ export function LoginPage() {
               <div className="space-y-2">
                 <Label htmlFor="username">Username</Label>
                 <div className="relative">
-                  <UserRound className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" />
+                  <UserRound className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="username"
                     name="username"
@@ -171,7 +169,7 @@ export function LoginPage() {
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <div className="relative">
-                  <LockKeyhole className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" />
+                  <LockKeyhole className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="password"
                     name="password"
@@ -185,7 +183,7 @@ export function LoginPage() {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="absolute top-1/2 right-1 size-8 -translate-y-1/2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                    className="absolute top-1/2 right-1 size-8 -translate-y-1/2 text-muted-foreground"
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                     aria-pressed={showPassword}
                     onClick={() => setShowPassword((isVisible) => !isVisible)}
@@ -204,7 +202,7 @@ export function LoginPage() {
                 Sign in
               </Button>
 
-              <p className="text-center text-xs leading-5 text-slate-400">
+              <p className="text-center text-xs leading-5 text-muted-foreground">
                 Demo mode: use the suggested username and any non-empty password.
               </p>
             </form>

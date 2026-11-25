@@ -110,7 +110,7 @@ test('shows the pickup evidence and the pending outcome notice', async () => {
   renderPage()
   await waitForRecords()
 
-  const card = screen.getByRole('listitem')
+  const card = within(screen.getByRole('list', { name: 'Handoff records' })).getByRole('listitem')
   expect(within(card).getByRole('heading', { name: '#test-001' })).toBeInTheDocument()
   expect(within(card).getByText('Contractor 2')).toBeInTheDocument()
   expect(within(card).getByText('20 OCT 2026, 6:30 PM')).toBeInTheDocument()

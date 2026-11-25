@@ -11,6 +11,7 @@ import {
   type HandoffActorOption,
   type SortingStatsResponse,
 } from '@/api'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import {
@@ -20,13 +21,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { BIN_TYPE_TONES } from '@/lib/bin-type-tones'
 import { useApiResource } from '@/lib/use-api-resource'
-import {
-  BIN_STATUS_LABELS,
-  BIN_TYPE_LABELS,
-  BIN_TYPE_STYLES,
-  CONDITION_LABELS,
-} from '@/lib/sorting-labels'
+import { BIN_STATUS_LABELS, BIN_TYPE_LABELS, CONDITION_LABELS } from '@/lib/sorting-labels'
 
 // Until managers sign in, the page asks which manager (or administrator) is looking. The choice
 // is remembered per browser; storage can be unavailable, so it is optional.
@@ -257,11 +254,9 @@ export function SortingOverviewPage() {
                             {bin.bin_code}
                           </td>
                           <td className="px-4 py-2.5">
-                            <span
-                              className={`inline-flex rounded px-2 py-0.5 text-[11px] font-medium ${BIN_TYPE_STYLES[bin.bin_type]}`}
-                            >
+                            <Badge variant={BIN_TYPE_TONES[bin.bin_type].variant}>
                               {BIN_TYPE_LABELS[bin.bin_type]}
-                            </span>
+                            </Badge>
                           </td>
                           <td className="px-4 py-2.5">{BIN_STATUS_LABELS[bin.status]}</td>
                           <td className="px-4 py-2.5">

@@ -521,8 +521,18 @@ python -m ruff check backend
   light and `dark:` pair. Use them for states such as approved, disputed, or
   awaiting pickup instead of hand-styled pills or boxes. Don't add new tokens
   for status colors.
-- **Primitives:** alert, badge, button, card, chart, checkbox, dialog,
-  dropdown-menu, input, label, progress, radio-group, select, separator, sheet,
+- **Bin-type colors:** bin types are categories, not statuses, so they have
+  their own tokens: `--resale` (teal), `--recycle` (amber), and `--repair`
+  (sky), each with `-foreground`, `-soft`, and `-soft-foreground`, in light
+  (-700 solids) and dark (-400 solids). Use the solid pair (`bg-resale
+text-resale-foreground`) for the sorting quick-tap buttons, and the soft pair
+  through the `resale`, `recycle`, and `repair` variants of `Badge` and `Alert`.
+  `lib/bin-type-tones.ts` maps each `BinType` to its classes (badge variant,
+  solid, soft, fill, progress, and toggle-on) and each bin status to a badge
+  variant. `lib/handoff-records.ts` does the same for handoff statuses.
+- **Primitives:** alert, alert-dialog, badge, breadcrumb, button, card, chart,
+  checkbox, dialog, dropdown-menu, empty, field, input, input-group, label,
+  progress, radio-group, select, separator, sheet,
   sidebar, skeleton, sonner, switch, table, tabs, textarea, toggle,
   toggle-group, tooltip. They come from shadcn's `new-york-v4` registry and are
   built on the `radix-ui` package. The `new-york` style in `components.json`
@@ -532,6 +542,8 @@ python -m ruff check backend
   aliases, and run Prettier.
 - **Local changes to the primitives** (keep them when updating):
   - `CardTitle` renders an `h2` and `AlertTitle` an `h5`, so titles stay headings.
+  - `Badge` and `Alert` add the `success`, `warning`, `info`, `resale`,
+    `recycle`, and `repair` variants.
   - `Card` keeps the section-padding model: `CardHeader` is a `flex flex-col p-6`
     column (pages make it a row with `flex-row justify-between`), and
     `CardContent` and `CardFooter` use `p-6 pt-0`. Upstream uses `py-6 gap-6`
@@ -559,11 +571,33 @@ python -m ruff check backend
 - **Reference:** `/design-system` shows every token and primitive in a light and
   a dark panel. A popup opened from the dark panel gets `className="dark"`
   because it renders in a portal outside the panel.
-- **Legacy styles:** the BEM classes in `styles.css` (`.resale-*`,
-  `.dashboard`, `.not-found`, `.primary-button`, `.page-container`, …) and the
-  `--legacy-*` variables still style pages that haven't been migrated. When a
-  page moves to the design system, replace classes as follows and then delete
-  any legacy CSS that is no longer used:
+- **Shared page components** in `components/` (use them before building your
+  own):
+  - `PageHeader`: breadcrumb, `h1`, description, optional eyebrow, and actions.
+    Breadcrumbs with a `to` render as router links, and the last one is the
+    current page (`aria-current`, not a link).
+  - `PageSection`: a titled `section` with an actions slot (filters), a footer
+    slot (record counts), and an optional `headingRef` for returning focus.
+  - `StatCard`: one summary metric as a `dt`/`dd` pair inside a `dl` grid,
+    with `default`, `destructive`, `resale`, `recycle`, and `repair` tones.
+  - `RecordCard` and `RecordDetail`: a bin or record row with an icon tile,
+    identity, a `dl` of details, a status slot, and optional children. With
+    `onSelect`, the title becomes a stretched button so the whole card is
+    clickable.
+  - `LoadState` and `ErrorState`: the loading status and a destructive alert
+    with Retry. `EmptyState`: a dashed placeholder for an empty list.
+  - Staff-only: `staff/SortActionButton`, `staff/BinProgressCard`,
+    `staff/NewBinDialog`, `staff/SealBinDialog`, and
+    `staff/DirectResaleProcessDialog`. `staff/handoff-form.tsx` holds the
+    handoff fields, `BinSummary`, and `HandoffDialogShell`, built on `field`
+    and `input-group`.
+- **Migrated so far:** the app shell (`AppLayout`, `WorkspaceSidebar`,
+  `ApiStatus`), `TextileTrackLoader`, the login, 404, and contractor report
+  import wrapper pages, and the whole staff workspace (Garment Sorting, Direct
+  Resale with its two subpages, and both Recycle Bin Handoff pages).
+- **Legacy styles:** the manager and admin pages still use palette classes.
+  When a page moves to the design system, replace classes as follows and then
+  delete any legacy CSS that is no longer used:
 
   | Replace                                     | With                                                 |
   | ------------------------------------------- | ---------------------------------------------------- |

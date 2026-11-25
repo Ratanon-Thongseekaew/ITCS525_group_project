@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getGreeting } from '@/api'
+import { Badge } from '@/components/ui/badge'
 
 export function ApiStatus() {
   const [connected, setConnected] = useState(false)
@@ -25,9 +26,9 @@ export function ApiStatus() {
   }, [])
 
   return (
-    <div className={`api-status ${connected ? 'api-status--online' : ''}`}>
-      <span className="api-status__dot" aria-hidden="true" />
+    <Badge variant={connected ? 'success' : 'warning'} className="hidden sm:inline-flex">
+      <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
       {label}
-    </div>
+    </Badge>
   )
 }

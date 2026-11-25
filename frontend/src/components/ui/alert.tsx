@@ -16,6 +16,13 @@ const alertVariants = cva(
         warning:
           'border-amber-200 bg-amber-50 text-amber-900 *:data-[slot=alert-description]:text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200 dark:*:data-[slot=alert-description]:text-amber-300',
         info: 'border-sky-200 bg-sky-50 text-sky-900 *:data-[slot=alert-description]:text-sky-800 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-200 dark:*:data-[slot=alert-description]:text-sky-300',
+        // Project addition: bin-type variants built on the --resale, --recycle and --repair tokens.
+        resale:
+          'border-resale/30 bg-resale-soft text-resale-soft-foreground *:data-[slot=alert-description]:text-resale-soft-foreground/90',
+        recycle:
+          'border-recycle/30 bg-recycle-soft text-recycle-soft-foreground *:data-[slot=alert-description]:text-recycle-soft-foreground/90',
+        repair:
+          'border-repair/30 bg-repair-soft text-repair-soft-foreground *:data-[slot=alert-description]:text-repair-soft-foreground/90',
       },
     },
     defaultVariants: {

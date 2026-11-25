@@ -22,6 +22,10 @@ const badgeVariants = cva(
         warning:
           'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 [a&]:hover:bg-amber-200 dark:[a&]:hover:bg-amber-900',
         info: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 [a&]:hover:bg-sky-200 dark:[a&]:hover:bg-sky-900',
+        // Project addition: bin-type variants built on the --resale, --recycle and --repair tokens.
+        resale: 'bg-resale-soft text-resale-soft-foreground [a&]:hover:bg-resale-soft/80',
+        recycle: 'bg-recycle-soft text-recycle-soft-foreground [a&]:hover:bg-recycle-soft/80',
+        repair: 'bg-repair-soft text-repair-soft-foreground [a&]:hover:bg-repair-soft/80',
       },
     },
     defaultVariants: {
