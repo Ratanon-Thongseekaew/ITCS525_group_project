@@ -5,8 +5,8 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { getHandoffOptions, getHandoffs, type HandoffOutcomes, type HandoffRecord } from '@/api'
+import { signInAs } from '@/test/auth'
 import {
-  actAs,
   chooseOption,
   handoffOptions,
   handoffRecord,
@@ -86,8 +86,7 @@ function outcomeValue(label: string) {
 }
 
 beforeEach(() => {
-  window.localStorage.clear()
-  actAs(STAFF_ID)
+  signInAs('staff', { id: STAFF_ID })
   records = [pickedUp(), reported()]
   vi.mocked(getHandoffOptions).mockResolvedValue(handoffOptions)
   vi.mocked(getHandoffs).mockImplementation(async () => ({ handoffs: [...records] }))
@@ -95,6 +94,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  window.sessionStorage.clear()
   vi.clearAllMocks()
 })
 
@@ -103,6 +103,11 @@ test('loads the records for the staff member’s site', async () => {
   await waitForRecords()
 
   expect(getHandoffs).toHaveBeenCalledWith({ site_id: 1 }, expect.any(AbortSignal))
+  expect(getHandoffOptions).not.toHaveBeenCalled()
+  const account = screen.getByRole('group', { name: 'Signed-in staff account' })
+  expect(account).toHaveTextContent('Test staff')
+  expect(account).toHaveTextContent('Siam Square')
+  expect(screen.queryByLabelText('Staff member')).not.toBeInTheDocument()
 })
 
 test('shows the pickup evidence and the pending outcome notice', async () => {
@@ -233,12 +238,24 @@ test('explains a disputed handoff without offering approval or closing', async (
   expect(screen.queryByRole('button', { name: /Close Handoff/ })).not.toBeInTheDocument()
 })
 
-test('loads nothing until a staff account is chosen', async () => {
-  window.localStorage.clear()
+test('loads nothing for a staff account without a store', async () => {
+  signInAs('staff', { id: STAFF_ID, store: null })
   renderPage()
 
   expect(
-    await screen.findByText('Choose your staff account above to see your site’s handoff records.'),
+    await screen.findByText(
+      'A staff account assigned to a store is required to see handoff records.',
+    ),
+  ).toBeInTheDocument()
+  expect(getHandoffs).not.toHaveBeenCalled()
+})
+
+test('loads nothing for a signed-in manager', async () => {
+  signInAs('manager')
+  renderPage()
+
+  expect(
+    await screen.findByText('Recycle Bin Handoff is available to staff accounts only.'),
   ).toBeInTheDocument()
   expect(getHandoffs).not.toHaveBeenCalled()
 })

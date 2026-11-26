@@ -11,8 +11,8 @@ import {
   recordHandoffAtPickup,
   type HandoffReadyBin,
 } from '@/api'
+import { signInAs } from '@/test/auth'
 import {
-  actAs,
   chooseOption,
   fillPickupEvidence,
   handoffOptions,
@@ -56,8 +56,7 @@ async function findBinList() {
 }
 
 beforeEach(() => {
-  window.localStorage.clear()
-  actAs(STAFF_ID)
+  signInAs('staff', { id: STAFF_ID })
   bins = [
     readyBin({ id: 1, code: 'test-001', item_count: 10, total_weight_kg: 1.5, ready_at: packedAt }),
     readyBin({ id: 2, code: 'test-002', item_count: 25, total_weight_kg: 0.1, ready_at: packedAt }),
@@ -73,6 +72,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  window.sessionStorage.clear()
   vi.clearAllMocks()
 })
 
@@ -135,43 +135,42 @@ test('shows a load error and retries', async () => {
   await findBinList()
 })
 
-test('offers only staff accounts and loads nothing until one is chosen', async () => {
-  window.localStorage.clear()
+test('uses the signed-in staff account and its store instead of a picker', async () => {
   renderPage()
-
-  expect(
-    await screen.findByText('Choose your staff account above to see the bins at your site.'),
-  ).toBeInTheDocument()
-  expect(getHandoffReadyBins).not.toHaveBeenCalled()
-
-  fireEvent.keyDown(screen.getByLabelText('Staff member'), { key: 'Enter' })
-  expect(screen.getByRole('option', { name: 'staff.bkk@example.com' })).toBeInTheDocument()
-  expect(screen.queryByRole('option', { name: /manager/ })).not.toBeInTheDocument()
-  fireEvent.click(screen.getByRole('option', { name: 'staff.bkk@example.com' }))
-
   await findBinList()
-  expect(getHandoffReadyBins).toHaveBeenCalledWith(1, expect.any(AbortSignal))
-  expect(screen.getByText('Bangkok Sorting Center', { selector: 'p' })).toBeInTheDocument()
+
+  const account = screen.getByRole('group', { name: 'Signed-in staff account' })
+  expect(account).toHaveTextContent('Test staff')
+  expect(account).toHaveTextContent('Siam Square')
+  expect(screen.queryByLabelText('Staff member')).not.toBeInTheDocument()
+  expect(screen.queryByText(/Temporary/)).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: '#test-001' })).toBeEnabled()
 })
 
-test('labels the staff picker as a stand-in until login exists', async () => {
-  renderPage()
-
-  const picker = await screen.findByLabelText('Staff member')
-  const notice = screen.getByText(/Staff login isn’t available yet/)
-  expect(notice).toHaveTextContent('Temporary')
-  expect(picker).toHaveAccessibleDescription(/replaced by signing in/)
-})
-
-test('ignores a remembered manager account', async () => {
-  actAs(MANAGER_ID)
+test('loads nothing for a staff account without a store', async () => {
+  signInAs('staff', { id: STAFF_ID, store: null })
   renderPage()
 
   expect(
-    await screen.findByText('Choose your staff account above to see the bins at your site.'),
+    await screen.findByText(
+      'A staff account assigned to a store is required to load bins awaiting handoff.',
+    ),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('group', { name: 'Signed-in staff account' })).toHaveTextContent(
+    'No store assigned',
+  )
+  expect(getHandoffReadyBins).not.toHaveBeenCalled()
+})
+
+test('loads nothing for a signed-in manager', async () => {
+  signInAs('manager', { id: MANAGER_ID })
+  renderPage()
+
+  expect(
+    await screen.findByText('Recycle Bin Handoff is available to staff accounts only.'),
   ).toBeInTheDocument()
   expect(getHandoffReadyBins).not.toHaveBeenCalled()
+  expect(getHandoffOptions).not.toHaveBeenCalled()
 })
 
 test('links to Handoff Records and has no scheduling page', () => {

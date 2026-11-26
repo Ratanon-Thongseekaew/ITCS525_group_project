@@ -3,8 +3,9 @@ import { getHandoffOptions } from '@/api'
 import { useApiResource } from '@/lib/use-api-resource'
 import type { HandoffActorOption, HandoffOptions } from '@/types/handoff'
 
-// The handoff pages are a staff workplace. Until login is connected they ask which staff
-// account is working; the choice is remembered per browser. Storage can be unavailable
+// Garment Sorting still asks which staff account is working through this temporary picker
+// (the handoff and Direct Resale pages use the signed-in account). The choice is remembered
+// per browser. Storage can be unavailable
 // (private windows, blocked site data), so it's optional.
 const ACTOR_KEY = 'textile-track:handoff-actor-id'
 

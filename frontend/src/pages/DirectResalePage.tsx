@@ -6,7 +6,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { PageHeader } from '@/components/PageHeader'
 import { PageSection } from '@/components/PageSection'
 import { StatCard } from '@/components/StatCard'
-import { DirectResaleAccountBar } from '@/components/staff/DirectResaleAccountBar'
+import { StaffAccountBar } from '@/components/staff/StaffAccountBar'
 import { DirectResaleBinRow } from '@/components/staff/DirectResaleBinRow'
 import { DirectResaleProcessDialog } from '@/components/staff/DirectResaleProcessDialog'
 import { Button } from '@/components/ui/button'
@@ -53,7 +53,7 @@ export function DirectResalePage() {
         }
       />
 
-      <DirectResaleAccountBar user={user} />
+      <StaffAccountBar user={user} featureName="Direct Resale" />
 
       <PageSection title="Summary" bordered>
         <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

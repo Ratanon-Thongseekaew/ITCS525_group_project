@@ -7,12 +7,12 @@ import { FilterSelect, type FilterOption } from '@/components/FilterSelect'
 import { LoadState } from '@/components/LoadState'
 import { PageHeader } from '@/components/PageHeader'
 import { PageSection } from '@/components/PageSection'
-import { HandoffActorBar } from '@/components/staff/HandoffActorBar'
 import { HandoffRecordCard } from '@/components/staff/HandoffRecordCard'
+import { StaffAccountBar } from '@/components/staff/StaffAccountBar'
 import { Button } from '@/components/ui/button'
+import { useSession } from '@/lib/auth-session'
 import { getVisibleRecords } from '@/lib/handoff-records'
 import { useApiResource } from '@/lib/use-api-resource'
-import { useHandoffWorkspace } from '@/lib/use-handoff-workspace'
 import {
   handoffRecordFilterLabels,
   handoffRecordSortLabels,
@@ -28,15 +28,15 @@ const filterOptions = toOptions(handoffRecordFilterLabels)
 const sortOptions = toOptions(handoffRecordSortLabels)
 
 export function HandoffRecordsPage() {
-  const workspace = useHandoffWorkspace()
-  const { siteId } = workspace
+  const user = useSession()?.user ?? null
+  const siteId = user?.role === 'staff' ? (user.store?.id ?? null) : null
   const [filter, setFilter] = useState<HandoffRecordFilter>('all')
   const [sort, setSort] = useState<HandoffRecordSort>('date')
   const loadRecords = useCallback(
     (signal: AbortSignal) => getHandoffs({ site_id: siteId ?? undefined }, signal),
     [siteId],
   )
-  // Staff only see their own site, so nothing loads until a staff account is chosen.
+  // Staff only see their own store's site, so nothing loads without one.
   const resource = useApiResource(
     siteId === null ? null : `handoff-records:${siteId}`,
     loadRecords,
@@ -65,7 +65,7 @@ export function HandoffRecordsPage() {
             </Button>
           }
         />
-        <HandoffActorBar workspace={workspace} />
+        <StaffAccountBar user={user} featureName="Recycle Bin Handoff" />
       </div>
 
       <PageSection
@@ -99,13 +99,13 @@ export function HandoffRecordsPage() {
           ) : undefined
         }
       >
-        {siteId === null && !workspace.isLoading ? (
+        {siteId === null ? (
           <EmptyState>
-            Choose your staff account above to see your site’s handoff records.
+            A staff account assigned to a store is required to see handoff records.
           </EmptyState>
         ) : null}
         <LoadState
-          isLoading={resource.isLoading || workspace.isLoading}
+          isLoading={resource.isLoading}
           error={resource.error}
           loadingLabel="Loading handoff records…"
           onRetry={resource.retry}
