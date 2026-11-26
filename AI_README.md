@@ -145,13 +145,15 @@ React Router owns client-side navigation. The current frontend routes are:
   summary.
 - `/staff/sorting` renders the garment sorting workspace. `/staff` has no route;
   the login page and sidebar logo send staff users to `/staff/sorting`.
-- `/staff/direct-resale` renders the Direct Resale bins awaiting process, using
-  mock data. Processing a bin removes it from the list.
-- `/staff/direct-resale/potential-revenue-analysis` renders Potential Revenue
-  Analysis, totalled from mock processed bins.
-- `/staff/direct-resale/processed-bins-record` renders Processed Bin Records,
-  using the same mock data. Bins processed during a session do not carry over
-  to either page yet.
+- `/staff/direct-resale` loads closed resale bins for the selected staff
+  account's site from `GET /api/resale-bins?site_id=`. Processing a bin records
+  accepted/rejected counts, revenue, date, and notes with
+  `POST /api/resale-bins/{bin_id}/process`.
+- `/staff/direct-resale/potential-revenue-analysis` renders Revenue Summary,
+  totalling persisted process revenue for the selected site.
+- `/staff/direct-resale/processed-bins-record` renders persisted Processed Bin
+  History for the selected site. The staff account picker is shared with the
+  handoff workspace until frontend login is connected.
 - `/staff/recycle-bin-handoff` renders New Bins for Handoff from
   `/api/handoffs/bins`. Selecting a bin opens `NewHandoffRecordDialog`, which
   records the handoff and its pickup evidence through `POST /api/handoffs/pickups`.
@@ -311,6 +313,17 @@ the backend before relying on it for access control.
 Returns the five sites with the highest summed `actual_value` across resale
 bins. The manager resale page displays each site and calculates the combined
 actual value of the returned sites.
+
+### Direct Resale processing
+
+- `GET /api/resale-bins?site_id=` lists closed resale bins at a site and joins
+  any saved processing record.
+- `POST /api/resale-bins/{bin_id}/process` records the staff actor, accepted and
+  rejected item counts (which must total the bin count), sale revenue, process
+  date, and optional notes. A bin can be processed once. The revenue is also
+  saved to `bins.actual_value` for EPR and manager resale reporting.
+- `resale_bin_processes` stores process details. Apply its schema with
+  `npm run db:migrate` before using the Direct Resale write flow.
 
 ### `GET /api/epr/quarterly-report` (EPR change request)
 

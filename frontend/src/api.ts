@@ -12,6 +12,29 @@ export interface ResaleStoreSummaryResponse {
   stores: ResaleStoreSummary[]
 }
 
+export interface DirectResaleBinRecord {
+  id: number
+  bin_code: string
+  item_count: number
+  total_weight_kg: number
+  packed_at: string
+  status: 'awaiting_process' | 'processed'
+  accepted_item_count: number | null
+  rejected_item_count: number | null
+  revenue: number | null
+  processed_at: string | null
+  notes: string | null
+}
+
+export interface ProcessDirectResaleBinRequest {
+  actor_id: number
+  accepted_item_count: number
+  rejected_item_count: number
+  revenue: number
+  processed_at: string
+  notes?: string
+}
+
 export type BinType = 'resale' | 'recycle' | 'repair'
 // 'active' accepts items; sealing makes a recycling bin 'ready' for handoff, others 'closed'.
 export type BinStatus = 'active' | 'ready' | 'handed_off' | 'closed'
@@ -401,6 +424,16 @@ export function getBins(
   filters?: { bin_type?: BinType; status?: BinStatus },
 ): Promise<BinRecord[]> {
   return sortingRequest<BinRecord[]>(`/bins${buildQuery({ site_id: siteId, ...filters })}`)
+}
+
+export function getDirectResaleBins(siteId: number, signal?: AbortSignal) {
+  return sortingRequest<DirectResaleBinRecord[]>(`/resale-bins${buildQuery({ site_id: siteId })}`, {
+    signal,
+  })
+}
+
+export function processDirectResaleBin(binId: number, payload: ProcessDirectResaleBinRequest) {
+  return postJson<DirectResaleBinRecord>(`/resale-bins/${binId}/process`, payload)
 }
 
 export function createBin(payload: BinCreateRequest): Promise<BinRecord> {

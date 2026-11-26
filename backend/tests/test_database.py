@@ -26,6 +26,7 @@ EXPECTED_TABLES = {
     "epr_quarter_site_snapshots",
     "garment_records",
     "handoffs",
+    "resale_bin_processes",
     "sites",
     "user_sites",
     "users",

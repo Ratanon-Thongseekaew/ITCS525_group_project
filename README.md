@@ -203,9 +203,9 @@ Vite proxies `/api` requests to FastAPI during development. To point the fronten
 | `/manager/import`                                              | Contractor monthly outcome report import            |
 | `/manager/resale-bins`                                         | Top-five store resale value summary                 |
 | `/staff/sorting`                                               | Garment sorting (Resale, Recycle, Repair / Upcycle) |
-| `/staff/direct-resale`                                         | Direct resale bins (mock data)                      |
-| `/staff/direct-resale/potential-revenue-analysis`              | Potential revenue analysis (mock data)              |
-| `/staff/direct-resale/processed-bins-record`                   | Processed resale bin records (mock data)            |
+| `/staff/direct-resale`                                         | Closed resale bins and processing form              |
+| `/staff/direct-resale/potential-revenue-analysis`              | Revenue summary for processed resale bins           |
+| `/staff/direct-resale/processed-bins-record`                   | Processed bin history                               |
 | `/staff/recycle-bin-handoff`                                   | Record a handoff when the driver arrives            |
 | `/staff/recycle-bin-handoff/handoff-records`                   | Handoff records and their status                    |
 | `/admin/users`                                                 | User management, the admin landing page (mock data) |
