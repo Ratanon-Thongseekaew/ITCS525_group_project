@@ -6,35 +6,37 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-interface OptionSelectProps<T extends string> {
+interface OptionSelectProps {
   id: string
   value: string
-  options: readonly T[]
+  options: readonly { value: string; label: string }[]
   placeholder: string
   invalid?: boolean
   describedBy?: string
-  onChange: (value: T) => void
+  disabled?: boolean
+  onChange: (value: string) => void
 }
 
-/** A select whose options are their own labels, such as roles or stores. */
-export function OptionSelect<T extends string>({
+/** A labelled-by-id select, such as for roles or stores. */
+export function OptionSelect({
   id,
   value,
   options,
   placeholder,
   invalid,
   describedBy,
+  disabled,
   onChange,
-}: OptionSelectProps<T>) {
+}: OptionSelectProps) {
   return (
-    <Select value={value} onValueChange={(next) => onChange(next as T)}>
+    <Select value={value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger id={id} aria-invalid={invalid || undefined} aria-describedby={describedBy}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
         {options.map((option) => (
-          <SelectItem key={option} value={option}>
-            {option}
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
           </SelectItem>
         ))}
       </SelectContent>

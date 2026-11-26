@@ -3,10 +3,12 @@ import { ApiStatus } from './ApiStatus'
 import { ModeToggle } from './ModeToggle'
 import { WorkspaceSidebar } from './WorkspaceSidebar'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
+import { useSession } from '@/lib/auth-session'
 import { isWorkspaceRole } from '@/types/workspace'
 
 export function AppLayout() {
   const { pathname } = useLocation()
+  const user = useSession()?.user
   const pathRole = pathname.split('/')[1]
   const role = isWorkspaceRole(pathRole) ? pathRole : 'staff'
 
@@ -24,6 +26,14 @@ export function AppLayout() {
             </p>
           </div>
 
+          {user ? (
+            <span
+              className="hidden max-w-48 truncate text-xs text-muted-foreground sm:block"
+              title={user.username}
+            >
+              {user.full_name || user.username}
+            </span>
+          ) : null}
           <ApiStatus />
           <ModeToggle />
         </header>
