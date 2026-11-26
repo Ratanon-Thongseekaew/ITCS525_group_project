@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
 import { sessionUser, signInAs } from './test/auth'
 import { dashboardFixture } from './test/dashboard-fixture'
-import { actAs, handoffOptions, handoffRecord, readyBin, STAFF_ID } from './test/handoff-fixtures'
+import { handoffOptions, handoffRecord, readyBin } from './test/handoff-fixtures'
 import App from './App'
 import { isWorkspaceRole } from './types/workspace'
 
@@ -164,7 +164,6 @@ function renderRoute(route: string) {
 }
 
 function renderDirectResaleRoute(route: string) {
-  window.localStorage.setItem('textile-track:handoff-actor-id', String(STAFF_ID))
   renderRoute(route)
 }
 
@@ -438,7 +437,6 @@ test('opens Direct Resale from the staff sidebar', async () => {
 })
 
 test('renders New Bins for Handoff from the API', async () => {
-  actAs(STAFF_ID)
   renderRoute('/staff/recycle-bin-handoff')
 
   expect(screen.getByRole('heading', { name: 'New Bins for Handoff' })).toBeInTheDocument()
@@ -460,7 +458,6 @@ test('navigates to Handoff Records from the handoff page', async () => {
 })
 
 test('renders Handoff Records from the API', async () => {
-  actAs(STAFF_ID)
   renderRoute('/staff/recycle-bin-handoff/handoff-records')
 
   expect(screen.getByRole('heading', { name: 'Handoff Records' })).toBeInTheDocument()

@@ -2,21 +2,21 @@ import { useCallback, useRef, useState, type MouseEvent } from 'react'
 import { ArchiveRestore, Recycle } from 'lucide-react'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
-import { getHandoffReadyBins, getHandoffs } from '@/api'
+import { getHandoffOptions, getHandoffReadyBins, getHandoffs } from '@/api'
 import { EmptyState } from '@/components/EmptyState'
 import { LoadState } from '@/components/LoadState'
 import { PageHeader } from '@/components/PageHeader'
 import { PageSection } from '@/components/PageSection'
 import { RecordCard, RecordDetail } from '@/components/RecordCard'
 import { StatCard } from '@/components/StatCard'
-import { HandoffActorBar } from '@/components/staff/HandoffActorBar'
 import { NewHandoffRecordDialog } from '@/components/staff/NewHandoffRecordDialog'
+import { StaffAccountBar } from '@/components/staff/StaffAccountBar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { BIN_TYPE_TONES } from '@/lib/bin-type-tones'
+import { useSession } from '@/lib/auth-session'
 import { formatPackedAt } from '@/lib/handoff-format'
 import { useApiResource } from '@/lib/use-api-resource'
-import { useHandoffWorkspace } from '@/lib/use-handoff-workspace'
 import type { HandoffReadyBin, HandoffRecord } from '@/types/handoff'
 
 const recordsPath = '/staff/recycle-bin-handoff/handoff-records'
@@ -79,8 +79,16 @@ function BinRecordCard({ bin, disabled, onSelect }: BinRecordCardProps) {
 }
 
 export function NewBinsForHandoffPage() {
-  const workspace = useHandoffWorkspace()
-  const { options, siteId, actor } = workspace
+  const user = useSession()?.user ?? null
+  const actor = user?.role === 'staff' ? user : null
+  const siteId = actor?.store?.id ?? null
+  // Only the contractors are needed from the options: the actor is the signed-in staff user.
+  const optionsResource = useApiResource(
+    actor ? 'handoff-options' : null,
+    getHandoffOptions,
+    'Contractors could not be loaded.',
+  )
+  const options = optionsResource.data
   const loadBins = useCallback(
     async (signal: AbortSignal) => {
       const site = siteId ?? undefined
@@ -92,7 +100,7 @@ export function NewBinsForHandoffPage() {
     },
     [siteId],
   )
-  // Staff only see their own site, so nothing loads until a staff account is chosen.
+  // Staff only see their own store's site, so nothing loads without one.
   const resource = useApiResource(
     siteId === null ? null : `ready-bins:${siteId}`,
     loadBins,
@@ -140,7 +148,7 @@ export function NewBinsForHandoffPage() {
             </Button>
           }
         />
-        <HandoffActorBar workspace={workspace} />
+        <StaffAccountBar user={user} featureName="Recycle Bin Handoff" />
       </div>
 
       <PageSection title="Summary" bordered>
@@ -158,14 +166,16 @@ export function NewBinsForHandoffPage() {
         headingRef={listHeadingRef}
         footer={resource.data ? `Showing ${bins.length} of ${bins.length} records` : undefined}
       >
-        {siteId === null && !workspace.isLoading ? (
-          <EmptyState>Choose your staff account above to see the bins at your site.</EmptyState>
+        {siteId === null ? (
+          <EmptyState>
+            A staff account assigned to a store is required to load bins awaiting handoff.
+          </EmptyState>
         ) : null}
         <LoadState
-          isLoading={resource.isLoading || workspace.isLoading}
-          error={resource.error}
+          isLoading={resource.isLoading || optionsResource.isLoading}
+          error={resource.error ?? optionsResource.error}
           loadingLabel="Loading bins…"
-          onRetry={resource.retry}
+          onRetry={resource.error ? resource.retry : optionsResource.retry}
         />
         {resource.data ? (
           bins.length > 0 ? (
@@ -174,7 +184,7 @@ export function NewBinsForHandoffPage() {
                 <li key={bin.id}>
                   <BinRecordCard
                     bin={bin}
-                    disabled={!actor}
+                    disabled={!actor || !options}
                     onSelect={(event) => {
                       returnFocusRef.current = event.currentTarget
                       setSelectedBin(bin)

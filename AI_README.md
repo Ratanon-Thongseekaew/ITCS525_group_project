@@ -148,25 +148,24 @@ React Router owns client-side navigation. The current frontend routes are:
   summary.
 - `/staff/sorting` renders the garment sorting workspace. `/staff` has no route;
   the login page and sidebar logo send staff users to `/staff/sorting`.
-- `/staff/direct-resale` loads closed resale bins for the selected staff
-  account's site from `GET /api/resale-bins?site_id=`. Processing a bin records
+- `/staff/direct-resale` loads closed resale bins for the signed-in staff
+  account's store from `GET /api/resale-bins?site_id=`. Processing a bin records
   accepted/rejected counts, revenue, date, and notes with
   `POST /api/resale-bins/{bin_id}/process`.
 - `/staff/direct-resale/potential-revenue-analysis` renders Revenue Summary,
-  totalling persisted process revenue for the selected site.
+  totalling persisted process revenue for the signed-in staff account's store.
 - `/staff/direct-resale/processed-bins-record` renders persisted Processed Bin
-  History for the selected site. The staff account picker is shared with the
-  handoff workspace until frontend login is connected.
+  History for the signed-in staff account's store. The Direct Resale and handoff
+  pages show that account with `StaffAccountBar`.
 - `/staff/recycle-bin-handoff` renders New Bins for Handoff from
   `/api/handoffs/bins`. Selecting a bin opens `NewHandoffRecordDialog`, which
   records the handoff and its pickup evidence through `POST /api/handoffs/pickups`.
   Its Awaiting Approval card counts disputed handoffs at the staff member's site.
   There is no separate scheduling page; handoffs are recorded at pickup.
 - `/staff/recycle-bin-handoff/handoff-records` renders Handoff Records from
-  `GET /api/handoffs`, read-only. Both handoff pages are staff-only: they share
-  `useHandoffWorkspace` and `HandoffActorBar`, a staff-account picker kept in
-  `localStorage` until login is connected, and load nothing until a staff
-  account is chosen. There is no manager handoff route; managers approve and
+  `GET /api/handoffs`, read-only. Both handoff pages are staff-only: they use the
+  signed-in staff account (`useSession`) as the actor and its store as the site,
+  and load nothing for a non-staff account or a staff account without a store. There is no manager handoff route; managers approve and
   close through the API until a manager screen exists.
 - `/admin/users` renders user management on `/api/users` and `/api/sites`. It is the admin
   landing page after login; `/admin` has no route.
@@ -259,8 +258,8 @@ names the acting user with `actor_id` until login is connected (`422` unknown us
   to one site, so they are only reported when the request covers a single site.
 - `GET /api/garments/recent?actor_id=&site_id=&limit=` returns the latest garments.
 
-The staff screen reuses `useHandoffWorkspace` and `HandoffActorBar` to choose the staff member
-and loads nothing until one is chosen. `/manager/sorting` (`SortingOverviewPage`) is a read-only
+The staff screen still uses `useHandoffWorkspace` and `HandoffActorBar`, a temporary picker, to
+choose the staff member, and loads nothing until one is chosen. `/manager/sorting` (`SortingOverviewPage`) is a read-only
 overview for managers: a temporary manager picker, a site switcher with an "All sites" option,
 today's counts, the bins and the recent garments, with the site on every row. It offers no sorting,
 sealing or bin creation. Sealed Repair bins have no next step yet. Handoff only covers recycle

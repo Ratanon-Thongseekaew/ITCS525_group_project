@@ -3,7 +3,7 @@ import { ArrowLeft } from 'lucide-react'
 import { Link } from 'react-router'
 import { getDirectResaleBins } from '@/api'
 import { PageHeader } from '@/components/PageHeader'
-import { DirectResaleAccountBar } from '@/components/staff/DirectResaleAccountBar'
+import { StaffAccountBar } from '@/components/staff/StaffAccountBar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { useSession } from '@/lib/auth-session'
@@ -35,7 +35,7 @@ export function PotentialRevenueAnalysisPage() {
         title="Potential Revenue Analysis"
         description="Revenue recorded from processed direct resale bins"
       />
-      <DirectResaleAccountBar user={user} />
+      <StaffAccountBar user={user} featureName="Direct Resale" />
 
       <Card>
         <CardHeader>

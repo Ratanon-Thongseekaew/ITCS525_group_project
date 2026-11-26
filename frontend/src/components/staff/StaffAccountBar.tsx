@@ -2,17 +2,19 @@ import { MapPin, UserRound } from 'lucide-react'
 import type { User } from '@/api'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
-interface DirectResaleAccountBarProps {
+interface StaffAccountBarProps {
   user: User | null
+  /** The feature name shown when the signed-in account isn't a staff account. */
+  featureName: string
 }
 
-/** Shows the signed-in staff account and its assigned store on Direct Resale pages. */
-export function DirectResaleAccountBar({ user }: DirectResaleAccountBarProps) {
+/** Shows the signed-in staff account and its assigned store on staff workspace pages. */
+export function StaffAccountBar({ user, featureName }: StaffAccountBarProps) {
   if (!user || user.role !== 'staff') {
     return (
       <Alert variant="warning">
         <UserRound aria-hidden="true" />
-        <AlertDescription>Direct Resale is available to staff accounts only.</AlertDescription>
+        <AlertDescription>{featureName} is available to staff accounts only.</AlertDescription>
       </Alert>
     )
   }

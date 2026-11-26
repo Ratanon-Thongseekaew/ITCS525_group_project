@@ -5,7 +5,7 @@ import { getDirectResaleBins } from '@/api'
 import { EmptyState } from '@/components/EmptyState'
 import { PageHeader } from '@/components/PageHeader'
 import { PageSection } from '@/components/PageSection'
-import { DirectResaleAccountBar } from '@/components/staff/DirectResaleAccountBar'
+import { StaffAccountBar } from '@/components/staff/StaffAccountBar'
 import { DirectResaleBinRow } from '@/components/staff/DirectResaleBinRow'
 import { Button } from '@/components/ui/button'
 import { useSession } from '@/lib/auth-session'
@@ -43,7 +43,7 @@ export function ProcessedBinsRecordPage() {
           </Button>
         }
       />
-      <DirectResaleAccountBar user={user} />
+      <StaffAccountBar user={user} featureName="Direct Resale" />
 
       <PageSection
         title="Processed bin records"

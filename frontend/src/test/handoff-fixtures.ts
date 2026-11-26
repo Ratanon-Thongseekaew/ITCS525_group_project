@@ -84,10 +84,6 @@ export function chooseOption(label: string | RegExp, option: string | RegExp) {
   fireEvent.click(screen.getByRole('option', { name: option }))
 }
 
-export function actAs(actorId: number) {
-  window.localStorage.setItem('textile-track:handoff-actor-id', String(actorId))
-}
-
 export function scalePhoto(type = 'image/png', size = 64) {
   return new File([new Uint8Array(size)], 'scale.png', { type })
 }
