@@ -1,12 +1,27 @@
+import { useCallback } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { Link } from 'react-router'
+import { getDirectResaleBins } from '@/api'
 import { PageHeader } from '@/components/PageHeader'
+import { DirectResaleAccountBar } from '@/components/staff/DirectResaleAccountBar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { directResaleBins } from '@/lib/mock-direct-resale-bins'
+import { useSession } from '@/lib/auth-session'
+import { useApiResource } from '@/lib/use-api-resource'
 
 export function PotentialRevenueAnalysisPage() {
-  const processed = directResaleBins.filter((bin) => bin.status === 'Processed')
+  const user = useSession()?.user ?? null
+  const siteId = user?.role === 'staff' ? (user.store?.id ?? null) : null
+  const loadBins = useCallback(
+    (signal: AbortSignal) => getDirectResaleBins(siteId!, signal),
+    [siteId],
+  )
+  const resource = useApiResource(
+    siteId === null ? null : `direct-resale:${siteId}`,
+    loadBins,
+    'Revenue data could not be loaded.',
+  )
+  const processed = (resource.data ?? []).filter((bin) => bin.status === 'processed')
   const totalRevenue = processed.reduce((sum, bin) => sum + (bin.revenue ?? 0), 0)
 
   return (
@@ -20,16 +35,36 @@ export function PotentialRevenueAnalysisPage() {
         title="Potential Revenue Analysis"
         description="Revenue recorded from processed direct resale bins"
       />
+      <DirectResaleAccountBar user={user} />
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Total potential revenue</CardTitle>
+          <CardTitle className="text-base">Total recorded revenue</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <p className="text-4xl font-semibold tracking-tight text-primary">
-            ฿{totalRevenue.toLocaleString('en-US')}
-          </p>
-          <p className="text-sm text-muted-foreground">{processed.length} processed bins</p>
+          {siteId === null ? (
+            <p className="text-sm text-muted-foreground">
+              A staff account assigned to a store is required to see its revenue.
+            </p>
+          ) : resource.isLoading ? (
+            <p className="text-sm text-muted-foreground" role="status">
+              Loading revenue…
+            </p>
+          ) : resource.error ? (
+            <div className="space-y-2" role="alert">
+              <p className="text-sm text-destructive">{resource.error}</p>
+              <Button variant="outline" onClick={resource.retry}>
+                Retry
+              </Button>
+            </div>
+          ) : (
+            <>
+              <p className="text-4xl font-semibold tracking-tight text-primary">
+                ฿{totalRevenue.toLocaleString('en-US')}
+              </p>
+              <p className="text-sm text-muted-foreground">{processed.length} processed bins</p>
+            </>
+          )}
         </CardContent>
         <CardFooter>
           <Button asChild variant="outline">

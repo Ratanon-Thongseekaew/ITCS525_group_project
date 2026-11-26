@@ -115,7 +115,7 @@ The seed is additive and idempotent. It creates two sites and
 January–October 2026 handoff, contractor-report, disposition, and EPR examples
 for the dashboard (`DASH-` codes). It also adds recycle bin handoff data
 (`HAND-` codes): three ready recycling bins per site and one picked-up handoff
-per site, the Bangkok one disputed. It also adds one empty open bin of each type per site for the sorting page (`SORT-` codes). It never deletes existing records.
+per site, the Bangkok one disputed. It also adds one empty open bin of each type per site for the sorting page (`SORT-` codes) and four closed resale bins awaiting processing for Direct Resale (`DEMO-RS-BKK-` codes). It never deletes existing records.
 
 Create a migration after changing `backend/app/models.py`, verify that the
 metadata matches the migrated database, or roll back one revision during local
@@ -208,9 +208,9 @@ Vite proxies `/api` requests to FastAPI during development. To point the fronten
 | `/manager/sorting`                                             | Read-only sorting overview, one site or all sites   |
 | `/manager/resale-bins`                                         | Top-five store resale value summary                 |
 | `/staff/sorting`                                               | Garment sorting (Resale, Recycle, Repair / Upcycle) |
-| `/staff/direct-resale`                                         | Direct resale bins (mock data)                      |
-| `/staff/direct-resale/potential-revenue-analysis`              | Potential revenue analysis (mock data)              |
-| `/staff/direct-resale/processed-bins-record`                   | Processed resale bin records (mock data)            |
+| `/staff/direct-resale`                                         | Closed resale bins and processing form              |
+| `/staff/direct-resale/potential-revenue-analysis`              | Revenue summary for processed resale bins           |
+| `/staff/direct-resale/processed-bins-record`                   | Processed bin history                               |
 | `/staff/recycle-bin-handoff`                                   | Record a handoff when the driver arrives            |
 | `/staff/recycle-bin-handoff/handoff-records`                   | Handoff records and their status                    |
 | `/admin/users`                                                 | User management, the admin landing page             |

@@ -233,6 +233,29 @@ class GarmentRecord(TimestampMixin, table=True):
     notes: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))
 
 
+class ResaleBinProcess(TimestampMixin, table=True):
+    __tablename__ = "resale_bin_processes"
+    __table_args__ = (
+        UniqueConstraint("bin_id", name="uq_resale_bin_processes_bin"),
+        CheckConstraint(
+            "accepted_item_count >= 0", name="ck_resale_bin_processes_accepted_nonnegative"
+        ),
+        CheckConstraint(
+            "rejected_item_count >= 0", name="ck_resale_bin_processes_rejected_nonnegative"
+        ),
+        CheckConstraint("revenue >= 0", name="ck_resale_bin_processes_revenue_nonnegative"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    bin_id: int = Field(foreign_key="bins.id", ondelete="RESTRICT", index=True)
+    processed_by_user_id: int = Field(foreign_key="users.id", ondelete="RESTRICT", index=True)
+    accepted_item_count: int
+    rejected_item_count: int
+    revenue: Decimal = Field(sa_column=Column(Numeric(12, 2), nullable=False))
+    processed_at: date
+    notes: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))
+
+
 class Handoff(TimestampMixin, table=True):
     __tablename__ = "handoffs"
     __table_args__ = (

@@ -13,6 +13,8 @@ import { isWorkspaceRole } from './types/workspace'
 afterEach(() => {
   cleanup()
   window.localStorage.clear()
+  resaleBins.splice(0, resaleBins.length, ...initialResaleBins.map((bin) => ({ ...bin })))
+  vi.useRealTimers()
   window.sessionStorage.clear()
   vi.restoreAllMocks()
 })
@@ -65,6 +67,49 @@ const handoffRecords = [
   }),
 ]
 
+const initialResaleBins = [
+  {
+    id: 1,
+    bin_code: 'RS-001',
+    item_count: 100,
+    total_weight_kg: 40,
+    packed_at: '2026-10-01T15:31:00Z',
+    status: 'awaiting_process',
+    accepted_item_count: null,
+    rejected_item_count: null,
+    revenue: null,
+    processed_at: null,
+    notes: null,
+  },
+  {
+    id: 2,
+    bin_code: 'RS-002',
+    item_count: 80,
+    total_weight_kg: 32,
+    packed_at: '2026-09-28T10:15:00Z',
+    status: 'processed',
+    accepted_item_count: 78,
+    rejected_item_count: 2,
+    revenue: 12000,
+    processed_at: '2026-10-10',
+    notes: null,
+  },
+  {
+    id: 3,
+    bin_code: 'RS-003',
+    item_count: 120,
+    total_weight_kg: 45,
+    packed_at: '2026-09-25T14:05:00Z',
+    status: 'processed',
+    accepted_item_count: 118,
+    rejected_item_count: 2,
+    revenue: 18500,
+    processed_at: '2026-10-12',
+    notes: null,
+  },
+]
+const resaleBins: typeof initialResaleBins = initialResaleBins.map((bin) => ({ ...bin }))
+
 function fixtureFor(url: string) {
   if (url.includes('/api/auth/me')) return sessionUser()
   if (url.includes('/api/users') || url.includes('/api/sites')) return []
@@ -74,6 +119,7 @@ function fixtureFor(url: string) {
   if (url.includes('/api/handoffs')) {
     return { handoffs: url.includes('status=disputed') ? [] : handoffRecords }
   }
+  if (url.includes('/api/resale-bins')) return resaleBins
   return { message: 'Hello from FastAPI!' }
 }
 
@@ -88,20 +134,38 @@ function renderRoute(route: string) {
   window.sessionStorage.clear()
   if (isWorkspaceRole(pathRole)) signInAs(pathRole)
 
-  vi.spyOn(globalThis, 'fetch').mockImplementation((input) =>
-    Promise.resolve(
-      new Response(JSON.stringify(fixtureFor(String(input))), {
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+    const url = String(input)
+    if (init?.method === 'POST' && url.includes('/api/resale-bins/') && url.endsWith('/process')) {
+      const binId = Number(url.split('/').at(-2))
+      const payload = JSON.parse(String(init.body)) as {
+        accepted_item_count: number
+        rejected_item_count: number
+        revenue: number
+        processed_at: string
+        notes?: string
+      }
+      const bin = resaleBins.find((item) => item.id === binId)
+      if (bin) Object.assign(bin, { ...payload, status: 'processed' })
+    }
+    return Promise.resolve(
+      new Response(JSON.stringify(fixtureFor(url)), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
-    ),
-  )
+    )
+  })
 
   render(
     <MemoryRouter initialEntries={[route]}>
       <App />
     </MemoryRouter>,
   )
+}
+
+function renderDirectResaleRoute(route: string) {
+  window.localStorage.setItem('textile-track:handoff-actor-id', String(STAFF_ID))
+  renderRoute(route)
 }
 
 test('renders the garment sorting workspace at the staff sorting route', () => {
@@ -152,21 +216,71 @@ test('navigates from the manager workspace to the compliance dashboard path', as
 })
 
 test('renders and processes a direct resale bin', async () => {
-  renderRoute('/staff/direct-resale')
+  renderDirectResaleRoute('/staff/direct-resale')
 
   expect(screen.getByRole('heading', { name: 'Direct Resale Bins' })).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: /#bin-id-001/i }))
+  expect(screen.getByRole('group', { name: 'Signed-in staff account' })).toHaveTextContent(
+    'Test staff',
+  )
+  expect(screen.getByRole('group', { name: 'Signed-in staff account' })).toHaveTextContent(
+    'Siam Square',
+  )
+  expect(screen.queryByLabelText('Staff member')).not.toBeInTheDocument()
+  fireEvent.click(await screen.findByRole('button', { name: /#RS-001/i }))
   expect(screen.getByRole('dialog')).toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('Sale Revenue (฿)'), { target: { value: '15000' } })
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
-  expect(await screen.findByText('No bins in this list.')).toBeInTheDocument()
+  expect(
+    await screen.findByText('No closed resale bins are waiting to be processed.'),
+  ).toBeInTheDocument()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: /#bin-id-001/i })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /#RS-001/i })).not.toBeInTheDocument()
+  const processCall = vi
+    .mocked(globalThis.fetch)
+    .mock.calls.find(
+      ([input, init]) => String(input).includes('/api/resale-bins/') && init?.method === 'POST',
+    )
+  expect(processCall).toBeDefined()
+  expect(JSON.parse(String(processCall?.[1]?.body))).toMatchObject({ actor_id: 99 })
 })
 
-test('links Direct Resale to the potential revenue analysis page', () => {
-  renderRoute('/staff/direct-resale')
+test('uses the signed-in staff account and store instead of the temporary account picker', async () => {
+  renderDirectResaleRoute('/staff/direct-resale')
 
-  expect(screen.getByRole('link', { name: 'Potential Revenue Analysis' })).toHaveAttribute(
+  expect(await screen.findByText('#RS-001')).toBeInTheDocument()
+  expect(screen.queryByText('staff.bkk@example.com')).not.toBeInTheDocument()
+  expect(
+    vi
+      .mocked(globalThis.fetch)
+      .mock.calls.some(([input]) => String(input).includes('/api/resale-bins?site_id=1')),
+  ).toBe(true)
+  expect(
+    vi
+      .mocked(globalThis.fetch)
+      .mock.calls.some(([input]) => String(input).includes('/api/handoffs/options')),
+  ).toBe(false)
+})
+
+test('keeps accepted and rejected counts equal to the bin item total', async () => {
+  renderDirectResaleRoute('/staff/direct-resale')
+
+  fireEvent.click(await screen.findByRole('button', { name: /#RS-001/i }))
+  const accepted = screen.getByLabelText('Accepted Item Count')
+  const rejected = screen.getByLabelText('Rejected Item Count')
+
+  fireEvent.change(rejected, { target: { value: '2' } })
+  expect(accepted).toHaveValue(98)
+  expect(rejected).toHaveValue(2)
+
+  fireEvent.change(accepted, { target: { value: '90' } })
+  expect(accepted).toHaveValue(90)
+  expect(rejected).toHaveValue(10)
+})
+
+test('links Direct Resale to its revenue summary and processed history', () => {
+  renderDirectResaleRoute('/staff/direct-resale')
+
+  expect(screen.getByRole('link', { name: 'Revenue Summary' })).toHaveAttribute(
     'href',
     '/staff/direct-resale/potential-revenue-analysis',
   )
@@ -176,13 +290,13 @@ test('links Direct Resale to the potential revenue analysis page', () => {
   )
 })
 
-test('lists processed resale bins on their own page', () => {
-  renderRoute('/staff/direct-resale/processed-bins-record')
+test('lists processed resale bins on their own page', async () => {
+  renderDirectResaleRoute('/staff/direct-resale/processed-bins-record')
 
   expect(screen.getByRole('heading', { name: 'Processed Bin Records' })).toBeInTheDocument()
-  expect(screen.getByText('#bin-id-002')).toBeInTheDocument()
-  expect(screen.getByText('#bin-id-003')).toBeInTheDocument()
-  expect(screen.queryByText('#bin-id-001')).not.toBeInTheDocument()
+  expect(await screen.findByText('#RS-002')).toBeInTheDocument()
+  expect(await screen.findByText('#RS-003')).toBeInTheDocument()
+  expect(screen.queryByText('#RS-001')).not.toBeInTheDocument()
   expect(screen.getByText('Showing 2 of 2 records')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /#bin-id-002/i })).not.toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Back to bins' })).toHaveAttribute(
@@ -193,11 +307,11 @@ test('lists processed resale bins on their own page', () => {
   expect(directResaleLinks.some((link) => link.getAttribute('data-active') === 'true')).toBe(true)
 })
 
-test('renders potential revenue analysis from processed resale bins', () => {
-  renderRoute('/staff/direct-resale/potential-revenue-analysis')
+test('renders potential revenue analysis from processed resale bins', async () => {
+  renderDirectResaleRoute('/staff/direct-resale/potential-revenue-analysis')
 
   expect(screen.getByRole('heading', { name: 'Potential Revenue Analysis' })).toBeInTheDocument()
-  expect(screen.getByText('฿30,500')).toBeInTheDocument()
+  expect(await screen.findByText('฿30,500')).toBeInTheDocument()
   expect(screen.getByText('2 processed bins')).toBeInTheDocument()
   const directResaleLinks = screen.getAllByRole('link', { name: 'Direct Resale' })
   expect(directResaleLinks.some((link) => link.getAttribute('data-active') === 'true')).toBe(true)
@@ -205,6 +319,23 @@ test('renders potential revenue analysis from processed resale bins', () => {
     'href',
     '/staff/direct-resale',
   )
+})
+
+test('shows a just-processed bin in revenue summary and processed history', async () => {
+  renderDirectResaleRoute('/staff/direct-resale')
+
+  fireEvent.click(await screen.findByRole('button', { name: /#RS-001/i }))
+  fireEvent.change(screen.getByLabelText('Sale Revenue (฿)'), { target: { value: '15000' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Revenue Summary' }))
+
+  expect(await screen.findByText('฿45,500')).toBeInTheDocument()
+  expect(screen.getByText('3 processed bins')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('link', { name: 'Back to bins' }))
+  fireEvent.click(screen.getByRole('link', { name: 'Processed Bin Records' }))
+
+  expect(await screen.findByText('#RS-001')).toBeInTheDocument()
+  expect(screen.getByText('฿15,000')).toBeInTheDocument()
 })
 
 test('renders the login page at the root route', () => {

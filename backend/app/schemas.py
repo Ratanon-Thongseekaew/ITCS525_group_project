@@ -202,6 +202,29 @@ class BinRecord(BaseModel):
     notes: str | None = None
 
 
+class ResaleProcessRequest(BaseModel):
+    actor_id: int = Field(gt=0)
+    accepted_item_count: int = Field(ge=0)
+    rejected_item_count: int = Field(ge=0)
+    revenue: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    processed_at: date
+    notes: ShortText | None = None
+
+
+class ResaleBinRecord(BaseModel):
+    id: int
+    bin_code: str
+    item_count: int
+    total_weight_kg: float
+    packed_at: datetime
+    status: Literal["awaiting_process", "processed"]
+    accepted_item_count: int | None = None
+    rejected_item_count: int | None = None
+    revenue: float | None = None
+    processed_at: date | None = None
+    notes: str | None = None
+
+
 class BinCreateRequest(BaseModel):
     actor_id: int = Field(gt=0)
     bin_type: BinType
