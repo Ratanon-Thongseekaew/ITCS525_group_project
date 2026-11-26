@@ -6,16 +6,17 @@ import { EmptyState } from '@/components/EmptyState'
 import { PageHeader } from '@/components/PageHeader'
 import { PageSection } from '@/components/PageSection'
 import { StatCard } from '@/components/StatCard'
+import { DirectResaleAccountBar } from '@/components/staff/DirectResaleAccountBar'
 import { DirectResaleBinRow } from '@/components/staff/DirectResaleBinRow'
 import { DirectResaleProcessDialog } from '@/components/staff/DirectResaleProcessDialog'
-import { HandoffActorBar } from '@/components/staff/HandoffActorBar'
 import { Button } from '@/components/ui/button'
+import { useSession } from '@/lib/auth-session'
 import { useApiResource } from '@/lib/use-api-resource'
-import { useHandoffWorkspace } from '@/lib/use-handoff-workspace'
 
 export function DirectResalePage() {
-  const workspace = useHandoffWorkspace()
-  const { siteId, actor } = workspace
+  const user = useSession()?.user ?? null
+  const actor = user?.role === 'staff' ? user : null
+  const siteId = actor?.store?.id ?? null
   const loadBins = useCallback(
     (signal: AbortSignal) => getDirectResaleBins(siteId!, signal),
     [siteId],
@@ -52,7 +53,7 @@ export function DirectResalePage() {
         }
       />
 
-      <HandoffActorBar workspace={workspace} />
+      <DirectResaleAccountBar user={user} />
 
       <PageSection title="Summary" bordered>
         <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -71,7 +72,9 @@ export function DirectResalePage() {
 
       <PageSection title="Bins awaiting process" footer={`Showing ${awaiting.length} records`}>
         {siteId === null ? (
-          <EmptyState>Choose a staff account above to load resale bins for its site.</EmptyState>
+          <EmptyState>
+            A staff account assigned to a store is required to load resale bins.
+          </EmptyState>
         ) : resource.isLoading ? (
           <p className="p-6 text-sm text-muted-foreground" role="status">
             Loading resale bins…

@@ -5,15 +5,15 @@ import { getDirectResaleBins } from '@/api'
 import { EmptyState } from '@/components/EmptyState'
 import { PageHeader } from '@/components/PageHeader'
 import { PageSection } from '@/components/PageSection'
+import { DirectResaleAccountBar } from '@/components/staff/DirectResaleAccountBar'
 import { DirectResaleBinRow } from '@/components/staff/DirectResaleBinRow'
-import { HandoffActorBar } from '@/components/staff/HandoffActorBar'
 import { Button } from '@/components/ui/button'
+import { useSession } from '@/lib/auth-session'
 import { useApiResource } from '@/lib/use-api-resource'
-import { useHandoffWorkspace } from '@/lib/use-handoff-workspace'
 
 export function ProcessedBinsRecordPage() {
-  const workspace = useHandoffWorkspace()
-  const { siteId } = workspace
+  const user = useSession()?.user ?? null
+  const siteId = user?.role === 'staff' ? (user.store?.id ?? null) : null
   const loadBins = useCallback(
     (signal: AbortSignal) => getDirectResaleBins(siteId!, signal),
     [siteId],
@@ -43,14 +43,16 @@ export function ProcessedBinsRecordPage() {
           </Button>
         }
       />
-      <HandoffActorBar workspace={workspace} />
+      <DirectResaleAccountBar user={user} />
 
       <PageSection
         title="Processed bin records"
         footer={`Showing ${processed.length} of ${processed.length} records`}
       >
         {siteId === null ? (
-          <EmptyState>Choose a staff account above to see its processed bins.</EmptyState>
+          <EmptyState>
+            A staff account assigned to a store is required to see processed bins.
+          </EmptyState>
         ) : resource.isLoading ? (
           <p className="p-6 text-sm text-muted-foreground" role="status">
             Loading processed bins…

@@ -3,15 +3,15 @@ import { ArrowLeft } from 'lucide-react'
 import { Link } from 'react-router'
 import { getDirectResaleBins } from '@/api'
 import { PageHeader } from '@/components/PageHeader'
-import { HandoffActorBar } from '@/components/staff/HandoffActorBar'
+import { DirectResaleAccountBar } from '@/components/staff/DirectResaleAccountBar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { useSession } from '@/lib/auth-session'
 import { useApiResource } from '@/lib/use-api-resource'
-import { useHandoffWorkspace } from '@/lib/use-handoff-workspace'
 
 export function PotentialRevenueAnalysisPage() {
-  const workspace = useHandoffWorkspace()
-  const { siteId } = workspace
+  const user = useSession()?.user ?? null
+  const siteId = user?.role === 'staff' ? (user.store?.id ?? null) : null
   const loadBins = useCallback(
     (signal: AbortSignal) => getDirectResaleBins(siteId!, signal),
     [siteId],
@@ -35,7 +35,7 @@ export function PotentialRevenueAnalysisPage() {
         title="Potential Revenue Analysis"
         description="Revenue recorded from processed direct resale bins"
       />
-      <HandoffActorBar workspace={workspace} />
+      <DirectResaleAccountBar user={user} />
 
       <Card>
         <CardHeader>
@@ -44,7 +44,7 @@ export function PotentialRevenueAnalysisPage() {
         <CardContent className="space-y-2">
           {siteId === null ? (
             <p className="text-sm text-muted-foreground">
-              Choose a staff account to see its site revenue.
+              A staff account assigned to a store is required to see its revenue.
             </p>
           ) : resource.isLoading ? (
             <p className="text-sm text-muted-foreground" role="status">

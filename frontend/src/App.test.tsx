@@ -219,6 +219,13 @@ test('renders and processes a direct resale bin', async () => {
   renderDirectResaleRoute('/staff/direct-resale')
 
   expect(screen.getByRole('heading', { name: 'Direct Resale Bins' })).toBeInTheDocument()
+  expect(screen.getByRole('group', { name: 'Signed-in staff account' })).toHaveTextContent(
+    'Test staff',
+  )
+  expect(screen.getByRole('group', { name: 'Signed-in staff account' })).toHaveTextContent(
+    'Siam Square',
+  )
+  expect(screen.queryByLabelText('Staff member')).not.toBeInTheDocument()
   fireEvent.click(await screen.findByRole('button', { name: /#RS-001/i }))
   expect(screen.getByRole('dialog')).toBeInTheDocument()
   fireEvent.change(screen.getByLabelText('Sale Revenue (฿)'), { target: { value: '15000' } })
@@ -228,6 +235,30 @@ test('renders and processes a direct resale bin', async () => {
   ).toBeInTheDocument()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /#RS-001/i })).not.toBeInTheDocument()
+  const processCall = vi
+    .mocked(globalThis.fetch)
+    .mock.calls.find(
+      ([input, init]) => String(input).includes('/api/resale-bins/') && init?.method === 'POST',
+    )
+  expect(processCall).toBeDefined()
+  expect(JSON.parse(String(processCall?.[1]?.body))).toMatchObject({ actor_id: 99 })
+})
+
+test('uses the signed-in staff account and store instead of the temporary account picker', async () => {
+  renderDirectResaleRoute('/staff/direct-resale')
+
+  expect(await screen.findByText('#RS-001')).toBeInTheDocument()
+  expect(screen.queryByText('staff.bkk@example.com')).not.toBeInTheDocument()
+  expect(
+    vi
+      .mocked(globalThis.fetch)
+      .mock.calls.some(([input]) => String(input).includes('/api/resale-bins?site_id=1')),
+  ).toBe(true)
+  expect(
+    vi
+      .mocked(globalThis.fetch)
+      .mock.calls.some(([input]) => String(input).includes('/api/handoffs/options')),
+  ).toBe(false)
 })
 
 test('keeps accepted and rejected counts equal to the bin item total', async () => {
