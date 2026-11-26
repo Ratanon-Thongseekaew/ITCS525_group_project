@@ -207,6 +207,22 @@ test('renders and processes a direct resale bin', async () => {
   expect(screen.queryByRole('button', { name: /#RS-001/i })).not.toBeInTheDocument()
 })
 
+test('keeps accepted and rejected counts equal to the bin item total', async () => {
+  renderDirectResaleRoute('/staff/direct-resale')
+
+  fireEvent.click(await screen.findByRole('button', { name: /#RS-001/i }))
+  const accepted = screen.getByLabelText('Accepted Item Count')
+  const rejected = screen.getByLabelText('Rejected Item Count')
+
+  fireEvent.change(rejected, { target: { value: '2' } })
+  expect(accepted).toHaveValue(98)
+  expect(rejected).toHaveValue(2)
+
+  fireEvent.change(accepted, { target: { value: '90' } })
+  expect(accepted).toHaveValue(90)
+  expect(rejected).toHaveValue(10)
+})
+
 test('links Direct Resale to its revenue summary and processed history', () => {
   renderDirectResaleRoute('/staff/direct-resale')
 

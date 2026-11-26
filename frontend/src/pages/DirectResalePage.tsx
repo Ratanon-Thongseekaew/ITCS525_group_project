@@ -53,6 +53,23 @@ export function DirectResalePage() {
   const [keypadOpen, setKeypadOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
+  function updateItemCount(changedField: 'accepted' | 'rejected', value: string) {
+    if (changedField === 'accepted') setAccepted(value)
+    else setRejected(value)
+    if (!activeBin || value === '') return
+
+    const count = Number(value)
+    if (!Number.isFinite(count)) return
+    const boundedCount = Math.min(activeBin.item_count, Math.max(0, Math.trunc(count)))
+    if (changedField === 'accepted') {
+      setAccepted(String(boundedCount))
+      setRejected(String(activeBin.item_count - boundedCount))
+    } else {
+      setRejected(String(boundedCount))
+      setAccepted(String(activeBin.item_count - boundedCount))
+    }
+  }
+
   function openProcess(bin: DirectResaleBinRecord) {
     setActiveBin(bin)
     setAccepted(String(bin.item_count))
@@ -235,8 +252,10 @@ export function DirectResalePage() {
                     className="h-12 rounded-xl text-base"
                     type="number"
                     min="0"
+                    max={activeBin.item_count}
+                    step="1"
                     value={accepted}
-                    onChange={(event) => setAccepted(event.target.value)}
+                    onChange={(event) => updateItemCount('accepted', event.target.value)}
                   />
                 </label>
                 <label className="grid content-start gap-2 text-sm font-medium">
@@ -245,8 +264,10 @@ export function DirectResalePage() {
                     className="h-12 rounded-xl border-orange-500 text-base"
                     type="number"
                     min="0"
+                    max={activeBin.item_count}
+                    step="1"
                     value={rejected}
-                    onChange={(event) => setRejected(event.target.value)}
+                    onChange={(event) => updateItemCount('rejected', event.target.value)}
                   />
                 </label>
                 <label className="grid content-start gap-2 text-sm font-medium">

@@ -2,13 +2,13 @@ from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
 
 from app.database import get_session
 from app.main import app
 from app.models import Bin, BinStatus, BinType
-from seed import seed_dashboard_data
+from seed import seed_dashboard_data, seed_direct_resale_data
 
 
 @pytest.fixture
@@ -46,6 +46,25 @@ def test_resale_summary_returns_top_sites_from_persisted_bins(
         "Bangkok Sorting Center",
     ]
     assert [store["actual_value"] for store in stores] == [95530.0, 85690.0]
+
+
+def test_direct_resale_demo_seed_is_idempotent(resale_client: TestClient) -> None:
+    with Session(resale_client.engine) as session:
+        seed_direct_resale_data(session)
+        seed_direct_resale_data(session)
+        bins = session.exec(
+            select(Bin).where(Bin.code.like("DEMO-RS-BKK-%")).order_by(Bin.code)
+        ).all()
+
+    assert [bin_record.code for bin_record in bins] == [
+        "DEMO-RS-BKK-01",
+        "DEMO-RS-BKK-02",
+        "DEMO-RS-BKK-03",
+        "DEMO-RS-BKK-04",
+    ]
+    assert all(bin_record.bin_type is BinType.RESALE for bin_record in bins)
+    assert all(bin_record.status is BinStatus.CLOSED for bin_record in bins)
+    assert all(bin_record.actual_value is None for bin_record in bins)
 
 
 def test_resale_bins_can_be_processed_and_are_persisted(resale_client: TestClient) -> None:

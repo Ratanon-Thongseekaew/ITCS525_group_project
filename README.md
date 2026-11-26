@@ -115,7 +115,7 @@ The seed is additive and idempotent. It creates two sites and
 January–October 2026 handoff, contractor-report, disposition, and EPR examples
 for the dashboard (`DASH-` codes). It also adds recycle bin handoff data
 (`HAND-` codes): three ready recycling bins per site and one picked-up handoff
-per site, the Bangkok one disputed. It also adds one empty open bin of each type per site for the sorting page (`SORT-` codes). It never deletes existing records.
+per site, the Bangkok one disputed. It also adds one empty open bin of each type per site for the sorting page (`SORT-` codes) and four closed resale bins awaiting processing for Direct Resale (`DEMO-RS-BKK-` codes). It never deletes existing records.
 
 Create a migration after changing `backend/app/models.py`, verify that the
 metadata matches the migrated database, or roll back one revision during local

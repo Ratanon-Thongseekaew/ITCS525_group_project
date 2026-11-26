@@ -382,8 +382,10 @@ a relative path in `handoffs.scale_photo_url`. Responses expose that as
 offset. The `scheduled` status remains in the database enum, but no endpoint
 creates it. `backend/seed.py` runs `seed_dashboard_data` (`DASH-` records), then
 `seed_handoff_data` (`HAND-` ready bins and picked-up handoffs), then `seed_sorting_data`
-(`SORT-` empty open bins of each type per site, no garment records so EPR totals are unchanged);
-`seed_development_data` runs all three and is what `main()` and the tests use.
+(`SORT-` empty open bins of each type per site, no garment records so EPR totals are unchanged),
+and `seed_direct_resale_data` (four closed, unprocessed Bangkok resale bins). The resale demo
+seed is idempotent and adds no garment records; `seed_development_data` runs all four and is
+what `main()` and the tests use.
 
 ### `POST /api/contractor-reports/validate` (EPR change request)
 

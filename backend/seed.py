@@ -632,12 +632,49 @@ def seed_sorting_data(session: Session) -> None:
     session.commit()
 
 
+def seed_direct_resale_data(session: Session) -> None:
+    """Insert closed resale bins for the Direct Resale processing demo."""
+
+    site = session.exec(select(Site).where(Site.code == "DASH-BKK")).one_or_none()
+    if site is None:
+        return
+
+    demo_bins = (
+        ("DEMO-RS-BKK-01", 100, Decimal("40.000")),
+        ("DEMO-RS-BKK-02", 80, Decimal("32.000")),
+        ("DEMO-RS-BKK-03", 120, Decimal("44.500")),
+        ("DEMO-RS-BKK-04", 65, Decimal("25.500")),
+    )
+    for code, item_count, weight in demo_bins:
+        exists = session.exec(
+            select(Bin.id).where(Bin.site_id == site.id, Bin.code == code)
+        ).first()
+        if exists is not None:
+            continue
+        session.add(
+            Bin(
+                site_id=site.id,
+                code=code,
+                bin_type=BinType.RESALE,
+                status=BinStatus.CLOSED,
+                item_count=item_count,
+                total_weight_kg=weight,
+                max_capacity=item_count,
+                actual_value=None,
+                closed_at=datetime(2026, 11, 26, 9, 0, tzinfo=UTC),
+                notes="Direct Resale development demo data",
+            )
+        )
+    session.commit()
+
+
 def seed_development_data(session: Session) -> None:
-    """Insert all development records: dashboard, handoff, then sorting data."""
+    """Insert all development records: dashboard, handoff, sorting, and resale data."""
 
     seed_dashboard_data(session)
     seed_handoff_data(session)
     seed_sorting_data(session)
+    seed_direct_resale_data(session)
 
 
 def main() -> None:
@@ -646,7 +683,7 @@ def main() -> None:
     print(
         "Seed data is ready: dashboard (2 sites, Jan-Oct 2026, EPR Q3-Q4) and recycle bin "
         f"handoff ({HANDOFF_READY_BINS_PER_SITE} ready bins and 1 picked-up handoff per site), "
-        "sorting (one open bin of each type per site)."
+        "sorting (one open bin of each type per site), and Direct Resale (four closed resale bins)."
     )
 
 
