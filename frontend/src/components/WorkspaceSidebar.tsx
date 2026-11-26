@@ -1,6 +1,7 @@
 import { LogOut } from 'lucide-react'
 import { Link, useLocation } from 'react-router'
 import textileTrackLogo from '@/assets/logos/textile-track-app-logo-1024.png'
+import { signOut } from '@/lib/auth-session'
 import {
   getWorkspaceHomeUrl,
   getWorkspaceNavigation,
@@ -86,7 +87,7 @@ export function WorkspaceSidebar({ role, items }: WorkspaceSidebarProps) {
 
       <SidebarFooter className="p-3">
         <SidebarMenu>
-          <SidebarMenuItem>
+          <SidebarMenuItem onClick={() => signOut()}>
             <SidebarMenuButton
               asChild
               tooltip="Sign out"

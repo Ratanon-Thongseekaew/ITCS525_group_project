@@ -19,8 +19,7 @@ This is a minimal full-stack monorepo:
 - The backend uses SQLModel as its ORM, PyMySQL as the MySQL driver, and Alembic
   for versioned schema migrations. Database settings are loaded from the root
   `.env`, with an optional `DATABASE_URL` override.
-- The backend has JWT authentication and admin user management, but the
-  frontend does not use real login yet. Deployment configuration remains
+- The backend has JWT authentication and admin user management, and the frontend signs in against it. Deployment configuration remains
   unimplemented.
 
 ## Repository map
@@ -133,7 +132,7 @@ Staff, and source-record locking after EPR submission.
 
 React Router owns client-side navigation. The current frontend routes are:
 
-- `/` and `/login` render the role-based demo login page.
+- `/` and `/login` render the login page; `/change-password` replaces a temporary password.
 - `/manager` redirects to the manager compliance dashboard.
 - `/manager/compliance-dashboard` and `/admin/compliance-dashboard` render the
   database-backed compliance dashboard.
@@ -167,24 +166,27 @@ React Router owns client-side navigation. The current frontend routes are:
   `localStorage` until login is connected, and load nothing until a staff
   account is chosen. There is no manager handoff route; managers approve and
   close through the API until a manager screen exists.
-- `/admin/users` renders user management, using mock data. It is the admin
+- `/admin/users` renders user management on `/api/users` and `/api/sites`. It is the admin
   landing page after login; `/admin` has no route.
 - Unknown frontend paths render the local not-found page.
 
-The backend provides real authentication (`POST /api/auth/login` issues a JWT and
-all `/api/users` routes require an administrator), but the frontend is not yet
-connected to it: the demo login is not connected to password verification
-or sessions. It requires the suggested username for the selected role and any
-non-empty password. Successful submission shows a success toast
-and the shared loading screen for two seconds before redirecting to the selected
-workspace. A username mismatch keeps the form visible with an inline alert and
-an error toast. All workspace URLs remain directly accessible and render without
-that login transition. Do not add route guards until a real authentication
-source is available or the user explicitly requests mocked protection.
+### Frontend authentication
 
-The login view is a fullscreen responsive page based on the provided Textile
-Track design. It defaults to the Admin role and exposes a role selector for the
-demo flow. Changing the role updates the suggested username and destination.
+- `LoginPage` calls `POST /api/auth/login` and redirects by the returned role.
+- `lib/auth-session.ts` keeps `{token, user}` in `sessionStorage`
+  (`useSession`, `signIn`, `signOut`). `useSessionCheck` refreshes the user from
+  `/api/auth/me` on page load. A `401` on any signed-in request in `api.ts` ends
+  the session, which returns the user to `/login`.
+- `RequireAuth` guards every workspace and print route: signed-out visitors go to
+  `/login`, a temporary password only opens `/change-password`, and only admins
+  open `/admin/*`. `/design-system` is public.
+- The guards are navigation only. The dashboard, sorting, handoff, EPR, and
+  import APIs are still unauthenticated, and their account pickers remain.
+- Tests that render a guarded route through `App` call `signInAs(role)` from
+  `src/test/auth.ts` first and clear `sessionStorage` afterwards.
+
+The login and new-password screens share `AuthScreen`, a fullscreen responsive
+layout based on the provided Textile Track design.
 Each role's landing page comes from `getWorkspaceHomeUrl` in
 `frontend/src/config/workspace-navigation.ts`, which the login redirect and the
 sidebar logo both use: `/manager`, `/staff/sorting`, and `/admin/users`.
@@ -194,8 +196,7 @@ local shadcn sidebar primitives. `frontend/src/config/workspace-navigation.ts`
 owns labels, icons, route segments, and the `roles` arrays used to filter menu
 visibility. Managers see Compliance Dashboard, Sorting Overview, Resale Bin Records,
 and Import Data. Staff see Sorting, Direct Resale, and Recycle Bin Handoff. Admins
-see Compliance Dashboard and User Management. `AppLayout` derives the demo role
-from the URL only for presentation; this is not authentication.
+see Compliance Dashboard and User Management. `AppLayout` derives the workspace shown from the URL, for presentation only, and shows the signed-in user's name.
 
 The backend root path `/` intentionally has no route and returns `404`. Swagger
 UI is available at `/docs`. On application startup, the FastAPI lifespan handler
@@ -624,7 +625,7 @@ text-resale-foreground`) for the sorting quick-tap buttons, and the soft pair
     `staff/DirectResaleProcessDialog`. `staff/handoff-form.tsx` holds the
     handoff fields, `BinSummary`, and `HandoffDialogShell`, built on `field`
     and `input-group`.
-  - Admin-only: `admin/InviteUserForm`, `admin/EditUserDialog`,
+  - Admin-only: `admin/AddUserForm`, `admin/TemporaryPasswordDialog`, `admin/EditUserDialog`,
     `admin/DeleteUserDialog` (on `ConfirmDialog`), `admin/UserIdentity` (avatar,
     name, email), and `admin/UserStatusBadge`.
   - Contractor import: `ContractorReportImport` holds the wizard state and
@@ -656,8 +657,7 @@ text-resale-foreground`) for the sorting quick-tap buttons, and the soft pair
 
 - Keep workspace menu definitions in `config/workspace-navigation.ts` and use
   each item's optional `roles` list instead of duplicating sidebars per role.
-- Preserve the current unprotected workspace routes until database-backed
-  authentication is implemented or explicitly requested.
+- Put new workspace routes inside the `RequireAuth` route in `App.tsx`.
 - Keep backend calls and their response types in `frontend/src/api.ts` rather
   than placing raw `fetch` calls throughout components.
 - Read public environment variables through `import.meta.env`; Vite variables

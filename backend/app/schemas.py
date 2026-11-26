@@ -91,7 +91,8 @@ class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    username: EmailStr
+    # Not EmailStr: saved accounts, such as seeded ones, must always be readable.
+    username: str
     role: UserRole
     full_name: str | None = None
     must_change_password: bool = False

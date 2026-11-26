@@ -270,11 +270,40 @@ export interface EprManagement {
 
 const API_URL = import.meta.env.VITE_API_URL ?? ''
 
-async function handleResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const errorBody = await response.text()
-    throw new Error(`API request failed (${response.status}): ${errorBody || response.statusText}`)
+/** A failed request. `detail` is the server's own explanation, when it sent one. */
+export class ApiError extends Error {
+  readonly status: number
+  readonly detail: string | null
+
+  constructor(status: number, body: string, statusText: string) {
+    super(`API request failed (${status}): ${body || statusText}`)
+    this.name = 'ApiError'
+    this.status = status
+    this.detail = readDetail(body)
   }
+}
+
+// FastAPI sends `{"detail": "..."}`, or a list of `{msg}` objects for validation errors.
+function readDetail(body: string): string | null {
+  try {
+    const { detail } = JSON.parse(body) as { detail?: unknown }
+    if (typeof detail === 'string') return detail
+    if (Array.isArray(detail)) {
+      const messages = detail.map((item: { msg?: unknown }) => item.msg)
+      return messages.filter((msg) => typeof msg === 'string').join('. ') || null
+    }
+  } catch {
+    // Not JSON.
+  }
+  return null
+}
+
+async function toApiError(response: Response) {
+  return new ApiError(response.status, await response.text(), response.statusText)
+}
+
+async function handleResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) throw await toApiError(response)
   return response.json() as Promise<T>
 }
 
@@ -486,12 +515,32 @@ export interface UserUpdateRequest {
   site_id?: number | null
 }
 
-function authHeaders(token: string, json = false): HeadersInit {
-  return json
-    ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-    : { Authorization: `Bearer ${token}` }
+let onUnauthorized: (token: string) => void = () => {}
+
+/** Called with the rejected token whenever a signed-in request gets a `401`. */
+export function setUnauthorizedHandler(handler: (token: string) => void) {
+  onUnauthorized = handler
 }
 
+async function authFetch(token: string, path: string, method = 'GET', body?: unknown) {
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  const response = await fetch(`${API_URL}/api${path}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (response.status === 401) onUnauthorized(token)
+  if (!response.ok) throw await toApiError(response)
+  return response
+}
+
+async function authRequest<T>(token: string, path: string, method?: string, body?: unknown) {
+  const response = await authFetch(token, path, method, body)
+  return response.json() as Promise<T>
+}
+
+// A `401` here means wrong credentials, not an expired session.
 export async function login(username: string, password: string): Promise<LoginResponse> {
   const response = await fetch(`${API_URL}/api/auth/login`, {
     method: 'POST',
@@ -501,81 +550,39 @@ export async function login(username: string, password: string): Promise<LoginRe
   return handleResponse<LoginResponse>(response)
 }
 
-export async function getCurrentUser(token: string): Promise<User> {
-  const response = await fetch(`${API_URL}/api/auth/me`, { headers: authHeaders(token) })
-  return handleResponse<User>(response)
+export function getCurrentUser(token: string) {
+  return authRequest<User>(token, '/auth/me')
 }
 
-export async function listUsers(token: string, offset = 0, limit = 100): Promise<User[]> {
-  const response = await fetch(`${API_URL}/api/users?offset=${offset}&limit=${limit}`, {
-    headers: authHeaders(token),
+export function listUsers(token: string, offset = 0, limit = 100) {
+  return authRequest<User[]>(token, `/users?offset=${offset}&limit=${limit}`)
+}
+
+export function createUser(token: string, payload: UserCreateRequest) {
+  return authRequest<UserWithTemporaryPassword>(token, '/users', 'POST', payload)
+}
+
+export function resetUserPassword(token: string, userId: number) {
+  return authRequest<UserWithTemporaryPassword>(token, `/users/${userId}/reset-password`, 'POST')
+}
+
+export function listSites(token: string) {
+  return authRequest<Store[]>(token, '/sites')
+}
+
+export function changePassword(token: string, currentPassword: string, newPassword: string) {
+  return authRequest<User>(token, '/auth/change-password', 'POST', {
+    current_password: currentPassword,
+    new_password: newPassword,
   })
-  return handleResponse<User[]>(response)
 }
 
-export async function createUser(
-  token: string,
-  payload: UserCreateRequest,
-): Promise<UserWithTemporaryPassword> {
-  const response = await fetch(`${API_URL}/api/users`, {
-    method: 'POST',
-    headers: authHeaders(token, true),
-    body: JSON.stringify(payload),
-  })
-  return handleResponse<UserWithTemporaryPassword>(response)
-}
-
-export async function resetUserPassword(
-  token: string,
-  userId: number,
-): Promise<UserWithTemporaryPassword> {
-  const response = await fetch(`${API_URL}/api/users/${userId}/reset-password`, {
-    method: 'POST',
-    headers: authHeaders(token),
-  })
-  return handleResponse<UserWithTemporaryPassword>(response)
-}
-
-export async function listSites(token: string): Promise<Store[]> {
-  const response = await fetch(`${API_URL}/api/sites`, { headers: authHeaders(token) })
-  return handleResponse<Store[]>(response)
-}
-
-export async function changePassword(
-  token: string,
-  currentPassword: string,
-  newPassword: string,
-): Promise<User> {
-  const response = await fetch(`${API_URL}/api/auth/change-password`, {
-    method: 'POST',
-    headers: authHeaders(token, true),
-    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
-  })
-  return handleResponse<User>(response)
-}
-
-export async function updateUser(
-  token: string,
-  userId: number,
-  payload: UserUpdateRequest,
-): Promise<User> {
-  const response = await fetch(`${API_URL}/api/users/${userId}`, {
-    method: 'PATCH',
-    headers: authHeaders(token, true),
-    body: JSON.stringify(payload),
-  })
-  return handleResponse<User>(response)
+export function updateUser(token: string, userId: number, payload: UserUpdateRequest) {
+  return authRequest<User>(token, `/users/${userId}`, 'PATCH', payload)
 }
 
 export async function deleteUser(token: string, userId: number): Promise<void> {
-  const response = await fetch(`${API_URL}/api/users/${userId}`, {
-    method: 'DELETE',
-    headers: authHeaders(token),
-  })
-  if (!response.ok) {
-    const errorBody = await response.text()
-    throw new Error(`API request failed (${response.status}): ${errorBody || response.statusText}`)
-  }
+  await authFetch(token, `/users/${userId}`, 'DELETE')
 }
 
 export interface ContractorReportOptionItem {
