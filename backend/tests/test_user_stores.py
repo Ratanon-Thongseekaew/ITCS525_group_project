@@ -453,3 +453,11 @@ def test_sites_lists_active_stores_for_admins_only(env, admin):
     add_user(engine, "staff@example.com", UserRole.STAFF)
     for username in ("manager@example.com", "staff@example.com"):
         assert http.get("/api/sites", headers=headers_for(http, username)).status_code == 403
+
+
+def test_lists_saved_users_whose_username_is_not_a_valid_email(env, admin):
+    http, engine = env
+    add_user(engine, "dashboard.manager@example.invalid", UserRole.MANAGER)
+    response = http.get("/api/users", headers=admin)
+    assert response.status_code == 200
+    assert "dashboard.manager@example.invalid" in [user["username"] for user in response.json()]

@@ -27,8 +27,8 @@ export function TextileTrackLoader({
   return (
     <div
       className={cn(
-        'grid place-items-center content-center gap-4 text-[var(--color-muted)]',
-        fullScreen && 'min-h-screen min-h-svh w-full bg-[#f8fafc] text-[var(--color-muted)]',
+        'grid place-items-center content-center gap-4 text-muted-foreground',
+        fullScreen && 'min-h-screen min-h-svh w-full bg-background',
         className,
       )}
       role="status"
@@ -36,7 +36,7 @@ export function TextileTrackLoader({
       aria-label={label || 'กำลังโหลด'}
     >
       <div
-        className="textile-loader__mark relative isolate size-[var(--textile-loader-size)] [filter:drop-shadow(0_12px_22px_rgba(15,118,110,0.16))]"
+        className="textile-loader__mark relative isolate size-[var(--textile-loader-size)] drop-shadow-lg drop-shadow-primary/20"
         style={markStyle}
         aria-hidden="true"
       >

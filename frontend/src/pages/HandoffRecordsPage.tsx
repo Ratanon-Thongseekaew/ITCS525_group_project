@@ -1,19 +1,15 @@
-import { useCallback, useId, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { Link } from 'react-router'
 import { getHandoffs } from '@/api'
+import { EmptyState } from '@/components/EmptyState'
+import { FilterSelect, type FilterOption } from '@/components/FilterSelect'
+import { LoadState } from '@/components/LoadState'
+import { PageHeader } from '@/components/PageHeader'
+import { PageSection } from '@/components/PageSection'
 import { HandoffActorBar } from '@/components/staff/HandoffActorBar'
-import { actionButtonClass, LoadState } from '@/components/staff/handoff-ui'
 import { HandoffRecordCard } from '@/components/staff/HandoffRecordCard'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { getVisibleRecords } from '@/lib/handoff-records'
 import { useApiResource } from '@/lib/use-api-resource'
 import { useHandoffWorkspace } from '@/lib/use-handoff-workspace'
@@ -24,50 +20,12 @@ import {
   type HandoffRecordSort,
 } from '@/types/handoff'
 
-interface RecordsControlProps<Value extends string> {
-  label: string
-  value: Value
-  options: Record<Value, string>
-  minWidthClass: string
-  onChange: (value: Value) => void
+function toOptions(labels: Record<string, string>): FilterOption[] {
+  return Object.entries(labels).map(([value, label]) => ({ value, label }))
 }
 
-function RecordsControl<Value extends string>({
-  label,
-  value,
-  options,
-  minWidthClass,
-  onChange,
-}: RecordsControlProps<Value>) {
-  const id = useId()
-
-  return (
-    <div className="flex items-center gap-2">
-      <Label htmlFor={id} className="text-sm font-normal whitespace-nowrap text-slate-500">
-        {label}
-      </Label>
-      <Select value={value} onValueChange={(next) => onChange(next as Value)}>
-        {/* Grows past the design's width so longer options like "Outcomes Received" don't clip. */}
-        <SelectTrigger
-          id={id}
-          className={`h-9 w-auto gap-1.5 rounded-[10px] py-1.5 pr-2 pl-2.5 whitespace-nowrap shadow-none ${minWidthClass}`}
-        >
-          {/* On a span because the global button font and colour rules override utilities on the trigger. */}
-          <span className="text-sm font-medium text-slate-900">
-            <SelectValue />
-          </span>
-        </SelectTrigger>
-        <SelectContent>
-          {Object.entries<string>(options).map(([optionValue, optionLabel]) => (
-            <SelectItem key={optionValue} value={optionValue}>
-              {optionLabel}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  )
-}
+const filterOptions = toOptions(handoffRecordFilterLabels)
+const sortOptions = toOptions(handoffRecordSortLabels)
 
 export function HandoffRecordsPage() {
   const workspace = useHandoffWorkspace()
@@ -90,69 +48,61 @@ export function HandoffRecordsPage() {
   return (
     <section className="flex flex-col gap-7">
       <div className="flex flex-col gap-6">
-        <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-slate-500">Operations</span>
-          <span className="text-slate-500" aria-hidden="true">
-            /
-          </span>
-          <span className="text-slate-500">Recycle Bin Handoff</span>
-          <span className="text-slate-500" aria-hidden="true">
-            /
-          </span>
-          <span className="font-medium text-slate-900" aria-current="page">
-            Records
-          </span>
-        </nav>
-
-        <header className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-6">
-          <div className="flex min-w-0 flex-col gap-2">
-            <h1 className="text-[26px] leading-[26px] font-medium tracking-[-1px] text-slate-900">
-              Handoff Records
-            </h1>
-            <p className="text-sm text-slate-500">
-              Review contractor collections, recorded weights, and material outcomes.
-            </p>
-          </div>
-          <Button
-            asChild
-            variant="outline"
-            className={`self-start sm:self-auto ${actionButtonClass}`}
-          >
-            <Link to="/staff/recycle-bin-handoff">
-              <ArrowLeft aria-hidden="true" />
-              Back to Handoff
-            </Link>
-          </Button>
-        </header>
-
+        <PageHeader
+          breadcrumbs={[
+            { label: 'Operations' },
+            { label: 'Recycle Bin Handoff', to: '/staff/recycle-bin-handoff' },
+            { label: 'Records' },
+          ]}
+          title="Handoff Records"
+          description="Review contractor collections, recorded weights, and material outcomes."
+          actions={
+            <Button asChild variant="outline">
+              <Link to="/staff/recycle-bin-handoff">
+                <ArrowLeft aria-hidden="true" />
+                Back to Handoff
+              </Link>
+            </Button>
+          }
+        />
         <HandoffActorBar workspace={workspace} />
       </div>
 
-      <section className="flex flex-col gap-4 border-t border-slate-200 pt-4">
-        <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:justify-between">
-          <h2 className="text-sm font-medium text-slate-900">Handoff records</h2>
+      <PageSection
+        title="Handoff records"
+        bordered
+        actions={
           <div className="flex flex-wrap gap-x-4 gap-y-2">
-            <RecordsControl
+            <FilterSelect
               label="Filtered by:"
+              labelMode="inline"
               value={filter}
-              options={handoffRecordFilterLabels}
-              minWidthClass="min-w-[96px]"
-              onChange={setFilter}
+              items={filterOptions}
+              onValueChange={(value) => setFilter(value as HandoffRecordFilter)}
+              className="min-w-[96px]"
             />
-            <RecordsControl
+            <FilterSelect
               label="Sort by:"
+              labelMode="inline"
               value={sort}
-              options={handoffRecordSortLabels}
-              minWidthClass="min-w-[112px]"
-              onChange={setSort}
+              items={sortOptions}
+              onValueChange={(value) => setSort(value as HandoffRecordSort)}
+              className="min-w-[112px]"
             />
           </div>
-        </div>
-
+        }
+        footer={
+          resource.data ? (
+            <p aria-live="polite">
+              Showing {visibleRecords.length} of {records.length} records
+            </p>
+          ) : undefined
+        }
+      >
         {siteId === null && !workspace.isLoading ? (
-          <p className="py-8 text-center text-sm text-slate-500">
+          <EmptyState>
             Choose your staff account above to see your site’s handoff records.
-          </p>
+          </EmptyState>
         ) : null}
         <LoadState
           isLoading={resource.isLoading || workspace.isLoading}
@@ -161,28 +111,23 @@ export function HandoffRecordsPage() {
           onRetry={resource.retry}
         />
         {resource.data ? (
-          <>
-            {visibleRecords.length > 0 ? (
-              <ul className="flex flex-col gap-4">
-                {visibleRecords.map((record) => (
-                  <li key={record.id}>
-                    <HandoffRecordCard record={record} />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="py-8 text-center text-sm text-slate-500">
-                {filter === 'all'
-                  ? 'No handoff records yet.'
-                  : 'No handoff records match this filter.'}
-              </p>
-            )}
-            <p className="text-xs text-slate-500" aria-live="polite">
-              Showing {visibleRecords.length} of {records.length} records
-            </p>
-          </>
+          visibleRecords.length > 0 ? (
+            <ul aria-label="Handoff records" className="flex flex-col gap-4">
+              {visibleRecords.map((record) => (
+                <li key={record.id}>
+                  <HandoffRecordCard record={record} />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <EmptyState>
+              {filter === 'all'
+                ? 'No handoff records yet.'
+                : 'No handoff records match this filter.'}
+            </EmptyState>
+          )
         ) : null}
-      </section>
+      </PageSection>
     </section>
   )
 }

@@ -169,6 +169,9 @@ staff need exactly one store, managers may have one, and administrators have non
 `GET /api/sites` (administrator only) lists the active stores for the store
 dropdown. Seed sample stores with `uv run --project backend --locked python backend/seed.py`.
 
+The Add and Edit user forms require a store for staff and managers (the API
+still lets a manager have none).
+
 Administrators add people without choosing a password: `POST /api/users` with no
 `password` makes the server generate a temporary one and return it **once** in
 `temporary_password`. Give it to the person securely; it cannot be shown again.
@@ -198,9 +201,11 @@ Vite proxies `/api` requests to FastAPI during development. To point the fronten
 | -------------------------------------------------------------- | --------------------------------------------------- |
 | `/`                                                            | Fullscreen responsive login page                    |
 | `/login`                                                       | Alternate URL for the login page                    |
+| `/change-password`                                             | Replace a temporary password                        |
 | `/manager`                                                     | Redirects to the compliance dashboard               |
 | `/manager/compliance-dashboard`, `/admin/compliance-dashboard` | Database-backed compliance dashboard                |
 | `/manager/import`                                              | Contractor monthly outcome report import            |
+| `/manager/sorting`                                             | Read-only sorting overview, one site or all sites   |
 | `/manager/resale-bins`                                         | Top-five store resale value summary                 |
 | `/staff/sorting`                                               | Garment sorting (Resale, Recycle, Repair / Upcycle) |
 | `/staff/direct-resale`                                         | Closed resale bins and processing form              |
@@ -208,16 +213,18 @@ Vite proxies `/api` requests to FastAPI during development. To point the fronten
 | `/staff/direct-resale/processed-bins-record`                   | Processed bin history                               |
 | `/staff/recycle-bin-handoff`                                   | Record a handoff when the driver arrives            |
 | `/staff/recycle-bin-handoff/handoff-records`                   | Handoff records and their status                    |
-| `/admin/users`                                                 | User management, the admin landing page (mock data) |
+| `/admin/users`                                                 | User management, the admin landing page             |
+| `/design-system`                                               | Design system reference (unlisted)                  |
 
-The login page currently runs in demo mode. The backend now has a `users` table
-and user CRUD endpoints, but login is not connected to password verification or
-sessions yet. Select a role, enter the demo credentials, and submit to open the
-corresponding workspace: `/manager` for managers, `/staff/sorting` for staff,
-and `/admin/users` for admins.
+Sign in with the email and password of an account in your local database (see
+"Authentication" for creating the first administrator). Each laptop has its own
+database, so accounts are not shared through git. Managers land on `/manager`,
+staff on `/staff/sorting`, and admins on `/admin/users`.
 
-The workspace routes are intentionally **not protected** yet, so they can also
-be opened directly during development.
+Workspace pages require sign-in, and only admins can open `/admin/*`. An account
+with a temporary password must set a new one first. The session lasts until the
+tab closes or the token expires (`ACCESS_TOKEN_MINUTES`, default 60). The other
+features' APIs are not authenticated yet.
 
 ## Quarterly EPR report
 
@@ -261,6 +268,8 @@ Staff sort each garment as **Good / Reusable** (resale bin), **Worn / Recyclable
 bin) or **Repair / Upcycle** (repair bin) from `/staff/sorting`, with one tap or the keys
 R/1, C/2 and U/3. Garments and bins are stored in MySQL and belong to the staff member's site.
 Choose a **Staff member** on the page (this stands in for login, like the handoff pages).
+Staff only see and change their own site. Managers use `/manager/sorting`, a read-only
+overview where they switch between their sites or view all of them combined.
 
 Garments go to the oldest open bin of their type that still has room; a new bin is created
 when none has room. Sealing a recycling bin makes it **ready**, so it appears under
@@ -318,13 +327,18 @@ weight is returned as `uncategorized_weight_kg` for review on the import page.
 ## Frontend UI
 
 - Tailwind CSS provides responsive layout and utility styling.
-- Reusable shadcn/ui-style components live in `frontend/src/components/ui/`.
+- Reusable shadcn/ui components live in `frontend/src/components/ui/`, themed
+  by the tokens in `frontend/src/styles.css`. The theme is shadcn's neutral one
+  with a teal-700 primary color. Open `/design-system` to see every component
+  in light and dark mode. People choose Light, Dark, or System with the theme
+  button in the workspace header and on the login page; see "Design system" in
+  `AI_README.md`.
 - `WorkspaceSidebar` provides the responsive shared navigation for manager,
   staff, and admin workspaces. Menu definitions live in
   `frontend/src/config/workspace-navigation.ts`; add a `roles` list to a menu
   item when role-specific visibility is required.
-- The login design uses `Card`, `Input`, `Label`, `Select`, and `Button`
-  primitives with Lucide icons.
+- The login design uses `Card`, `Input`, `Label`, and `Button` primitives with
+  Lucide icons.
 - The login screen fills the available viewport and adapts its header, card,
   typography, and spacing for mobile, tablet, and desktop displays.
 

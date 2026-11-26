@@ -30,7 +30,7 @@ export default function Converge({
   CurveRadius = 150,
   CurveWeight = 1.5,
   CurveColor,
-  CurcePillColor = '#8ab4f8', // Adjusted default to match Gemini's blue for this theme
+  CurcePillColor = 'var(--primary)',
   PillSpeed = 3,
   PillWeight = 2.5,
   PillLength = 14,
@@ -63,15 +63,13 @@ export default function Converge({
   }
 
   return (
-    <div className="flex w-full items-center justify-center bg-gray-50 font-sans transition-colors duration-300 dark:bg-[#050505]">
+    <div className="flex w-full items-center justify-center font-sans">
       <div className="w-full overflow-x-auto custom-scrollbar flex justify-start md:justify-center">
         {/* Main Container */}
-        <div className="relative h-[600px] w-[1050px] shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl transition-colors duration-300 dark:border-[#1a1a1a] dark:bg-[#0a0a0a] dark:shadow-2xl">
+        <div className="relative h-[600px] w-[1050px] shrink-0 overflow-hidden rounded-xl border bg-card shadow-sm">
           {/* Top Header */}
           <div className="absolute top-6 left-8 right-8 flex justify-between items-center z-20 font-mono text-sm tracking-wider">
-            <div className="text-gray-500 font-semibold transition-colors duration-300">
-              {headerText}
-            </div>
+            <div className="font-semibold text-muted-foreground">{headerText}</div>
             <div
               className="font-bold flex items-center gap-2"
               style={{ color: CurcePillColor }}
@@ -101,11 +99,7 @@ export default function Converge({
                   <path
                     d={pathData}
                     strokeWidth={CurveWeight}
-                    className={
-                      CurveColor
-                        ? ''
-                        : 'stroke-gray-200 dark:stroke-[#1f1f1f] transition-colors duration-300'
-                    }
+                    className={CurveColor ? '' : 'stroke-border'}
                     style={CurveColor ? { stroke: CurveColor } : {}}
                   />
 
@@ -114,7 +108,8 @@ export default function Converge({
                       width={PillLength}
                       height={PillWeight}
                       rx={PillRadius}
-                      fill={CurcePillColor}
+                      // A style, not the fill attribute, so CSS variables resolve.
+                      style={{ fill: CurcePillColor }}
                       x={-(PillLength / 2)}
                       y={-(PillWeight / 2)}
                     >
@@ -145,10 +140,8 @@ export default function Converge({
               >
                 {source.icon}
               </div>
-              <span className="text-gray-800 dark:text-gray-200 font-medium text-sm w-28 transition-colors duration-300">
-                {source.name}
-              </span>
-              <span className="text-gray-400 dark:text-gray-600 font-mono text-sm transition-colors duration-300">
+              <span className="w-28 text-sm font-medium text-foreground">{source.name}</span>
+              <span className="font-mono text-sm text-muted-foreground">
                 {formatActualValue(source.actualValue)}
               </span>
             </div>
@@ -179,23 +172,25 @@ export default function Converge({
 
           {/* Main Hub Node */}
           <div
-            className="absolute z-20 flex flex-col items-center justify-center rounded-full bg-white dark:bg-[#0a0a0a] transition-colors duration-300"
+            className="absolute z-20 flex flex-col items-center justify-center rounded-full bg-card"
             style={{
               width: '80px',
               height: '80px',
               left: `${endX}px`,
               top: `${endY - 40}px`,
               border: `1px solid ${CurcePillColor}`,
-              boxShadow: `0 0 30px ${CurcePillColor}25`,
+              boxShadow: `0 0 30px color-mix(in oklch, ${CurcePillColor} 15%, transparent)`,
             }}
           >
             {/* Inner glowing core */}
             <div
               className="absolute inset-0 rounded-full transition-shadow duration-300"
-              style={{ boxShadow: `inset 0 0 20px ${CurcePillColor}30` }}
+              style={{
+                boxShadow: `inset 0 0 20px color-mix(in oklch, ${CurcePillColor} 19%, transparent)`,
+              }}
             />
 
-            <span className="text-gray-500 dark:text-gray-400 text-[10px] font-mono tracking-widest uppercase mb-0.5 transition-colors duration-300">
+            <span className="mb-0.5 font-mono text-2xs tracking-widest text-muted-foreground uppercase">
               {hubTopText}
             </span>
             <span

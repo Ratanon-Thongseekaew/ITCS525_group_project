@@ -1,6 +1,7 @@
 import { LogOut } from 'lucide-react'
 import { Link, useLocation } from 'react-router'
 import textileTrackLogo from '@/assets/logos/textile-track-app-logo-1024.png'
+import { signOut } from '@/lib/auth-session'
 import {
   getWorkspaceHomeUrl,
   getWorkspaceNavigation,
@@ -42,11 +43,11 @@ export function WorkspaceSidebar({ role, items }: WorkspaceSidebarProps) {
   }
 
   return (
-    <Sidebar collapsible="offcanvas" className="border-r border-slate-200">
+    <Sidebar collapsible="offcanvas">
       <SidebarHeader className="px-4 py-2">
         <Link
           to={getWorkspaceHomeUrl(role)}
-          className="flex min-h-10 items-center gap-2.5 rounded-md px-1 outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+          className="flex min-h-10 items-center gap-2.5 rounded-md px-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="Textile Track dashboard"
         >
           <img
@@ -55,13 +56,15 @@ export function WorkspaceSidebar({ role, items }: WorkspaceSidebarProps) {
             className="size-8 shrink-0 object-contain"
             aria-hidden="true"
           />
-          <span className="text-sm font-semibold tracking-tight text-slate-900">Textile Track</span>
+          <span className="text-sm font-semibold tracking-tight text-sidebar-foreground">
+            Textile Track
+          </span>
         </Link>
       </SidebarHeader>
 
       <SidebarContent>
         <SidebarGroup className="px-3">
-          <SidebarGroupLabel className="px-2 text-[10px] font-semibold tracking-[0.12em] text-slate-400 uppercase">
+          <SidebarGroupLabel className="px-2 text-2xs font-semibold tracking-[0.12em] text-muted-foreground uppercase">
             Workspace
           </SidebarGroupLabel>
           <SidebarGroupContent>
@@ -77,7 +80,7 @@ export function WorkspaceSidebar({ role, items }: WorkspaceSidebarProps) {
                       asChild
                       isActive={isActive}
                       tooltip={item.label}
-                      className="h-9 gap-3 rounded-md px-3 text-xs font-medium text-slate-600 hover:bg-teal-50 hover:text-teal-700 data-[active=true]:bg-teal-50 data-[active=true]:text-teal-700"
+                      className="h-9 gap-3 rounded-md px-3 text-xs font-medium text-sidebar-foreground/80 hover:bg-primary/10 hover:text-primary data-[active=true]:bg-primary/10 data-[active=true]:text-primary"
                     >
                       <Link to={url} onClick={collapseSidebar}>
                         <item.icon strokeWidth={1.8} />
@@ -94,11 +97,11 @@ export function WorkspaceSidebar({ role, items }: WorkspaceSidebarProps) {
 
       <SidebarFooter className="p-3">
         <SidebarMenu>
-          <SidebarMenuItem>
+          <SidebarMenuItem onClick={() => signOut()}>
             <SidebarMenuButton
               asChild
               tooltip="Sign out"
-              className="h-9 gap-3 bg-red-50 px-3 text-xs font-medium text-red-500 hover:bg-red-100 hover:text-red-600"
+              className="h-9 gap-3 bg-destructive/10 px-3 text-xs font-medium text-destructive hover:bg-destructive/15 hover:text-destructive"
             >
               <Link to="/login" onClick={collapseSidebar}>
                 <LogOut strokeWidth={1.8} />

@@ -12,7 +12,7 @@ test('renders an accessible full-screen loading status with separate logo layers
 
   const status = screen.getByRole('status', { name: 'Loading garment records' })
 
-  expect(status).toHaveClass('min-h-svh', 'bg-[#f8fafc]', 'text-[var(--color-muted)]')
+  expect(status).toHaveClass('min-h-svh', 'bg-background', 'text-muted-foreground')
   expect(screen.getByText('Loading garment records')).toBeInTheDocument()
   expect(status.querySelector('.textile-loader__center')).toBeInTheDocument()
   expect(status.querySelector('.textile-loader__arrows')).toBeInTheDocument()

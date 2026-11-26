@@ -28,7 +28,7 @@ A change may belong to more than one category. Follow every applicable section b
 - Preserve semantic HTML, associated form labels, keyboard navigation, visible focus, and usable loading, error, and empty states.
 - Keep workspace navigation and role visibility in `frontend/src/config/workspace-navigation.ts`; do not create separate sidebar definitions per role.
 - Keep HTTP calls and their TypeScript contracts in `frontend/src/api.ts`. Do not add raw component-level fetch calls or hardcoded backend origins.
-- Preserve direct access to `/manager/*`, `/staff/*`, and `/admin/*` until real authentication is implemented or route protection is explicitly requested.
+- Keep workspace routes inside `RequireAuth`; only administrators open `/admin/*`.
 - Add or update Vitest and Testing Library coverage for user-visible behavior.
 
 ## API and contract changes

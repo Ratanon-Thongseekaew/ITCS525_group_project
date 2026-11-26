@@ -51,6 +51,8 @@ describe('GarmentSortingWorkspace', () => {
   const mockActiveBins: api.ActiveBinsResponse = {
     resale_bin: {
       id: 1,
+      site_id: 1,
+      site_name: 'Bangkok Flagship',
       bin_code: 'BIN-RS-001',
       bin_type: 'resale',
       status: 'active',
@@ -64,6 +66,8 @@ describe('GarmentSortingWorkspace', () => {
     },
     recycle_bin: {
       id: 2,
+      site_id: 1,
+      site_name: 'Bangkok Flagship',
       bin_code: 'BIN-RC-001',
       bin_type: 'recycle',
       status: 'active',
@@ -77,6 +81,8 @@ describe('GarmentSortingWorkspace', () => {
     },
     repair_bin: {
       id: 3,
+      site_id: 1,
+      site_name: 'Bangkok Flagship',
       bin_code: 'BIN-RP-001',
       bin_type: 'repair',
       status: 'active',
@@ -96,6 +102,8 @@ describe('GarmentSortingWorkspace', () => {
     mockActiveBins.repair_bin!,
     {
       id: 4,
+      site_id: 1,
+      site_name: 'Bangkok Flagship',
       bin_code: 'BIN-RS-000',
       bin_type: 'resale',
       status: 'closed',
@@ -112,6 +120,8 @@ describe('GarmentSortingWorkspace', () => {
   const mockRecentGarments: api.GarmentItem[] = [
     {
       id: 101,
+      site_id: 1,
+      site_name: 'Bangkok Flagship',
       condition: 'good_reusable',
       category: 'Tops',
       bin_id: 1,
@@ -131,6 +141,8 @@ describe('GarmentSortingWorkspace', () => {
     vi.spyOn(api, 'sortGarment').mockResolvedValue({
       garment: {
         id: 102,
+        site_id: 1,
+        site_name: 'Bangkok Flagship',
         condition: 'good_reusable',
         category: 'Tops',
         bin_id: 1,
@@ -147,6 +159,8 @@ describe('GarmentSortingWorkspace', () => {
     })
     vi.spyOn(api, 'createBin').mockResolvedValue({
       id: 5,
+      site_id: 1,
+      site_name: 'Bangkok Flagship',
       bin_code: 'BIN-RS-002',
       bin_type: 'resale',
       status: 'active',
@@ -224,7 +238,7 @@ describe('GarmentSortingWorkspace', () => {
     render(<GarmentSortingWorkspace />)
     await waitFor(() => expect(screen.getAllByText('BIN-RP-001').length).toBeGreaterThan(0))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Repair' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Repair' }))
 
     expect(screen.queryByText('BIN-RS-000')).not.toBeInTheDocument()
     expect(screen.getAllByText('BIN-RP-001').length).toBeGreaterThan(0)
@@ -280,6 +294,21 @@ describe('GarmentSortingWorkspace', () => {
     expect(screen.queryByText('Create New Bin Record')).not.toBeInTheDocument()
   })
 
+  test('ignores sorting shortcuts while a dialog has focus', async () => {
+    render(<GarmentSortingWorkspace />)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /New Bin Record/i })).toBeEnabled(),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /New Bin Record/i }))
+    const recycling = screen.getByRole('radio', { name: 'Recycling' })
+    recycling.focus()
+    fireEvent.keyDown(recycling, { key: 'r' })
+    fireEvent.keyDown(recycling, { key: '2' })
+
+    expect(api.sortGarment).not.toHaveBeenCalled()
+  })
+
   test('responds to keyboard shortcut for quick intake', async () => {
     render(<GarmentSortingWorkspace />)
 
@@ -298,10 +327,10 @@ describe('GarmentSortingWorkspace', () => {
     render(<GarmentSortingWorkspace />)
 
     await waitFor(() => {
-      expect(api.getSortingStats).toHaveBeenCalledWith(1)
-      expect(api.getActiveBins).toHaveBeenCalledWith(1)
-      expect(api.getBins).toHaveBeenCalledWith(1)
-      expect(api.getRecentGarments).toHaveBeenCalledWith(1, 10)
+      expect(api.getSortingStats).toHaveBeenCalledWith(7, 1)
+      expect(api.getActiveBins).toHaveBeenCalledWith(7, 1)
+      expect(api.getBins).toHaveBeenCalledWith(7, 1)
+      expect(api.getRecentGarments).toHaveBeenCalledWith(7, 1, 10)
     })
   })
 

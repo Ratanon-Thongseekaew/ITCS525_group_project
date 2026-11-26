@@ -19,8 +19,7 @@ This is a minimal full-stack monorepo:
 - The backend uses SQLModel as its ORM, PyMySQL as the MySQL driver, and Alembic
   for versioned schema migrations. Database settings are loaded from the root
   `.env`, with an optional `DATABASE_URL` override.
-- The backend has JWT authentication and admin user management, but the
-  frontend does not use real login yet. Deployment configuration remains
+- The backend has JWT authentication and admin user management, and the frontend signs in against it. Deployment configuration remains
   unimplemented.
 
 ## Repository map
@@ -133,14 +132,18 @@ Staff, and source-record locking after EPR submission.
 
 React Router owns client-side navigation. The current frontend routes are:
 
-- `/` and `/login` render the role-based demo login page.
+- `/` and `/login` render the login page; `/change-password` replaces a temporary password.
 - `/manager` redirects to the manager compliance dashboard.
 - `/manager/compliance-dashboard` and `/admin/compliance-dashboard` render the
   database-backed compliance dashboard.
 - `/manager/epr-report/print` and `/admin/epr-report/print` render the standalone
   printable EPR report for the requested `year` and `quarter`.
+- `/design-system` renders the design system reference (tokens and every
+  primitive in light and dark). It is unlisted, outside `AppLayout`, and not in
+  the workspace navigation.
 - `/manager/import` renders the contractor monthly outcome report import page
   and is available from the manager workspace navigation.
+- `/manager/sorting` renders the read-only sorting overview across the manager's sites.
 - `/manager/resale-bins` renders the database-backed top-five store resale
   summary.
 - `/staff/sorting` renders the garment sorting workspace. `/staff` has no route;
@@ -165,24 +168,27 @@ React Router owns client-side navigation. The current frontend routes are:
   `localStorage` until login is connected, and load nothing until a staff
   account is chosen. There is no manager handoff route; managers approve and
   close through the API until a manager screen exists.
-- `/admin/users` renders user management, using mock data. It is the admin
+- `/admin/users` renders user management on `/api/users` and `/api/sites`. It is the admin
   landing page after login; `/admin` has no route.
 - Unknown frontend paths render the local not-found page.
 
-The backend provides real authentication (`POST /api/auth/login` issues a JWT and
-all `/api/users` routes require an administrator), but the frontend is not yet
-connected to it: the demo login is not connected to password verification
-or sessions. It requires the suggested username for the selected role and any
-non-empty password. Successful submission shows a success toast
-and the shared loading screen for two seconds before redirecting to the selected
-workspace. A username mismatch keeps the form visible with an inline alert and
-an error toast. All workspace URLs remain directly accessible and render without
-that login transition. Do not add route guards until a real authentication
-source is available or the user explicitly requests mocked protection.
+### Frontend authentication
 
-The login view is a fullscreen responsive page based on the provided Textile
-Track design. It defaults to the Admin role and exposes a role selector for the
-demo flow. Changing the role updates the suggested username and destination.
+- `LoginPage` calls `POST /api/auth/login` and redirects by the returned role.
+- `lib/auth-session.ts` keeps `{token, user}` in `sessionStorage`
+  (`useSession`, `signIn`, `signOut`). `useSessionCheck` refreshes the user from
+  `/api/auth/me` on page load. A `401` on any signed-in request in `api.ts` ends
+  the session, which returns the user to `/login`.
+- `RequireAuth` guards every workspace and print route: signed-out visitors go to
+  `/login`, a temporary password only opens `/change-password`, and only admins
+  open `/admin/*`. `/design-system` is public.
+- The guards are navigation only. The dashboard, sorting, handoff, EPR, and
+  import APIs are still unauthenticated, and their account pickers remain.
+- Tests that render a guarded route through `App` call `signInAs(role)` from
+  `src/test/auth.ts` first and clear `sessionStorage` afterwards.
+
+The login and new-password screens share `AuthScreen`, a fullscreen responsive
+layout based on the provided Textile Track design.
 Each role's landing page comes from `getWorkspaceHomeUrl` in
 `frontend/src/config/workspace-navigation.ts`, which the login redirect and the
 sidebar logo both use: `/manager`, `/staff/sorting`, and `/admin/users`.
@@ -190,10 +196,9 @@ sidebar logo both use: `/manager`, `/staff/sorting`, and `/admin/users`.
 Authenticated workspace screens share `WorkspaceSidebar`, composed from the
 local shadcn sidebar primitives. `frontend/src/config/workspace-navigation.ts`
 owns labels, icons, route segments, and the `roles` arrays used to filter menu
-visibility. Managers see Compliance Dashboard, Resale Bin Records, and Import
-Data. Staff see Sorting, Direct Resale, and Recycle Bin Handoff. Admins
-see Compliance Dashboard and User Management. `AppLayout` derives the demo role
-from the URL only for presentation; this is not authentication.
+visibility. Managers see Compliance Dashboard, Sorting Overview, Resale Bin Records,
+and Import Data. Staff see Sorting, Direct Resale, and Recycle Bin Handoff. Admins
+see Compliance Dashboard and User Management. `AppLayout` derives the workspace shown from the URL, for presentation only, and shows the signed-in user's name.
 
 The backend root path `/` intentionally has no route and returns `404`. Swagger
 UI is available at `/docs`. On application startup, the FastAPI lifespan handler
@@ -223,10 +228,16 @@ Used by the starter React page to demonstrate frontend/backend communication.
 
 ### Garment sorting and bin records (Feature 2)
 
-`backend/app/sorting.py` stores sorting in MySQL (`bins` and `garment_records`). Reads take a
-required `site_id` query parameter. Writes name the acting staff member with `actor_id`
-until login is connected; the actor must be a staff user and always works at their own site
-(`422` unknown user, `403` not staff, no site, or another site's bin).
+`backend/app/sorting.py` stores sorting in MySQL (`bins` and `garment_records`). Every request
+names the acting user with `actor_id` until login is connected (`422` unknown user).
+
+- **Writes** (sort, create bin, seal bin) need a staff user, who always works at their own site
+  (`403` not staff, no site, or another site's bin).
+- **Reads** take `actor_id` and an optional `site_id` (change request #16). Staff only reach
+  their own site (`403` for another). A manager reaches the sites they belong to, or every site
+  when none is assigned; an administrator reaches every site. A `site_id` outside that is `403`
+  (`404` if the site doesn't exist). Leaving `site_id` out returns all of the actor's sites
+  combined, and `BinRecord` and `GarmentItem` carry `site_id` and `site_name` for that view.
 
 - `POST /api/garments/sort` takes `{actor_id, condition, category?, weight_kg?, notes?, bin_id?}`.
   `condition` is `good_reusable` (resale bin), `worn_recyclable` (recycle bin) or
@@ -234,21 +245,26 @@ until login is connected; the actor must be a staff user and always works at the
   of that type with room at the actor's site. A full bin is skipped; a new bin
   (`BIN-RS|RC|RP-###`) is created when none has room. A `bin_id` of the wrong type, status or
   capacity is ignored; another site's bin returns `403`. `weight_kg` must be 0-50.
-- `GET /api/bins/active?site_id=` returns `resale_bin`, `recycle_bin` and `repair_bin`.
-- `GET /api/bins?site_id=` lists bins, with optional `bin_type` (`resale` / `recycle` /
+- `GET /api/bins/active?actor_id=&site_id=` returns `resale_bin`, `recycle_bin` and `repair_bin`
+  for one site, so a manager must pass `site_id` (`422` otherwise).
+- `GET /api/bins?actor_id=&site_id=` lists bins, with optional `bin_type` (`resale` / `recycle` /
   `repair`) and `status` (`active` / `ready` / `handed_off` / `closed`) filters.
 - `POST /api/bins` takes `{actor_id, bin_type, bin_code?, max_capacity?, notes?}`. A duplicate
   code at the site returns `409`; capacity is 1-500.
 - `POST /api/bins/{id}/close` takes `{actor_id, notes?}`. Sealing a **recycle** bin sets it
   `ready` with `ready_at`, which is what `GET /api/handoffs/bins` lists. Resale and repair bins
   become `closed` with `closed_at`. Empty or already sealed bins return `409`.
-- `GET /api/sorting/stats?site_id=` returns today's counts (in the site's timezone), the resale
-  capture percentage, and the active bin code and item count per type.
-- `GET /api/garments/recent?site_id=&limit=` returns the latest garments for the site.
+- `GET /api/sorting/stats?actor_id=&site_id=` returns today's counts (each site's own day), the
+  resale capture percentage, and the active bin code and item count per type. Open bins belong
+  to one site, so they are only reported when the request covers a single site.
+- `GET /api/garments/recent?actor_id=&site_id=&limit=` returns the latest garments.
 
 The staff screen reuses `useHandoffWorkspace` and `HandoffActorBar` to choose the staff member
-and loads nothing until one is chosen. Sealed Repair bins have no next step yet. Handoff only
-covers recycle bins.
+and loads nothing until one is chosen. `/manager/sorting` (`SortingOverviewPage`) is a read-only
+overview for managers: a temporary manager picker, a site switcher with an "All sites" option,
+today's counts, the bins and the recent garments, with the site on every row. It offers no sorting,
+sealing or bin creation. Sealed Repair bins have no next step yet. Handoff only covers recycle
+bins.
 
 ### Authentication and user management
 
@@ -493,12 +509,170 @@ python -m ruff check backend
 - Follow the existing Tailwind CSS responsive approach. Full-page entry screens
   should use the small-viewport unit (`min-h-svh`) with an appropriate fallback
   and must remain usable at widths down to 320px.
+- This project uses Tailwind CSS 4. Write CSS variables in utilities as `w-(--sidebar-width)`,
+  never the Tailwind 3 form `w-[--sidebar-width]`: v4 turns the old form into invalid CSS such as
+  `width: --sidebar-width`, which the browser silently drops (this once made the sidebar cover
+  every page). Convert shadcn/ui components copied from older docs, and check the page in a
+  browser at desktop width. Lint, types and tests do not catch it.
 - Keep reusable shadcn/ui primitives generic. Place application-specific login
   and workspace composition in `pages/` or non-`ui` components.
+
+#### Design system
+
+- **Tokens:** `frontend/src/styles.css` defines shadcn/ui's default neutral
+  theme as CSS variables (`--background`, `--foreground`, `--card`, `--popover`,
+  `--primary`, `--secondary`, `--muted`, `--accent`, `--destructive`,
+  `--border`, `--input`, `--ring`, `--chart-1` to `--chart-5`, `--sidebar-*`,
+  `--radius`) for `:root` and `.dark`, mapped to Tailwind colors in
+  `@theme inline`. The only change from shadcn's defaults is the primary brand
+  color: Tailwind teal-700 with near-white text in light mode, and teal-400 with
+  teal-950 text in dark mode. `--sidebar-primary` follows it.
+- **Using tokens:** style new UI with token utilities (`bg-background`,
+  `bg-card`, `text-foreground`, `text-muted-foreground`, `border`,
+  `bg-primary text-primary-foreground`, `text-primary`) and the primitives in
+  `components/ui/`, not palette classes such as `bg-white` or `text-slate-500`.
+  Token utilities switch with the theme; palette classes do not.
+- **Status colors:** `--success` (emerald), `--warning` (amber), and `--info`
+  (sky) tokens, each with `-foreground`, `-soft`, and `-soft-foreground`, in
+  light and dark. `Badge` and `Alert` have matching `success`, `warning`, and
+  `info` variants (Alert also has `destructive`), and `StatCard` has the same
+  tones. Use them for states such as approved, disputed, or awaiting pickup
+  instead of hand-styled pills or boxes, and use the soft tokens directly
+  (`bg-warning-soft`) for other tinted surfaces. Never write status colors as
+  palette classes with `dark:` pairs.
+- **Text sizes:** use the Tailwind scale. `text-2xs` (10px, defined in
+  `styles.css` and registered with `tailwind-merge` in `lib/utils.ts`) is the
+  smallest size, for chart legends and meta labels only. Avoid arbitrary sizes
+  such as `text-[11px]`.
+- **Bin-type colors:** bin types are categories, not statuses, so they have
+  their own tokens: `--resale` (teal), `--recycle` (amber), and `--repair`
+  (sky), each with `-foreground`, `-soft`, and `-soft-foreground`, in light
+  (-700 solids) and dark (-400 solids). Use the solid pair (`bg-resale
+text-resale-foreground`) for the sorting quick-tap buttons, and the soft pair
+  through the `resale`, `recycle`, and `repair` variants of `Badge` and `Alert`.
+  `lib/bin-type-tones.ts` maps each `BinType` to its classes (badge variant,
+  solid, soft, fill, progress, and toggle-on) and each bin status to a badge
+  variant. `lib/handoff-records.ts` does the same for handoff statuses.
+- **Outcome colors:** the six contractor outcome categories have their own
+  tokens: `--outcome-upcycled`, `--outcome-fibre-to-fibre`,
+  `--outcome-downcycled`, `--outcome-exported`, `--outcome-landfilled`, and
+  `--outcome-incinerated`, each with light and dark values.
+  `lib/outcome-tones.ts` maps each API outcome category to its label, chart
+  color (`var(--outcome-…)`, for a Recharts `ChartConfig`), dot class, and
+  column tint. Use it for charts and outcome table columns instead of hex
+  colors. Other charts use `--chart-1` to `--chart-5`. To pass a token to an
+  SVG, use `style={{ fill }}`, because a CSS variable doesn't resolve in a
+  presentation attribute.
+- **Primitives:** alert, alert-dialog, avatar, badge, breadcrumb, button, card, chart,
+  checkbox, dialog, dropdown-menu, empty, field, input, input-group, label,
+  progress, radio-group, select, separator, sheet,
+  sidebar, skeleton, sonner, switch, table, tabs, textarea, toggle,
+  toggle-group, tooltip. They come from shadcn's `new-york-v4` registry and are
+  built on the `radix-ui` package. The `new-york` style in `components.json`
+  makes the shadcn CLI serve the old Tailwind 3 versions, so add new components
+  from `https://ui.shadcn.com/r/styles/new-york-v4/<name>.json`. Then change
+  `from "cn"` to `@/lib/utils` and `@/registry/new-york-v4/...` to the local
+  aliases, and run Prettier.
+- **Local changes to the primitives** (keep them when updating):
+  - `CardTitle` renders an `h2` and `AlertTitle` an `h5`, so titles stay headings.
+  - `Badge` and `Alert` add the `success`, `warning`, `info`, `resale`,
+    `recycle`, and `repair` variants, built on the status and bin-type tokens.
+  - `Card` keeps the section-padding model: `CardHeader` is a `flex flex-col p-6`
+    column (pages make it a row with `flex-row justify-between`), and
+    `CardContent` and `CardFooter` use `p-6 pt-0`. Upstream uses `py-6 gap-6`
+    on the card instead, which would add space to every existing card.
+  - `SelectTrigger` is `w-full` rather than upstream's `w-fit`, as the forms
+    expect.
+  - `DialogContent` accepts `overlayClassName`.
+  - `Toaster` honors a forced theme.
+  - `SidebarMenuSkeleton` uses a fixed width, because the React Compiler lint
+    rules reject the upstream random width.
+  - `hooks/use-mobile.tsx` uses `useSyncExternalStore`.
+  - `chart.tsx` keeps the existing Recharts 2 version, with tokens for its
+    colors.
+- **Dialog widths:** v4 `DialogContent` sets `sm:max-w-lg`, so override the
+  width with an `sm:` class (for example `sm:max-w-2xl`). A plain `max-w-2xl`
+  doesn't override it on larger screens.
+- **Dark mode:** on. `ThemeProvider` (`components/theme-provider.tsx`, using
+  `next-themes` with the class attribute) wraps the app in `main.tsx`, and
+  `ModeToggle` (Light, Dark, System) sits in the `AppLayout` header and on the
+  login page. The choice is stored in `localStorage` under `theme`. An inline
+  script in `frontend/index.html` applies the saved theme before the bundle
+  loads, so a dark page doesn't flash light. `APP_FORCED_THEME` in
+  `config/theme.ts` is `null`; set it to `'light'` or `'dark'` only to force one
+  theme everywhere. `App.tsx` provides a root `TooltipProvider`.
+- **Theme scopes:** the light tokens are defined on `:root` and `.light`, and
+  the dark ones on `.dark`. The `dark:` variant applies inside `.dark` except
+  inside a `.light` island, so an element with the `light` class always renders
+  light, even while the app is dark.
+- **Reference:** `/design-system` shows every token and primitive in a light and
+  a dark panel, whatever the app theme is. Popups render in a portal outside
+  the panel, so each popup gets the panel's `light` or `dark` class.
+- **Shared page components** in `components/` (use them before building your
+  own):
+  - `PageHeader`: breadcrumb, `h1`, description, optional eyebrow, and actions.
+    Breadcrumbs with a `to` render as router links, and the last one is the
+    current page (`aria-current`, not a link).
+  - `PageSection`: a titled `section` with an actions slot (filters), a footer
+    slot (record counts), and an optional `headingRef` for returning focus.
+  - `StatCard`: one summary metric as a `dt`/`dd` pair inside a `dl` grid,
+    with `default`, `success`, `warning`, `info`, `destructive`, `resale`,
+    `recycle`, and `repair` tones.
+  - `TableCard`: a titled card around a `Table`, with actions and footer slots.
+  - `FilterSelect`: a compact list filter. `labelMode="hidden"` names it with
+    `aria-label`; `"inline"` shows a label before it. Long values truncate
+    with a `title` tooltip.
+  - `TemporaryAccountPicker`: the dashed "Temporary" notice that holds an
+    account picker until login exists. Remove it with real login.
+  - `Stepper`: progress through a multi-step flow (`aria-current="step"`).
+  - `RecordCard` and `RecordDetail`: a bin or record row with an icon tile,
+    identity, a `dl` of details, a status slot, and optional children. With
+    `onSelect`, the title becomes a stretched button so the whole card is
+    clickable.
+  - `LoadState` and `ErrorState`: the loading status and a destructive alert
+    with Retry. `EmptyState`: a dashed placeholder for an empty list.
+  - `SearchInput`: a search field with an icon, named by its `label`.
+  - `ConfirmDialog`: an `AlertDialog` for "are you sure" actions, with a
+    `destructive` option and room for extra content. Render it while the
+    question is open; confirming calls only `onConfirm`.
+  - Staff-only: `staff/SortActionButton`, `staff/BinProgressCard`,
+    `staff/NewBinDialog`, `staff/SealBinDialog`, and
+    `staff/DirectResaleProcessDialog`. `staff/handoff-form.tsx` holds the
+    handoff fields, `BinSummary`, and `HandoffDialogShell`, built on `field`
+    and `input-group`.
+  - Admin-only: `admin/AddUserForm`, `admin/TemporaryPasswordDialog`, `admin/EditUserDialog`,
+    `admin/DeleteUserDialog` (on `ConfirmDialog`), `admin/UserIdentity` (avatar,
+    name, email), and `admin/UserStatusBadge`.
+  - Contractor import: `ContractorReportImport` holds the wizard state and
+    renders `contractor-import/ImportUploadStep`, `ImportReviewStep`, and
+    `ImportResultStep`.
+- **Status:** every page uses the design system. Palette classes and raw
+  colors remain only where they're intended: the login video scrim and its
+  teal glow (photo treatment, the same in both themes), the EPR print
+  overrides (black on white on paper), the `bg-black/20` key chip on the
+  sorting buttons, and the `/design-system` swatch labels.
+  `WorkspaceFeaturePlaceholderPage` is kept, already migrated, for the
+  commented-out Recycle Bin Records route.
+- **Reviewing new code:** replace palette classes and hand-built controls as
+  follows:
+
+  | Replace                                     | With                                                 |
+  | ------------------------------------------- | ---------------------------------------------------- |
+  | `bg-white`, `bg-slate-50` surfaces          | `bg-card` / `Card`, `bg-background`, `bg-muted`      |
+  | `text-slate-900` / `-700` / `-500`          | `text-foreground` / `text-muted-foreground`          |
+  | `border-slate-200`                          | `border` (uses `--border`)                           |
+  | teal brand classes, `!text-white`           | `bg-primary text-primary-foreground`, `text-primary` |
+  | raw `button`, `select`, `label`, `textarea` | `Button`, `Select`, `Label`, `Textarea`              |
+  | chip toggles, radio-like buttons            | `ToggleGroup`, `RadioGroup`                          |
+  | raw `table`                                 | `Table` primitives                                   |
+  | hand-built error or info boxes              | `Alert` with a variant                               |
+  | status pills                                | `Badge` with a variant                               |
+  | custom overlays                             | `Dialog`                                             |
+  | spinners and loading placeholders           | `Skeleton`, `Progress`                               |
+
 - Keep workspace menu definitions in `config/workspace-navigation.ts` and use
   each item's optional `roles` list instead of duplicating sidebars per role.
-- Preserve the current unprotected workspace routes until database-backed
-  authentication is implemented or explicitly requested.
+- Put new workspace routes inside the `RequireAuth` route in `App.tsx`.
 - Keep backend calls and their response types in `frontend/src/api.ts` rather
   than placing raw `fetch` calls throughout components.
 - Read public environment variables through `import.meta.env`; Vite variables

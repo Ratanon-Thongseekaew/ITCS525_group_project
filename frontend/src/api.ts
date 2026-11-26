@@ -51,6 +51,8 @@ export interface GarmentSortRequest {
 
 export interface GarmentItem {
   id: number
+  site_id: number
+  site_name: string
   condition: GarmentCondition
   category: string
   bin_id: number
@@ -62,6 +64,8 @@ export interface GarmentItem {
 
 export interface BinRecord {
   id: number
+  site_id: number
+  site_name: string
   bin_code: string
   bin_type: BinType
   status: BinStatus
@@ -289,11 +293,40 @@ export interface EprManagement {
 
 const API_URL = import.meta.env.VITE_API_URL ?? ''
 
-async function handleResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const errorBody = await response.text()
-    throw new Error(`API request failed (${response.status}): ${errorBody || response.statusText}`)
+/** A failed request. `detail` is the server's own explanation, when it sent one. */
+export class ApiError extends Error {
+  readonly status: number
+  readonly detail: string | null
+
+  constructor(status: number, body: string, statusText: string) {
+    super(`API request failed (${status}): ${body || statusText}`)
+    this.name = 'ApiError'
+    this.status = status
+    this.detail = readDetail(body)
   }
+}
+
+// FastAPI sends `{"detail": "..."}`, or a list of `{msg}` objects for validation errors.
+function readDetail(body: string): string | null {
+  try {
+    const { detail } = JSON.parse(body) as { detail?: unknown }
+    if (typeof detail === 'string') return detail
+    if (Array.isArray(detail)) {
+      const messages = detail.map((item: { msg?: unknown }) => item.msg)
+      return messages.filter((msg) => typeof msg === 'string').join('. ') || null
+    }
+  } catch {
+    // Not JSON.
+  }
+  return null
+}
+
+async function toApiError(response: Response) {
+  return new ApiError(response.status, await response.text(), response.statusText)
+}
+
+async function handleResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) throw await toApiError(response)
   return response.json() as Promise<T>
 }
 
@@ -411,19 +444,28 @@ function postJson<T>(path: string, body: unknown) {
   })
 }
 
-export function getSortingStats(siteId: number): Promise<SortingStatsResponse> {
-  return sortingRequest<SortingStatsResponse>(`/sorting/stats${buildQuery({ site_id: siteId })}`)
+// Reads name the acting user (`actor_id`). Staff only reach their own site; managers pick one of
+// their sites, or leave `siteId` out for all of them combined (the list endpoints only).
+export function getSortingStats(actorId: number, siteId?: number): Promise<SortingStatsResponse> {
+  return sortingRequest<SortingStatsResponse>(
+    `/sorting/stats${buildQuery({ actor_id: actorId, site_id: siteId })}`,
+  )
 }
 
-export function getActiveBins(siteId: number): Promise<ActiveBinsResponse> {
-  return sortingRequest<ActiveBinsResponse>(`/bins/active${buildQuery({ site_id: siteId })}`)
+export function getActiveBins(actorId: number, siteId?: number): Promise<ActiveBinsResponse> {
+  return sortingRequest<ActiveBinsResponse>(
+    `/bins/active${buildQuery({ actor_id: actorId, site_id: siteId })}`,
+  )
 }
 
 export function getBins(
-  siteId: number,
+  actorId: number,
+  siteId?: number,
   filters?: { bin_type?: BinType; status?: BinStatus },
 ): Promise<BinRecord[]> {
-  return sortingRequest<BinRecord[]>(`/bins${buildQuery({ site_id: siteId, ...filters })}`)
+  return sortingRequest<BinRecord[]>(
+    `/bins${buildQuery({ actor_id: actorId, site_id: siteId, ...filters })}`,
+  )
 }
 
 export function getDirectResaleBins(siteId: number, signal?: AbortSignal) {
@@ -448,8 +490,14 @@ export function sortGarment(payload: GarmentSortRequest): Promise<SortGarmentRes
   return postJson<SortGarmentResponse>('/garments/sort', payload)
 }
 
-export function getRecentGarments(siteId: number, limit = 15): Promise<GarmentItem[]> {
-  return sortingRequest<GarmentItem[]>(`/garments/recent${buildQuery({ site_id: siteId, limit })}`)
+export function getRecentGarments(
+  actorId: number,
+  siteId?: number,
+  limit = 15,
+): Promise<GarmentItem[]> {
+  return sortingRequest<GarmentItem[]>(
+    `/garments/recent${buildQuery({ actor_id: actorId, site_id: siteId, limit })}`,
+  )
 }
 
 export type UserRole = 'admin' | 'manager' | 'staff'
@@ -500,12 +548,32 @@ export interface UserUpdateRequest {
   site_id?: number | null
 }
 
-function authHeaders(token: string, json = false): HeadersInit {
-  return json
-    ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-    : { Authorization: `Bearer ${token}` }
+let onUnauthorized: (token: string) => void = () => {}
+
+/** Called with the rejected token whenever a signed-in request gets a `401`. */
+export function setUnauthorizedHandler(handler: (token: string) => void) {
+  onUnauthorized = handler
 }
 
+async function authFetch(token: string, path: string, method = 'GET', body?: unknown) {
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  const response = await fetch(`${API_URL}/api${path}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (response.status === 401) onUnauthorized(token)
+  if (!response.ok) throw await toApiError(response)
+  return response
+}
+
+async function authRequest<T>(token: string, path: string, method?: string, body?: unknown) {
+  const response = await authFetch(token, path, method, body)
+  return response.json() as Promise<T>
+}
+
+// A `401` here means wrong credentials, not an expired session.
 export async function login(username: string, password: string): Promise<LoginResponse> {
   const response = await fetch(`${API_URL}/api/auth/login`, {
     method: 'POST',
@@ -515,81 +583,150 @@ export async function login(username: string, password: string): Promise<LoginRe
   return handleResponse<LoginResponse>(response)
 }
 
-export async function getCurrentUser(token: string): Promise<User> {
-  const response = await fetch(`${API_URL}/api/auth/me`, { headers: authHeaders(token) })
-  return handleResponse<User>(response)
+export function getCurrentUser(token: string) {
+  return authRequest<User>(token, '/auth/me')
 }
 
-export async function listUsers(token: string, offset = 0, limit = 100): Promise<User[]> {
-  const response = await fetch(`${API_URL}/api/users?offset=${offset}&limit=${limit}`, {
-    headers: authHeaders(token),
+export function listUsers(token: string, offset = 0, limit = 100) {
+  return authRequest<User[]>(token, `/users?offset=${offset}&limit=${limit}`)
+}
+
+export function createUser(token: string, payload: UserCreateRequest) {
+  return authRequest<UserWithTemporaryPassword>(token, '/users', 'POST', payload)
+}
+
+export function resetUserPassword(token: string, userId: number) {
+  return authRequest<UserWithTemporaryPassword>(token, `/users/${userId}/reset-password`, 'POST')
+}
+
+export function listSites(token: string) {
+  return authRequest<Store[]>(token, '/sites')
+}
+
+export function changePassword(token: string, currentPassword: string, newPassword: string) {
+  return authRequest<User>(token, '/auth/change-password', 'POST', {
+    current_password: currentPassword,
+    new_password: newPassword,
   })
-  return handleResponse<User[]>(response)
 }
 
-export async function createUser(
-  token: string,
-  payload: UserCreateRequest,
-): Promise<UserWithTemporaryPassword> {
-  const response = await fetch(`${API_URL}/api/users`, {
-    method: 'POST',
-    headers: authHeaders(token, true),
-    body: JSON.stringify(payload),
-  })
-  return handleResponse<UserWithTemporaryPassword>(response)
-}
-
-export async function resetUserPassword(
-  token: string,
-  userId: number,
-): Promise<UserWithTemporaryPassword> {
-  const response = await fetch(`${API_URL}/api/users/${userId}/reset-password`, {
-    method: 'POST',
-    headers: authHeaders(token),
-  })
-  return handleResponse<UserWithTemporaryPassword>(response)
-}
-
-export async function listSites(token: string): Promise<Store[]> {
-  const response = await fetch(`${API_URL}/api/sites`, { headers: authHeaders(token) })
-  return handleResponse<Store[]>(response)
-}
-
-export async function changePassword(
-  token: string,
-  currentPassword: string,
-  newPassword: string,
-): Promise<User> {
-  const response = await fetch(`${API_URL}/api/auth/change-password`, {
-    method: 'POST',
-    headers: authHeaders(token, true),
-    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
-  })
-  return handleResponse<User>(response)
-}
-
-export async function updateUser(
-  token: string,
-  userId: number,
-  payload: UserUpdateRequest,
-): Promise<User> {
-  const response = await fetch(`${API_URL}/api/users/${userId}`, {
-    method: 'PATCH',
-    headers: authHeaders(token, true),
-    body: JSON.stringify(payload),
-  })
-  return handleResponse<User>(response)
+export function updateUser(token: string, userId: number, payload: UserUpdateRequest) {
+  return authRequest<User>(token, `/users/${userId}`, 'PATCH', payload)
 }
 
 export async function deleteUser(token: string, userId: number): Promise<void> {
-  const response = await fetch(`${API_URL}/api/users/${userId}`, {
-    method: 'DELETE',
-    headers: authHeaders(token),
-  })
+  await authFetch(token, `/users/${userId}`, 'DELETE')
+}
+
+export interface ContractorReportOptionItem {
+  id: number
+  code?: string | null
+  name: string
+}
+
+export interface ContractorReportOptionsResponse {
+  sites: ContractorReportOptionItem[]
+  contractors: ContractorReportOptionItem[]
+}
+
+export interface ContractorDispositionWeightsPayload {
+  upcycled_kg: number
+  fibre_to_fibre_kg: number
+  downcycled_kg: number
+  exported_kg: number
+  landfilled_kg: number
+  incinerated_energy_recovery_kg: number
+}
+
+export interface ContractorReportParsedRow {
+  row: number
+  bin_id: string
+  contractor: string
+  store_weight_kg: number
+  received_kg: number
+  dispositions: ContractorDispositionWeightsPayload
+  categorized_weight_kg: number
+  uncategorized_weight_kg: number
+  status: 'Verified' | 'Warning' | 'Error'
+  errors: string[]
+}
+
+export interface ContractorReportFileParseResponse {
+  filename: string
+  rows: ContractorReportParsedRow[]
+}
+
+export interface ContractorReportImportRequest {
+  site_id: number
+  contractor_name: string
+  report_month: string
+  source_filename: string
+  rows: Array<{
+    row: number
+    bin_id: string
+    contractor: string
+    store_weight_kg: number
+    received_kg: number
+    dispositions: ContractorDispositionWeightsPayload
+  }>
+}
+
+export interface ContractorReportImportResponse {
+  report_id: number
+  site_id: number
+  site_name: string
+  contractor_name: string
+  report_month: string
+  imported_rows: number
+  total_received_kg: number
+  total_categorized_weight_kg: number
+  message: string
+}
+
+const IMPORT_API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
+
+async function parseImportApiResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    const errorBody = await response.text()
-    throw new Error(`API request failed (${response.status}): ${errorBody || response.statusText}`)
+    let detail = `Request failed (${response.status})`
+    try {
+      const data = (await response.json()) as { detail?: string }
+      if (data.detail) {
+        detail = data.detail
+      }
+    } catch {
+      // keep default detail
+    }
+    throw new Error(detail)
   }
+  return (await response.json()) as T
+}
+
+export async function fetchContractorReportOptions(): Promise<ContractorReportOptionsResponse> {
+  const response = await fetch(`${IMPORT_API_BASE}/api/contractor-reports/options`)
+  return parseImportApiResponse<ContractorReportOptionsResponse>(response)
+}
+
+export async function parseAndValidateContractorFile(
+  filename: string,
+  contentBase64: string,
+): Promise<ContractorReportFileParseResponse> {
+  const response = await fetch(`${IMPORT_API_BASE}/api/contractor-reports/parse-and-validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, content_base64: contentBase64 }),
+  })
+  return parseImportApiResponse<ContractorReportFileParseResponse>(response)
+}
+
+export async function importContractorReport(
+  payload: ContractorReportImportRequest,
+): Promise<ContractorReportImportResponse> {
+  const response = await fetch(`${IMPORT_API_BASE}/api/contractor-reports/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  return parseImportApiResponse<ContractorReportImportResponse>(response)
 }
 
 // Recycle bin handoff. Mirrors the "Recycle bin handoff" section of backend/app/schemas.py.

@@ -1,19 +1,21 @@
 /** @vitest-environment jsdom */
 
 import '@testing-library/jest-dom/vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { toast } from 'sonner'
 import { afterEach, expect, test, vi } from 'vitest'
+import { sessionUser, signInAs } from './test/auth'
 import { dashboardFixture } from './test/dashboard-fixture'
 import { actAs, handoffOptions, handoffRecord, readyBin, STAFF_ID } from './test/handoff-fixtures'
 import App from './App'
+import { isWorkspaceRole } from './types/workspace'
 
 afterEach(() => {
   cleanup()
   window.localStorage.clear()
   resaleBins.splice(0, resaleBins.length, ...initialResaleBins.map((bin) => ({ ...bin })))
   vi.useRealTimers()
+  window.sessionStorage.clear()
   vi.restoreAllMocks()
 })
 
@@ -109,6 +111,8 @@ const initialResaleBins = [
 const resaleBins: typeof initialResaleBins = initialResaleBins.map((bin) => ({ ...bin }))
 
 function fixtureFor(url: string) {
+  if (url.includes('/api/auth/me')) return sessionUser()
+  if (url.includes('/api/users') || url.includes('/api/sites')) return []
   if (url.includes('/api/dashboard')) return dashboardFixture
   if (url.includes('/api/handoffs/options')) return handoffOptions
   if (url.includes('/api/handoffs/bins')) return { bins: handoffBins }
@@ -119,7 +123,17 @@ function fixtureFor(url: string) {
   return { message: 'Hello from FastAPI!' }
 }
 
+/** The workspace sidebar, so its links aren't confused with a page's breadcrumb links. */
+function sidebar() {
+  return within(document.querySelector<HTMLElement>('[data-sidebar="sidebar"]')!)
+}
+
+/** Renders a route signed in as the role its path belongs to; other routes start signed out. */
 function renderRoute(route: string) {
+  const pathRole = route.split('/')[1]
+  window.sessionStorage.clear()
+  if (isWorkspaceRole(pathRole)) signInAs(pathRole)
+
   vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
     const url = String(input)
     if (init?.method === 'POST' && url.includes('/api/resale-bins/') && url.endsWith('/process')) {
@@ -165,6 +179,15 @@ test('renders user management immediately when visited directly', () => {
 
   expect(screen.getByRole('heading', { name: 'User Management' })).toBeInTheDocument()
   expect(screen.queryByRole('status', { name: 'loading...' })).not.toBeInTheDocument()
+})
+
+test('offers the theme picker in the workspace header and on the login page', () => {
+  renderRoute('/admin/users')
+  expect(screen.getByRole('button', { name: 'Change color theme' })).toBeInTheDocument()
+  cleanup()
+
+  renderRoute('/login')
+  expect(screen.getByRole('button', { name: 'Change color theme' })).toBeInTheDocument()
 })
 
 test('redirects the manager root to the compliance dashboard', () => {
@@ -230,7 +253,7 @@ test('links Direct Resale to its revenue summary and processed history', () => {
     'href',
     '/staff/direct-resale/potential-revenue-analysis',
   )
-  expect(screen.getByRole('link', { name: 'Processed Bin History' })).toHaveAttribute(
+  expect(screen.getByRole('link', { name: 'Processed Bin Records' })).toHaveAttribute(
     'href',
     '/staff/direct-resale/processed-bins-record',
   )
@@ -239,7 +262,7 @@ test('links Direct Resale to its revenue summary and processed history', () => {
 test('lists processed resale bins on their own page', async () => {
   renderDirectResaleRoute('/staff/direct-resale/processed-bins-record')
 
-  expect(screen.getByRole('heading', { name: 'Processed Bin History' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Processed Bin Records' })).toBeInTheDocument()
   expect(await screen.findByText('#RS-002')).toBeInTheDocument()
   expect(await screen.findByText('#RS-003')).toBeInTheDocument()
   expect(screen.queryByText('#RS-001')).not.toBeInTheDocument()
@@ -256,9 +279,9 @@ test('lists processed resale bins on their own page', async () => {
 test('renders potential revenue analysis from processed resale bins', async () => {
   renderDirectResaleRoute('/staff/direct-resale/potential-revenue-analysis')
 
-  expect(screen.getByRole('heading', { name: 'Revenue Summary' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Potential Revenue Analysis' })).toBeInTheDocument()
   expect(await screen.findByText('฿30,500')).toBeInTheDocument()
-  expect(screen.getByText('From 2 processed bins')).toBeInTheDocument()
+  expect(screen.getByText('2 processed bins')).toBeInTheDocument()
   const directResaleLinks = screen.getAllByRole('link', { name: 'Direct Resale' })
   expect(directResaleLinks.some((link) => link.getAttribute('data-active') === 'true')).toBe(true)
   expect(screen.getByRole('link', { name: 'Back to bins' })).toHaveAttribute(
@@ -273,12 +296,12 @@ test('shows a just-processed bin in revenue summary and processed history', asyn
   fireEvent.click(await screen.findByRole('button', { name: /#RS-001/i }))
   fireEvent.change(screen.getByLabelText('Sale Revenue (฿)'), { target: { value: '15000' } })
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
-  fireEvent.click(screen.getByRole('link', { name: 'Revenue Summary' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Revenue Summary' }))
 
   expect(await screen.findByText('฿45,500')).toBeInTheDocument()
-  expect(screen.getByText('From 3 processed bins')).toBeInTheDocument()
+  expect(screen.getByText('3 processed bins')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('link', { name: 'Back to bins' }))
-  fireEvent.click(screen.getByRole('link', { name: 'Processed Bin History' }))
+  fireEvent.click(screen.getByRole('link', { name: 'Processed Bin Records' }))
 
   expect(await screen.findByText('#RS-001')).toBeInTheDocument()
   expect(screen.getByText('฿15,000')).toBeInTheDocument()
@@ -288,7 +311,7 @@ test('renders the login page at the root route', () => {
   renderRoute('/')
 
   expect(screen.getByRole('heading', { name: 'Login' })).toBeInTheDocument()
-  expect(screen.getByText('Admin access')).toBeInTheDocument()
+  expect(screen.getByText('Welcome back')).toBeInTheDocument()
 
   const backgroundVideo = document.querySelector('video')
   const videoSource = backgroundVideo?.querySelector('source')
@@ -318,60 +341,18 @@ test('toggles password visibility from the login form', () => {
   expect(passwordInput).toHaveAttribute('type', 'password')
 })
 
-test('redirects the demo admin login through the loader to user management', () => {
-  vi.useFakeTimers()
-  const successToast = vi.spyOn(toast, 'success')
-  renderRoute('/')
-
-  fireEvent.change(screen.getByLabelText('Password'), {
-    target: { value: 'demo-password' },
-  })
-  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
-
-  expect(successToast).toHaveBeenCalledWith('Login successful', {
-    description: 'Opening the admin workspace...',
-  })
-  expect(screen.getByRole('status', { name: 'loading...' })).toBeInTheDocument()
-
-  act(() => {
-    vi.advanceTimersByTime(2_000)
-  })
-
-  expect(screen.getByRole('heading', { name: 'User Management' })).toBeInTheDocument()
-  expect(screen.getByRole('link', { name: 'User Management' })).toHaveAttribute(
-    'data-active',
-    'true',
-  )
-})
-
-test('keeps the login form visible and shows an alert for an invalid demo username', () => {
-  const errorToast = vi.spyOn(toast, 'error')
-  renderRoute('/')
-
-  fireEvent.change(screen.getByLabelText('Username'), {
-    target: { value: 'WrongUser' },
-  })
-  fireEvent.change(screen.getByLabelText('Password'), {
-    target: { value: 'demo-password' },
-  })
-  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
-
-  expect(screen.getByRole('heading', { name: 'Login failed' })).toBeInTheDocument()
-  expect(screen.getByText('Use Admin01 for the admin workspace.')).toBeInTheDocument()
-  expect(errorToast).toHaveBeenCalledWith('Login failed', {
-    description: 'Use Admin01 for the admin workspace.',
-  })
-  expect(screen.getByRole('heading', { name: 'Login' })).toBeInTheDocument()
-  expect(screen.queryByRole('status', { name: 'loading...' })).not.toBeInTheDocument()
-})
-
 const staffNavigation = [
   ['Sorting', '/staff/sorting'],
   ['Direct Resale', '/staff/direct-resale'],
   ['Recycle Bin Handoff', '/staff/recycle-bin-handoff'],
 ] as const
 
-const managerNavigation = ['Compliance Dashboard', 'Resale Bin Records', 'Import Data']
+const managerNavigation = [
+  'Compliance Dashboard',
+  'Sorting Overview',
+  'Resale Bin Records',
+  'Import Data',
+]
 
 test('shows the Figma navigation in the staff sidebar', () => {
   renderRoute('/staff/sorting')
@@ -471,7 +452,7 @@ test('returns to New Bins for Handoff from Handoff Records', async () => {
 test('keeps Recycle Bin Handoff active on its sub-routes', () => {
   renderRoute('/staff/recycle-bin-handoff/handoff-records')
 
-  expect(screen.getByRole('link', { name: 'Recycle Bin Handoff' })).toHaveAttribute(
+  expect(sidebar().getByRole('link', { name: 'Recycle Bin Handoff' })).toHaveAttribute(
     'data-active',
     'true',
   )
@@ -520,31 +501,6 @@ test('shows the compliance dashboard to admins and keeps them in their workspace
     'aria-haspopup',
     'dialog',
   )
-})
-
-test('redirects the demo staff login to the sorting workspace', () => {
-  Object.assign(Element.prototype, {
-    hasPointerCapture: () => false,
-    setPointerCapture: () => undefined,
-    releasePointerCapture: () => undefined,
-    scrollIntoView: () => undefined,
-  })
-  vi.useFakeTimers()
-  renderRoute('/')
-
-  fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' })
-  fireEvent.click(screen.getByRole('option', { name: /staff/i }))
-  fireEvent.change(screen.getByLabelText('Password'), {
-    target: { value: 'demo-password' },
-  })
-  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
-
-  act(() => {
-    vi.advanceTimersByTime(2_000)
-  })
-
-  expect(screen.getByRole('link', { name: 'Sorting' })).toHaveAttribute('data-active', 'true')
-  expect(screen.getByText('Your work, clearly organized.')).toBeInTheDocument()
 })
 
 test('opens the contractor report import page from manager navigation', () => {

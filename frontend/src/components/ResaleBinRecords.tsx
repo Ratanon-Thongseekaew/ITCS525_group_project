@@ -1,10 +1,19 @@
-import { AlertCircle, RefreshCw, Store } from 'lucide-react'
+import { Store } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { getResaleStoreSummary, type ResaleStoreSummary } from '@/api'
+import { EmptyState } from '@/components/EmptyState'
+import { ErrorState } from '@/components/LoadState'
+import { PageHeader } from '@/components/PageHeader'
 import Converge, { type DataSourceItem } from '@/lib/react-vibe/Converage'
 
-const STORE_COLORS = ['#10a37f', '#d97757', '#8ab4f8', '#4d6bfe', '#999784']
+const STORE_COLORS = [
+  'var(--chart-1)',
+  'var(--chart-2)',
+  'var(--chart-3)',
+  'var(--chart-4)',
+  'var(--chart-5)',
+]
 const STORE_POSITIONS = [120, 210, 300, 390, 480]
 
 function toDataSources(stores: ResaleStoreSummary[]): DataSourceItem[] {
@@ -51,53 +60,30 @@ function ResaleBinRecords() {
   }
 
   return (
-    <section className="space-y-5" aria-labelledby="resale-bin-records-title">
-      <header>
-        <p className="mb-1 text-xs font-medium text-emerald-700">Operations / Direct Resale</p>
-        <h1
-          id="resale-bin-records-title"
-          className="mb-1 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl"
-        >
-          Resale Bin Records
-        </h1>
-        <p className="mb-0 text-sm text-slate-500">
-          Actual resale value from the first five stores.
-        </p>
-      </header>
+    <section className="flex flex-col gap-6">
+      <PageHeader
+        breadcrumbs={[{ label: 'Operations' }, { label: 'Direct Resale' }]}
+        title="Resale Bin Records"
+        description="Actual resale value from the first five stores."
+      />
 
       {isLoading ? (
         <div
           role="status"
           aria-label="Loading resale store data"
-          className="flex min-h-80 items-center justify-center rounded-xl border border-slate-200 bg-white text-sm text-slate-500"
+          className="flex min-h-80 items-center justify-center rounded-xl border bg-card text-sm text-muted-foreground"
         >
           Loading resale store data...
         </div>
       ) : null}
 
-      {error ? (
-        <div
-          role="alert"
-          className="flex min-h-48 flex-col items-center justify-center gap-3 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-800"
-        >
-          <AlertCircle aria-hidden="true" />
-          <p className="mb-0">{error}</p>
-          <button
-            type="button"
-            onClick={retryRequest}
-            className="inline-flex items-center gap-2 rounded-md border border-rose-300 bg-white px-3 py-2 font-medium hover:bg-rose-100"
-          >
-            <RefreshCw className="size-4" aria-hidden="true" />
-            Retry
-          </button>
-        </div>
-      ) : null}
+      {error ? <ErrorState message={error} onRetry={retryRequest} /> : null}
 
       {!isLoading && !error && stores.length > 0 ? (
         <Converge
           CurveRadius={250}
           CurveWeight={1.5}
-          CurcePillColor="#10b981"
+          CurcePillColor="var(--primary)"
           PillSpeed={3.5}
           PillWeight={2.5}
           PillLength={14}
@@ -107,9 +93,7 @@ function ResaleBinRecords() {
       ) : null}
 
       {!isLoading && !error && stores.length === 0 ? (
-        <p className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
-          No resale store data is available.
-        </p>
+        <EmptyState>No resale store data is available.</EmptyState>
       ) : null}
     </section>
   )

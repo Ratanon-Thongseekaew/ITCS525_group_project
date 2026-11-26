@@ -100,7 +100,8 @@ test('shows each bin with its own details', async () => {
   renderPage()
   await findBinList()
 
-  const card = screen.getAllByRole('listitem')[1]
+  const binList = screen.getByRole('list', { name: 'Bins awaiting handoff' })
+  const card = within(binList).getAllByRole('listitem')[1]
 
   expect(within(card).getByRole('heading', { name: '#test-002' })).toBeInTheDocument()
   expect(within(card).getByText('Recycling Bin · Bangkok Sorting Center')).toBeInTheDocument()

@@ -114,10 +114,10 @@ test('exports the same quarterly EPR figures to CSV and the printable page', asy
   renderDashboard()
   await screen.findByText('Live data from the Textile Track database.')
   const exportButton = screen.getByRole('button', { name: 'Export EPR Report' })
-  expect(exportButton).toHaveClass('cursor-pointer', 'hover:bg-teal-800')
+  expect(exportButton).toBeEnabled()
   fireEvent.click(exportButton)
   const exportDialog = screen.getByRole('dialog', { name: 'Export quarterly EPR report' })
-  expect(exportDialog).toHaveClass('bg-white', 'text-slate-900')
+  expect(exportDialog).toHaveAccessibleDescription(/covers all sites/)
   const dialog = within(exportDialog)
   const printLink = await dialog.findByRole('link', { name: 'Open printable report' })
   expect(printLink).toHaveAttribute(
@@ -125,7 +125,7 @@ test('exports the same quarterly EPR figures to CSV and the printable page', asy
     expect.stringMatching(/^\/manager\/epr-report\/print\?/),
   )
   const downloadButton = dialog.getByRole('button', { name: 'Download CSV' })
-  expect(downloadButton).toHaveClass('cursor-pointer', 'hover:bg-slate-100')
+  expect(downloadButton).toBeEnabled()
   fireEvent.click(downloadButton)
   expect(download).toHaveBeenCalledOnce()
 
@@ -148,7 +148,7 @@ test('exports the same quarterly EPR figures to CSV and the printable page', asy
     '/manager/compliance-dashboard',
   )
   const printButton = screen.getByRole('button', { name: 'Print report' })
-  expect(printButton).toHaveClass('cursor-pointer', 'hover:bg-teal-800')
+  expect(printButton).toBeEnabled()
   fireEvent.click(printButton)
   expect(print).toHaveBeenCalledOnce()
   expect(getEprReportMock).toHaveBeenCalledOnce()
