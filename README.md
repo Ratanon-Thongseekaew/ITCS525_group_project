@@ -402,8 +402,28 @@ three independent checks:
 - **Frontend checks:** install the locked npm dependencies on Node.js 24, check
   and test the executable project guardrails, check Prettier and ESLint, run
   Vitest, then create a production build.
-- **Compose validation:** resolve `compose.yaml` with non-production CI values
-  and validate its syntax without starting MySQL.
+- **Compose validation:** resolve `compose.yaml` and `compose.prod.yaml`
+  with non-production CI values and validate their syntax without starting MySQL.
+
+## Deployment (AWS EC2 + Docker Compose)
+
+Pushes to `main` (or manual workflow dispatches) trigger
+`.github/workflows/deploy.yaml`, which:
+
+1. Authenticates with `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (the scoped
+   `github-actions-ec2-deploy` IAM user in `ap-southeast-2`).
+2. Builds `linux/amd64` images from `backend/Dockerfile` and
+   `frontend/Dockerfile` and pushes them to Amazon ECR.
+3. Calls `scripts/deploy-ec2.mjs` to update the EC2 instance tagged
+   `Project=textile-track` over AWS SSM (`AWS-RunShellScript`), running
+   `alembic -c backend/alembic.ini upgrade head` and `docker compose -f compose.prod.yaml up -d`.
+
+Inside `compose.prod.yaml`, three containers share a private Docker network:
+`frontend` (Caddy serving the Vite static bundle, managing HTTPS for
+`SITE_DOMAIN`, enforcing `ALLOWED_CLIENT_CIDRS`, and proxying `/api/*`,
+`/docs*`, and `/openapi.json`), `backend` (FastAPI/Uvicorn with persistent
+`uploads_data`), and `mysql` (MySQL 8.4 with persistent `mysql_data`, not
+exposed on the host).
 
 The backend CI job uses a disposable MySQL service with non-production
 credentials and applies all migrations before running checks. Database tests

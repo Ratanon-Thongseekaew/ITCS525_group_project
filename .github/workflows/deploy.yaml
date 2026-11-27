@@ -1,0 +1,66 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-ec2
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-southeast-2
+  ECR_FRONTEND_REPO: textile-track-frontend
+  ECR_BACKEND_REPO: textile-track-backend
+
+jobs:
+  deploy:
+    name: Build, push to ECR, and deploy via SSM
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push backend image
+        run: |
+          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
+          TAG="${{ github.sha }}"
+          docker build --platform linux/amd64 -f backend/Dockerfile \
+            -t "${REGISTRY}/${ECR_BACKEND_REPO}:${TAG}" \
+            -t "${REGISTRY}/${ECR_BACKEND_REPO}:latest" .
+          docker push "${REGISTRY}/${ECR_BACKEND_REPO}:${TAG}"
+          docker push "${REGISTRY}/${ECR_BACKEND_REPO}:latest"
+
+      - name: Build and push frontend image
+        run: |
+          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
+          TAG="${{ github.sha }}"
+          docker build --platform linux/amd64 -f frontend/Dockerfile \
+            -t "${REGISTRY}/${ECR_FRONTEND_REPO}:${TAG}" \
+            -t "${REGISTRY}/${ECR_FRONTEND_REPO}:latest" .
+          docker push "${REGISTRY}/${ECR_FRONTEND_REPO}:${TAG}"
+          docker push "${REGISTRY}/${ECR_FRONTEND_REPO}:latest"
+
+      - name: Deploy containers on EC2 via SSM
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: node scripts/deploy-ec2.mjs

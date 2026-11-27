@@ -19,8 +19,7 @@ This is a minimal full-stack monorepo:
 - The backend uses SQLModel as its ORM, PyMySQL as the MySQL driver, and Alembic
   for versioned schema migrations. Database settings are loaded from the root
   `.env`, with an optional `DATABASE_URL` override.
-- The backend has JWT authentication and admin user management, and the frontend signs in against it. Deployment configuration remains
-  unimplemented.
+- The backend has JWT authentication and admin user management, and the frontend signs in against it. Production deployment targets AWS EC2 (`ap-southeast-2`) with Docker Compose (`compose.prod.yaml`), Amazon ECR, and GitHub Actions (`.github/workflows/deploy.yaml`).
 
 ## Repository map
 
@@ -78,8 +77,12 @@ This is a minimal full-stack monorepo:
 │   └── pyproject.toml       Python package and tool configuration
 ├── .github/
 │   └── workflows/
-│       └── ci.yaml           Pull request and main-branch CI checks
+│       ├── ci.yaml          Pull request and main-branch CI checks
+│       └── deploy.yaml      ECR image builds and EC2 SSM deployment on `main`
 ├── compose.yaml             Local MySQL service
+├── compose.prod.yaml        Production 3-container Compose stack (frontend, backend, mysql)
+├── backend/Dockerfile       FastAPI + Alembic container image
+├── frontend/Dockerfile      Multi-stage Vite build served by Caddy with `/api` proxy
 ├── .env.example             Safe template for local environment values
 ├── package.json             Root development commands
 └── README.md                Human setup and usage guide
@@ -531,8 +534,12 @@ npm run commit          # Guardrails, lint, backend tests, then Commitizen
 - `Frontend checks`: Node.js 24, `npm ci`, Prettier, ESLint, Vitest, and the
   production Vite build. It also runs and tests the executable project
   guardrails.
-- `Compose validation`: validates the resolved Compose configuration with
-  disposable CI environment values and does not start containers.
+- `Compose validation`: validates the resolved `compose.yaml` and
+  `compose.prod.yaml` configurations with disposable CI environment values and
+  does not start containers.
+
+`.github/workflows/deploy.yaml` runs on pushes to `main` and manual workflow
+dispatches using `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (`github-actions-ec2-deploy`), builds `linux/amd64` `backend` and `frontend` images to ECR, and deploys via `scripts/deploy-ec2.mjs` over AWS SSM (running `alembic upgrade head` before updating containers).
 
 CI dependency caches are keyed from `backend/pyproject.toml` and the root
 `package-lock.json`. Superseded runs for the same pull request are cancelled.
