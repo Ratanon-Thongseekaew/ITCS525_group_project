@@ -170,7 +170,7 @@ class Contractor(TimestampMixin, table=True):
 class Bin(TimestampMixin, table=True):
     __tablename__ = "bins"
     __table_args__ = (
-        UniqueConstraint("site_id", "code", name="uq_bins_site_code"),
+        UniqueConstraint("code", name="uq_bins_code"),
         CheckConstraint("item_count >= 0", name="ck_bins_item_count_nonnegative"),
         CheckConstraint("total_weight_kg >= 0", name="ck_bins_weight_nonnegative"),
         CheckConstraint("max_capacity > 0", name="ck_bins_capacity_positive"),
@@ -269,6 +269,10 @@ class Handoff(TimestampMixin, table=True):
             name="ck_handoffs_driver_weight_nonnegative",
         ),
         CheckConstraint(
+            "contractor_received_kg IS NULL OR contractor_received_kg >= 0",
+            name="ck_handoffs_contractor_received_nonnegative",
+        ),
+        CheckConstraint(
             "weight_variance_percent IS NULL OR weight_variance_percent >= 0",
             name="ck_handoffs_variance_nonnegative",
         ),
@@ -299,6 +303,11 @@ class Handoff(TimestampMixin, table=True):
         sa_column=Column(Numeric(12, 3), nullable=True),
     )
     driver_weight_kg: Decimal | None = Field(
+        default=None,
+        sa_column=Column(Numeric(12, 3), nullable=True),
+    )
+    # The weight the contractor's monthly outcome report says it received for this bin.
+    contractor_received_kg: Decimal | None = Field(
         default=None,
         sa_column=Column(Numeric(12, 3), nullable=True),
     )

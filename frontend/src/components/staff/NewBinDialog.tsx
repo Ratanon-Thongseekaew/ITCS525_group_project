@@ -10,13 +10,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { BIN_TYPE_TONES } from '@/lib/bin-type-tones'
 import { cn } from '@/lib/utils'
-
-const BIN_CODE_PREFIXES: Record<BinType, string> = { resale: 'RS', recycle: 'RC', repair: 'RP' }
 
 const BIN_TYPE_OPTIONS = [
   { type: 'resale', label: 'Direct Resale', icon: Sparkles },
@@ -26,7 +24,6 @@ const BIN_TYPE_OPTIONS = [
 
 export interface NewBinValues {
   bin_type: BinType
-  bin_code?: string
   max_capacity: number
   notes?: string
 }
@@ -39,7 +36,6 @@ interface NewBinDialogProps {
 /** Registers an empty bin for counter sorting. */
 export function NewBinDialog({ onCreate, onCancel }: NewBinDialogProps) {
   const [type, setType] = useState<BinType>('resale')
-  const [code, setCode] = useState('')
   const [capacity, setCapacity] = useState('50')
   const [notes, setNotes] = useState('')
 
@@ -47,7 +43,6 @@ export function NewBinDialog({ onCreate, onCancel }: NewBinDialogProps) {
     event.preventDefault()
     onCreate({
       bin_type: type,
-      bin_code: code.trim() || undefined,
       max_capacity: parseInt(capacity, 10) || 50,
       notes: notes.trim() || undefined,
     })
@@ -58,7 +53,9 @@ export function NewBinDialog({ onCreate, onCancel }: NewBinDialogProps) {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Create New Bin Record</DialogTitle>
-          <DialogDescription>Register an empty bin for counter sorting.</DialogDescription>
+          <DialogDescription>
+            Register an empty bin for counter sorting. Its code is generated from your store code.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
           <FieldGroup className="gap-4">
@@ -84,16 +81,6 @@ export function NewBinDialog({ onCreate, onCancel }: NewBinDialogProps) {
                   </ToggleGroupItem>
                 ))}
               </ToggleGroup>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="modal-bincode">Custom Bin Code (optional)</FieldLabel>
-              <Input
-                id="modal-bincode"
-                placeholder={`e.g. BIN-${BIN_CODE_PREFIXES[type]}-005`}
-                value={code}
-                onChange={(event) => setCode(event.target.value)}
-              />
-              <FieldDescription>Leave blank to auto-generate sequentially.</FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor="modal-capacity">Target Max Capacity (items)</FieldLabel>

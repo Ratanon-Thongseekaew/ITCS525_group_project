@@ -1,54 +1,78 @@
+from datetime import UTC, datetime
+
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session, SQLModel, create_engine
-from sqlmodel.pool import StaticPool
+from sqlmodel import Session, select
 
 from app.database import get_session
 from app.main import app
-from seed import seed_dashboard_data
+from app.models import ContractorReport, ContractorReportEntry, Handoff, Site
+
+# The demo seed is pinned to 2026-11-27: October is last month (BKK and KKC reports pending),
+# Q3 is fully reported, and November has one disputed handoff awaiting approval.
 
 
 @pytest.fixture
-def dashboard_client():
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        seed_dashboard_data(session)
-
+def dashboard_engine(demo_engine):
     def override_session():
-        with Session(engine) as session:
+        with Session(demo_engine) as session:
             yield session
 
     app.dependency_overrides[get_session] = override_session
-    try:
-        with TestClient(app) as client:
-            yield client
-    finally:
-        app.dependency_overrides.clear()
-        engine.dispose()
+    yield demo_engine
+    app.dependency_overrides.clear()
 
 
-def test_monthly_dashboard_aggregates_seeded_data(dashboard_client: TestClient) -> None:
+@pytest.fixture
+def dashboard_client(dashboard_engine):
+    with TestClient(app) as client:
+        yield client
+
+
+def october_weights(engine, site_code: str | None = None) -> tuple[float, float]:
+    """Staff weight picked up in October and outcome weight reported for October."""
+
+    start, end = datetime(2026, 10, 1, tzinfo=UTC), datetime(2026, 11, 1, tzinfo=UTC)
+    with Session(engine) as session:
+        site_id = (
+            session.exec(select(Site.id).where(Site.code == site_code)).one() if site_code else None
+        )
+        handoffs = [
+            handoff
+            for handoff in session.exec(select(Handoff)).all()
+            if start <= handoff.picked_up_at.replace(tzinfo=UTC) < end
+            and (site_id is None or handoff.site_id == site_id)
+        ]
+        entries = session.exec(
+            select(ContractorReportEntry, ContractorReport).join(
+                ContractorReport, ContractorReport.id == ContractorReportEntry.contractor_report_id
+            )
+        ).all()
+        reported = [
+            entry.weight_kg
+            for entry, report in entries
+            if report.report_month == start.date()
+            and (site_id is None or report.site_id == site_id)
+        ]
+        return float(sum(h.staff_weight_kg for h in handoffs)), float(sum(reported))
+
+
+def test_monthly_dashboard_aggregates_seeded_data(dashboard_client, dashboard_engine) -> None:
     response = dashboard_client.get(
         "/api/dashboard", params={"frequency": "monthly", "year": 2026, "month": 10}
     )
 
     assert response.status_code == 200
     payload = response.json()
+    recorded, reported = october_weights(dashboard_engine)
+    summary = payload["summary"]
     assert payload["period_label"] == "October 2026"
-    assert payload["summary"] == {
-        "recycling_bins_collected": 2,
-        "recycling_bins_reported": 1,
-        "pending_bins": 1,
-        "disputed_handoffs": 1,
-        "recovery_rate": 95.0,
-        "diverted_weight_kg": 223.25,
-        "total_recorded_weight_kg": 482.0,
-        "total_reported_weight_kg": 235.0,
-        "weight_variance_kg": -247.0,
-    }
+    assert summary["recycling_bins_collected"] == 10  # 5 stores x 2 recycle bins
+    assert summary["recycling_bins_reported"] == 6  # BKK and KKC are still pending
+    assert summary["pending_bins"] == 4
+    assert summary["disputed_handoffs"] == 0
+    assert summary["total_recorded_weight_kg"] == pytest.approx(recorded)
+    assert summary["total_reported_weight_kg"] == pytest.approx(reported)
     assert {outcome["category"] for outcome in payload["outcomes"]} == {
         "upcycled",
         "fibre_to_fibre",
@@ -57,34 +81,31 @@ def test_monthly_dashboard_aggregates_seeded_data(dashboard_client: TestClient) 
         "landfilled",
         "incinerated_energy_recovery",
     }
-    assert {exception["status"] for exception in payload["exceptions"]} == {
-        "pending",
-        "disputed",
-    }
-    assert len(payload["filters"]["sites"]) == 2
-    assert len(payload["filters"]["contractors"]) == 2
-    assert payload["filters"]["available_years"] == [2026]
+    assert {exception["status"] for exception in payload["exceptions"]} == {"pending"}
+    assert len(payload["filters"]["sites"]) == 5
+    assert len(payload["filters"]["contractors"]) == 3
+    assert payload["filters"]["available_years"] == [2026, 2025]
 
 
-def test_dashboard_filters_by_site(dashboard_client: TestClient) -> None:
+def test_dashboard_filters_by_site(dashboard_client, dashboard_engine) -> None:
     options = dashboard_client.get("/api/dashboard", params={"year": 2026, "month": 10}).json()[
         "filters"
     ]
-    bangkok_id = next(site["id"] for site in options["sites"] if site["code"] == "DASH-BKK")
+    site_ids = {site["code"]: site["id"] for site in options["sites"]}
 
-    response = dashboard_client.get(
-        "/api/dashboard",
-        params={"year": 2026, "month": 10, "site_id": bangkok_id},
+    bangkok = dashboard_client.get(
+        "/api/dashboard", params={"year": 2026, "month": 10, "site_id": site_ids["BKK"]}
+    ).json()["summary"]
+    chiang_mai = dashboard_client.get(
+        "/api/dashboard", params={"year": 2026, "month": 10, "site_id": site_ids["CNX"]}
+    ).json()["summary"]
+
+    assert (bangkok["recycling_bins_collected"], bangkok["pending_bins"]) == (2, 2)
+    assert bangkok["total_recorded_weight_kg"] == pytest.approx(
+        october_weights(dashboard_engine, "BKK")[0]
     )
-
-    assert response.status_code == 200
-    summary = response.json()["summary"]
-    assert summary["recycling_bins_collected"] == 1
-    assert summary["recycling_bins_reported"] == 1
-    assert summary["pending_bins"] == 0
-    assert summary["disputed_handoffs"] == 1
-    assert summary["total_recorded_weight_kg"] == 235.0
-    assert summary["total_reported_weight_kg"] == 235.0
+    assert bangkok["total_reported_weight_kg"] == 0
+    assert (chiang_mai["recycling_bins_reported"], chiang_mai["pending_bins"]) == (2, 0)
 
 
 def test_quarterly_dashboard_uses_quarter_boundaries(dashboard_client: TestClient) -> None:
@@ -98,9 +119,16 @@ def test_quarterly_dashboard_uses_quarter_boundaries(dashboard_client: TestClien
     assert payload["period_label"] == "Q3 2026"
     assert payload["month"] is None
     assert payload["quarter"] == 3
-    assert payload["summary"]["recycling_bins_collected"] == 6
-    assert payload["summary"]["recycling_bins_reported"] == 6
+    assert payload["summary"]["recycling_bins_collected"] == 30
+    assert payload["summary"]["recycling_bins_reported"] == 30
     assert payload["exceptions"] == []
+
+
+def test_current_month_shows_the_disputed_handoff(dashboard_client: TestClient) -> None:
+    payload = dashboard_client.get("/api/dashboard", params={"year": 2026, "month": 11}).json()
+
+    assert payload["summary"]["disputed_handoffs"] == 1
+    assert "disputed" in {exception["status"] for exception in payload["exceptions"]}
 
 
 def test_dashboard_rejects_invalid_filters(dashboard_client: TestClient) -> None:

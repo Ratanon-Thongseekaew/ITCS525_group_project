@@ -266,37 +266,20 @@ class SortGarmentResponse(BaseModel):
     message: str
 
 
+# Weights are stored as NUMERIC(12, 3), so a report weight must stay below one billion kg.
+MAX_REPORT_WEIGHT_KG = Decimal("1000000000")
+ReportWeight = Annotated[Decimal, Field(ge=0, lt=MAX_REPORT_WEIGHT_KG)]
+
+
 class ContractorDispositionWeights(BaseModel):
     """The six mutually exclusive contractor disposition categories."""
 
-    upcycled_kg: Decimal = Field(ge=0)
-    fibre_to_fibre_kg: Decimal = Field(ge=0)
-    downcycled_kg: Decimal = Field(ge=0)
-    exported_kg: Decimal = Field(ge=0)
-    landfilled_kg: Decimal = Field(ge=0)
-    incinerated_energy_recovery_kg: Decimal = Field(ge=0)
-
-
-class ContractorReportValidationRowRequest(BaseModel):
-    row: int = Field(ge=1)
-    received_kg: Decimal = Field(ge=0)
-    dispositions: ContractorDispositionWeights
-
-
-class ContractorReportValidationRequest(BaseModel):
-    rows: list[ContractorReportValidationRowRequest] = Field(min_length=1)
-
-
-class ContractorReportValidationRowResult(BaseModel):
-    row: int
-    categorized_weight_kg: float = Field(ge=0)
-    uncategorized_weight_kg: float = Field(ge=0)
-    is_valid: bool
-    errors: list[str]
-
-
-class ContractorReportValidationResponse(BaseModel):
-    rows: list[ContractorReportValidationRowResult]
+    upcycled_kg: ReportWeight
+    fibre_to_fibre_kg: ReportWeight
+    downcycled_kg: ReportWeight
+    exported_kg: ReportWeight
+    landfilled_kg: ReportWeight
+    incinerated_energy_recovery_kg: ReportWeight
 
 
 class EprQuarterReportResponse(BaseModel):
@@ -473,31 +456,37 @@ class DashboardResponse(BaseModel):
 
 class ContractorReportOptionItem(BaseModel):
     id: int
-    code: str | None = None
     name: str
 
 
 class ContractorReportOptionsResponse(BaseModel):
-    sites: list[ContractorReportOptionItem]
     contractors: list[ContractorReportOptionItem]
 
 
+ReportMonth = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}(-\d{2})?$")]
+
+
 class ContractorReportFileParseRequest(BaseModel):
+    actor_id: int = Field(gt=0)  # A manager or admin, until the API reads the login token
     filename: str = Field(min_length=1, max_length=255)
     content_base64: str = Field(min_length=1)
+    # When given, rows not picked up in this month, or by this contractor, are rejected.
+    report_month: ReportMonth | None = None
+    contractor_id: int | None = Field(default=None, gt=0)
 
 
 class ContractorReportParsedRow(BaseModel):
-    row: int = Field(ge=1)
+    row: int = Field(ge=1)  # The spreadsheet line number (the header is line 1)
     bin_id: str
-    contractor: str
-    store_weight_kg: float = Field(ge=0)
+    site_name: str | None = None  # The bin's sorting center; None when the bin wasn't found.
+    staff_weight_kg: float | None = None  # Weighed by store staff at pickup, from the handoff
     received_kg: float = Field(ge=0)
     dispositions: ContractorDispositionWeights
     categorized_weight_kg: float = Field(ge=0)
     uncategorized_weight_kg: float = Field(ge=0)
     status: Literal["Verified", "Warning", "Error"]
-    errors: list[str]
+    errors: list[str]  # Why the row is rejected; empty unless status is "Error"
+    warnings: list[str]  # What to check before saving; the row can still be saved
 
 
 class ContractorReportFileParseResponse(BaseModel):
@@ -508,24 +497,27 @@ class ContractorReportFileParseResponse(BaseModel):
 class ContractorReportImportRowRequest(BaseModel):
     row: int = Field(ge=1)
     bin_id: str = Field(min_length=1, max_length=64)
-    contractor: str = Field(min_length=1, max_length=160)
-    store_weight_kg: Decimal = Field(default=Decimal("0"), ge=0)
-    received_kg: Decimal = Field(ge=0)
+    received_kg: ReportWeight
     dispositions: ContractorDispositionWeights
 
 
 class ContractorReportImportRequest(BaseModel):
-    site_id: int = Field(gt=0)
-    contractor_name: str = Field(min_length=1, max_length=160)
-    report_month: str = Field(pattern=r"^\d{4}-\d{2}(-\d{2})?$")
+    actor_id: int = Field(gt=0)  # A manager or admin, recorded as the uploader
+    contractor_id: int = Field(gt=0)
+    report_month: ReportMonth
     source_filename: str = Field(min_length=1, max_length=255)
     rows: list[ContractorReportImportRowRequest] = Field(min_length=1)
 
 
-class ContractorReportImportResponse(BaseModel):
+class ContractorReportImportSiteResult(BaseModel):
     report_id: int
     site_id: int
     site_name: str
+    imported_rows: int
+
+
+class ContractorReportImportResponse(BaseModel):
+    reports: list[ContractorReportImportSiteResult]  # One per sorting center in the file.
     contractor_name: str
     report_month: date
     imported_rows: int

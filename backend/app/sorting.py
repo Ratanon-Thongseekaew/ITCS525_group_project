@@ -69,6 +69,7 @@ BIN_CODE_PREFIXES: dict[BinType, str] = {
     BinType.RECYCLE: "RC",
     BinType.REPAIR: "RP",
 }
+BIN_CODE_CONFLICT = "A bin with this code already exists."
 MAX_NOTES_LENGTH = 500  # bins.notes is VARCHAR(500)
 WEIGHT_PRECISION = Decimal("0.001")  # garment_records.weight_kg and bins.total_weight_kg
 
@@ -193,8 +194,13 @@ def find_active_bin(
 
 
 def next_bin_code(session: Session, site_id: int, bin_type: BinType) -> str:
-    """BIN-RS-001 style code; skips numbers already taken, including custom codes."""
+    """BKK-RS-001 style code: the site's code, the bin type, and a per-site counter.
 
+    Site codes are unique, so generated codes are unique across all sites. Numbers already
+    taken, including custom codes, are skipped.
+    """
+
+    site_code = session.exec(select(Site.code).where(Site.id == site_id)).one()
     prefix = BIN_CODE_PREFIXES[bin_type]
     number = (
         session.exec(
@@ -205,8 +211,8 @@ def next_bin_code(session: Session, site_id: int, bin_type: BinType) -> str:
         + 1
     )
     while True:
-        code = f"BIN-{prefix}-{number:03d}"
-        taken = session.exec(select(Bin.id).where(Bin.site_id == site_id, Bin.code == code)).first()
+        code = f"{site_code}-{prefix}-{number:03d}"
+        taken = session.exec(select(Bin.id).where(Bin.code == code)).first()
         if taken is None:
             return code
         number += 1
@@ -222,11 +228,9 @@ def add_bin(
     notes: str | None = None,
 ) -> Bin:
     if code is not None:
-        duplicate = session.exec(select(Bin.id).where(Bin.site_id == site_id, Bin.code == code))
+        duplicate = session.exec(select(Bin.id).where(Bin.code == code))
         if duplicate.first() is not None:
-            raise HTTPException(
-                status_code=409, detail="A bin with this code already exists at your site."
-            )
+            raise HTTPException(status_code=409, detail=BIN_CODE_CONFLICT)
     bin_record = Bin(
         site_id=site_id,
         code=code or next_bin_code(session, site_id, bin_type),
@@ -245,9 +249,7 @@ def commit_or_conflict(session: Session) -> None:
         session.commit()
     except IntegrityError:
         session.rollback()
-        raise HTTPException(
-            status_code=409, detail="A bin with this code already exists at your site."
-        ) from None
+        raise HTTPException(status_code=409, detail=BIN_CODE_CONFLICT) from None
 
 
 @router.get("/bins", response_model=list[BinRecord])

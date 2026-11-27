@@ -5,8 +5,7 @@ from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session, SQLModel, create_engine, select
-from sqlmodel.pool import StaticPool
+from sqlmodel import Session, func, select
 
 from app.database import get_session
 from app.main import app
@@ -20,12 +19,14 @@ from app.models import (
     GarmentRecord,
     Site,
     User,
+    UserRole,
     UserSite,
 )
-from app.schemas import UserRole
-from seed import seed_development_data
 
 SORT = "/api/garments/sort"
+
+# The demo seed gives every store one partly filled active bin of each type, and its garments
+# may fall on today's date, so these tests compare counts before and after sorting.
 
 
 @dataclass
@@ -46,20 +47,29 @@ class SortingTestContext:
 
     @property
     def bkk_staff_id(self) -> int:
-        return self.user_id("dashboard.staff.bkk@example.invalid")
+        return self.user_id("staff.bkk@example.com")
 
     @property
     def cnx_staff_id(self) -> int:
-        return self.user_id("dashboard.staff.cnx@example.invalid")
+        return self.user_id("staff.cnx@example.com")
 
     @property
     def manager_id(self) -> int:
-        return self.user_id("dashboard.manager@example.invalid")
+        """The Bangkok manager; tests that need two stores call ``add_cnx_to_manager``."""
+        return self.user_id("manager.bkk@example.com")
+
+    @property
+    def admin_id(self) -> int:
+        return self.user_id("admin@example.com")
 
     @property
     def bkk_site_id(self) -> int:
+        return self.site_id("BKK")
+
+    def add_cnx_to_manager(self) -> None:
         with self.session() as session:
-            return session.exec(select(Bin.site_id).where(Bin.code.startswith("SORT-BKK"))).first()
+            session.add(UserSite(user_id=self.manager_id, site_id=self.site_id("CNX")))
+            session.commit()
 
     def sort(self, condition: str, actor_id: int | None = None, **fields):
         body = {"actor_id": actor_id or self.bkk_staff_id, "condition": condition, **fields}
@@ -93,36 +103,55 @@ class SortingTestContext:
             f"/api/bins/{bin_id}/close", json={"actor_id": actor_id or self.bkk_staff_id, **fields}
         )
 
+    def close_all(self, bin_type: BinType, site_code: str = "BKK") -> None:
+        with self.session() as session:
+            for bin_record in session.exec(
+                select(Bin)
+                .join(Site, Site.id == Bin.site_id)
+                .where(Site.code == site_code, Bin.bin_type == bin_type)
+            ):
+                bin_record.status = BinStatus.CLOSED
+                session.add(bin_record)
+            session.commit()
+
+    def bin_count(self, bin_type: BinType, site_code: str) -> int:
+        with self.session() as session:
+            return session.exec(
+                select(func.count())
+                .select_from(Bin)
+                .join(Site, Site.id == Bin.site_id)
+                .where(Site.code == site_code, Bin.bin_type == bin_type)
+            ).one()
+
 
 @pytest.fixture
-def ctx() -> Iterator[SortingTestContext]:
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        seed_development_data(session)
-
+def ctx(demo_engine) -> Iterator[SortingTestContext]:
     def override_session():
-        with Session(engine) as session:
+        with Session(demo_engine) as session:
             yield session
 
     app.dependency_overrides[get_session] = override_session
     try:
         with TestClient(app) as client:
-            yield SortingTestContext(client=client, engine=engine)
+            yield SortingTestContext(client=client, engine=demo_engine)
     finally:
         app.dependency_overrides.clear()
-        engine.dispose()
 
 
-def test_seed_is_idempotent_and_adds_one_open_bin_of_each_type_per_site(ctx) -> None:
+def test_demo_seed_has_one_partly_filled_active_bin_of_each_type_per_store(ctx) -> None:
     with ctx.session() as session:
-        seed_development_data(session)
-        bins = session.exec(select(Bin).where(Bin.code.startswith("SORT-"))).all()
-    assert len(bins) == 6
-    assert {b.bin_type for b in bins} == {BinType.RESALE, BinType.RECYCLE, BinType.REPAIR}
-    assert all(b.status is BinStatus.ACTIVE and b.item_count == 0 for b in bins)
+        active = session.exec(
+            select(Site.code, Bin)
+            .join(Site, Site.id == Bin.site_id)
+            .where(Bin.status == BinStatus.ACTIVE)
+        ).all()
+
+    assert len(active) == 15
+    assert {(code, b.bin_type) for code, b in active} == {
+        (code, bin_type) for code in ("BKK", "CNX", "HKT", "KKC", "HDY") for bin_type in BinType
+    }
+    assert all(0 < b.item_count < b.max_capacity for _code, b in active)
+    assert all(b.code.startswith(f"{code}-") for code, b in active)
 
 
 @pytest.mark.parametrize(
@@ -136,15 +165,18 @@ def test_seed_is_idempotent_and_adds_one_open_bin_of_each_type_per_site(ctx) -> 
 def test_each_condition_is_stored_and_routed_to_its_bin_type(
     ctx, condition, outcome, bin_type, label
 ) -> None:
+    before = ctx.active_bins()[f"{bin_type}_bin"]
+
     response = ctx.sort(condition, category="Dresses", weight_kg=0.45, notes="Silk dress")
 
     assert response.status_code == 200
     data = response.json()
     assert data["garment"]["condition"] == condition
     assert data["garment"]["category"] == "Dresses"
+    assert data["bin"]["id"] == before["id"]
     assert data["bin"]["bin_type"] == bin_type
-    assert data["bin"]["item_count"] == 1
-    assert data["bin"]["total_weight_kg"] == pytest.approx(0.45)
+    assert data["bin"]["item_count"] == before["item_count"] + 1
+    assert data["bin"]["total_weight_kg"] == pytest.approx(before["total_weight_kg"] + 0.45)
     assert label in data["message"]
     with ctx.session() as session:
         garment = session.get(GarmentRecord, data["garment"]["id"])
@@ -155,15 +187,17 @@ def test_each_condition_is_stored_and_routed_to_its_bin_type(
 
 
 def test_sorting_persists_and_updates_stats_and_recent_feed(ctx) -> None:
+    before = ctx.stats()
     for condition in ("good_reusable", "good_reusable", "worn_recyclable", "repair_upcycle"):
         assert ctx.sort(condition).status_code == 200
 
     stats = ctx.stats()
-    assert stats["total_sorted_today"] == 4
-    assert (stats["resale_count"], stats["recycle_count"], stats["repair_count"]) == (2, 1, 1)
-    assert stats["resale_percentage"] == 50.0
-    assert stats["active_repair_bin_code"] == "SORT-BKK-RP-01"
-    assert stats["active_resale_bin_items"] == 2
+    assert stats["total_sorted_today"] == before["total_sorted_today"] + 4
+    assert stats["resale_count"] == before["resale_count"] + 2
+    assert stats["recycle_count"] == before["recycle_count"] + 1
+    assert stats["repair_count"] == before["repair_count"] + 1
+    assert stats["active_repair_bin_code"] == ctx.active_bins()["repair_bin"]["bin_code"]
+    assert stats["active_resale_bin_items"] == before["active_resale_bin_items"] + 2
 
     recent = ctx.read("/api/garments/recent", limit=3).json()
     assert [item["condition"] for item in recent] == [
@@ -174,41 +208,32 @@ def test_sorting_persists_and_updates_stats_and_recent_feed(ctx) -> None:
 
 
 def test_items_fill_the_existing_active_bin_of_their_type(ctx) -> None:
+    active = ctx.active_bins()["repair_bin"]
     first = ctx.sort("repair_upcycle").json()
     second = ctx.sort("repair_upcycle").json()
 
-    assert first["bin"]["bin_code"] == "SORT-BKK-RP-01"
+    assert first["bin"]["bin_code"] == active["bin_code"]
     assert second["bin"]["id"] == first["bin"]["id"]
-    assert second["bin"]["item_count"] == 2
+    assert second["bin"]["item_count"] == active["item_count"] + 2
 
 
 def test_a_bin_is_created_when_none_is_active(ctx) -> None:
-    active = ctx.active_bins()
-    assert ctx.close(active["repair_bin"]["id"]).status_code == 409  # empty bins can't be sealed
-    with ctx.session() as session:
-        for bin_record in session.exec(select(Bin).where(Bin.bin_type == BinType.REPAIR)):
-            bin_record.status = BinStatus.CLOSED
-            session.add(bin_record)
-        session.commit()
+    empty = ctx.make_bin("repair").json()
+    assert ctx.close(empty["id"]).status_code == 409  # empty bins can't be sealed
+    ctx.close_all(BinType.REPAIR)
 
     data = ctx.sort("repair_upcycle").json()
 
-    assert data["bin"]["bin_code"].startswith("BIN-RP-")
-    assert data["bin"]["bin_code"] != "SORT-BKK-RP-01"
+    assert data["bin"]["bin_code"].startswith("BKK-RP-")
+    assert data["bin"]["id"] != empty["id"]
     assert data["bin"]["bin_type"] == "repair"
     assert data["bin"]["status"] == "active"
     assert data["bin"]["notes"] == "Auto-created when incoming garment was sorted"
 
 
 def test_a_full_bin_is_skipped_and_a_new_one_is_created(ctx) -> None:
+    ctx.close_all(BinType.RESALE)
     small = ctx.make_bin("resale", max_capacity=1, bin_code="TINY-1").json()
-    with ctx.session() as session:
-        for bin_record in session.exec(
-            select(Bin).where(Bin.code == "SORT-BKK-RS-01", Bin.bin_type == BinType.RESALE)
-        ):
-            bin_record.status = BinStatus.CLOSED
-            session.add(bin_record)
-        session.commit()
 
     first = ctx.sort("good_reusable").json()
     second = ctx.sort("good_reusable").json()
@@ -248,8 +273,9 @@ def test_unrealistic_weights_are_rejected(ctx, weight) -> None:
 
 
 def test_a_huge_weight_is_rejected_and_nothing_is_stored(ctx) -> None:
+    before = ctx.stats()["total_sorted_today"]
     assert ctx.sort("good_reusable", weight_kg=1e12).status_code == 422
-    assert ctx.stats()["total_sorted_today"] == 0
+    assert ctx.stats()["total_sorted_today"] == before
 
 
 def test_unknown_condition_and_blank_category_are_rejected(ctx) -> None:
@@ -264,32 +290,34 @@ def test_only_staff_with_a_site_can_sort(ctx) -> None:
 
 
 def test_staff_only_see_and_fill_their_own_sites_bins(ctx) -> None:
+    bkk_before = ctx.stats()["total_sorted_today"]
+    cnx_before = ctx.stats(ctx.cnx_staff_id)["total_sorted_today"]
+    cnx_active = ctx.active_bins(ctx.cnx_staff_id)["resale_bin"]
     ctx.sort("good_reusable")
 
     cnx = ctx.sort("good_reusable", actor_id=ctx.cnx_staff_id).json()
 
-    assert cnx["bin"]["bin_code"] == "SORT-CNX-RS-01"
-    assert ctx.stats()["total_sorted_today"] == 1
-    assert ctx.stats(ctx.cnx_staff_id)["total_sorted_today"] == 1
+    assert cnx["bin"]["bin_code"] == cnx_active["bin_code"]
+    assert ctx.stats()["total_sorted_today"] == bkk_before + 1
+    assert ctx.stats(ctx.cnx_staff_id)["total_sorted_today"] == cnx_before + 1
     bkk_codes = {b["bin_code"] for b in ctx.read("/api/bins").json()}
-    assert not any("CNX" in code for code in bkk_codes)
+    assert all(code.startswith("BKK-") for code in bkk_codes)
 
 
 def test_stats_only_count_garments_received_today(ctx) -> None:
+    before = ctx.stats()["total_sorted_today"]
     ctx.sort("good_reusable")
     with ctx.session() as session:
-        # The dashboard seed adds older garment records; pick the one just sorted.
         garment = session.exec(
             select(GarmentRecord)
             .where(GarmentRecord.recorded_by_user_id == ctx.bkk_staff_id)
             .order_by(GarmentRecord.id.desc())
         ).first()
-        garment.received_at = datetime.now(UTC) - timedelta(days=2)
+        garment.received_at = datetime.now(UTC) - timedelta(days=40)
         session.add(garment)
         session.commit()
 
-    assert ctx.stats()["total_sorted_today"] == 0
-    assert ctx.stats()["resale_percentage"] == 0.0
+    assert ctx.stats()["total_sorted_today"] == before
 
 
 READ_PATHS = ("/api/bins", "/api/bins/active", "/api/sorting/stats", "/api/garments/recent")
@@ -303,7 +331,7 @@ def test_reads_require_a_known_actor(ctx, path) -> None:
 
 @pytest.mark.parametrize("path", READ_PATHS)
 def test_staff_cannot_read_another_site(ctx, path) -> None:
-    cnx_site = ctx.site_id("DASH-CNX")
+    cnx_site = ctx.site_id("CNX")
 
     assert ctx.read(path, site_id=cnx_site).status_code == 403
     assert ctx.read(path, site_id=ctx.bkk_site_id).status_code == 200
@@ -321,7 +349,10 @@ def test_staff_reads_default_to_their_own_site(ctx) -> None:
 
 
 def test_manager_can_switch_between_their_sites(ctx) -> None:
-    cnx_site = ctx.site_id("DASH-CNX")
+    ctx.add_cnx_to_manager()
+    cnx_site = ctx.site_id("CNX")
+    cnx_before = ctx.stats(ctx.manager_id, cnx_site)["recycle_count"]
+    bkk_before = ctx.stats(ctx.manager_id, ctx.bkk_site_id)["resale_count"]
     ctx.sort("good_reusable")
     ctx.sort("worn_recyclable", actor_id=ctx.cnx_staff_id)
 
@@ -330,11 +361,13 @@ def test_manager_can_switch_between_their_sites(ctx) -> None:
 
     assert {b["site_id"] for b in cnx} == {cnx_site}
     assert {b["site_id"] for b in bkk} == {ctx.bkk_site_id}
-    assert ctx.stats(ctx.manager_id, cnx_site)["recycle_count"] == 1
-    assert ctx.stats(ctx.manager_id, ctx.bkk_site_id)["resale_count"] == 1
+    assert ctx.stats(ctx.manager_id, cnx_site)["recycle_count"] == cnx_before + 1
+    assert ctx.stats(ctx.manager_id, ctx.bkk_site_id)["resale_count"] == bkk_before + 1
 
 
 def test_manager_without_a_site_filter_sees_all_their_sites_combined(ctx) -> None:
+    ctx.add_cnx_to_manager()
+    before = ctx.stats(ctx.manager_id)
     ctx.sort("good_reusable")
     ctx.sort("worn_recyclable", actor_id=ctx.cnx_staff_id)
 
@@ -342,21 +375,17 @@ def test_manager_without_a_site_filter_sees_all_their_sites_combined(ctx) -> Non
     recent = ctx.read("/api/garments/recent", ctx.manager_id).json()
     stats = ctx.stats(ctx.manager_id)
 
-    assert {b["site_id"] for b in bins} == {ctx.bkk_site_id, ctx.site_id("DASH-CNX")}
-    assert {g["site_name"] for g in recent} >= {b["site_name"] for b in bins}
-    assert (stats["total_sorted_today"], stats["resale_count"], stats["recycle_count"]) == (2, 1, 1)
+    assert {b["site_id"] for b in bins} == {ctx.bkk_site_id, ctx.site_id("CNX")}
+    assert {g["site_name"] for g in recent} <= {b["site_name"] for b in bins}
+    assert stats["total_sorted_today"] == before["total_sorted_today"] + 2
+    assert stats["resale_count"] == before["resale_count"] + 1
+    assert stats["recycle_count"] == before["recycle_count"] + 1
     # Open bins belong to one site, so a combined view reports none.
     assert stats["active_resale_bin_code"] is None
 
 
 def test_managers_are_limited_to_the_sites_they_belong_to(ctx) -> None:
-    cnx_site = ctx.site_id("DASH-CNX")
-    with ctx.session() as session:
-        manager = session.get(User, ctx.manager_id)
-        for membership in session.exec(select(UserSite).where(UserSite.user_id == manager.id)):
-            if membership.site_id == cnx_site:
-                session.delete(membership)
-        session.commit()
+    cnx_site = ctx.site_id("CNX")
 
     assert ctx.read("/api/bins", ctx.manager_id, cnx_site).status_code == 403
     assert {b["site_id"] for b in ctx.read("/api/bins", ctx.manager_id).json()} == {ctx.bkk_site_id}
@@ -364,21 +393,17 @@ def test_managers_are_limited_to_the_sites_they_belong_to(ctx) -> None:
 
 def test_a_manager_without_a_site_and_an_admin_can_read_every_site(ctx) -> None:
     with ctx.session() as session:
-        admin = User(
-            username="sorting.admin@example.invalid", password_hash="x", role=UserRole.ADMIN
-        )
-        session.add(admin)
         for membership in session.exec(select(UserSite).where(UserSite.user_id == ctx.manager_id)):
             session.delete(membership)
         session.commit()
-        admin_id = admin.id
 
-    for actor_id in (ctx.manager_id, admin_id):
+    for actor_id in (ctx.manager_id, ctx.admin_id):
         sites = {b["site_id"] for b in ctx.read("/api/bins", actor_id).json()}
-        assert sites >= {ctx.bkk_site_id, ctx.site_id("DASH-CNX")}
+        assert sites >= {ctx.bkk_site_id, ctx.site_id("CNX")}
 
 
 def test_active_bins_need_a_single_site_for_managers(ctx) -> None:
+    ctx.add_cnx_to_manager()
     assert ctx.read("/api/bins/active", ctx.manager_id).status_code == 422
 
     data = ctx.read("/api/bins/active", ctx.manager_id, ctx.bkk_site_id).json()
@@ -389,7 +414,7 @@ def test_active_bins_need_a_single_site_for_managers(ctx) -> None:
 def test_create_bin_generates_codes_and_rejects_duplicates(ctx) -> None:
     first = ctx.make_bin("repair")
     assert first.status_code == 201
-    assert first.json()["bin_code"].startswith("BIN-RP-")
+    assert first.json()["bin_code"].startswith("BKK-RP-")
     second = ctx.make_bin("repair")
     assert second.json()["bin_code"] != first.json()["bin_code"]
     assert first.json()["status"] == "active"
@@ -403,9 +428,31 @@ def test_create_bin_generates_codes_and_rejects_duplicates(ctx) -> None:
     assert ctx.make_bin("repair", max_capacity=501).status_code == 422
 
 
+def test_generated_bin_codes_are_prefixed_with_the_site_code(ctx) -> None:
+    bkk_next = ctx.bin_count(BinType.RECYCLE, "BKK") + 1
+    cnx_next = ctx.bin_count(BinType.RECYCLE, "CNX") + 1
+
+    bkk = ctx.make_bin("recycle").json()
+    cnx = ctx.make_bin("recycle", actor_id=ctx.cnx_staff_id).json()
+
+    # Each site counts its own bins.
+    assert bkk["bin_code"] == f"BKK-RC-{bkk_next:03d}"
+    assert cnx["bin_code"] == f"CNX-RC-{cnx_next:03d}"
+
+
+def test_custom_bin_code_must_be_unique_across_sites(ctx) -> None:
+    assert ctx.make_bin("repair", bin_code="SHARED-1").status_code == 201
+
+    response = ctx.make_bin("repair", bin_code="SHARED-1", actor_id=ctx.cnx_staff_id)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "A bin with this code already exists."
+
+
 def test_list_bins_filters_by_type_and_status(ctx) -> None:
+    active_repair = ctx.active_bins()["repair_bin"]["bin_code"]
     repair_bins = ctx.read("/api/bins", bin_type="repair").json()
-    assert "SORT-BKK-RP-01" in {b["bin_code"] for b in repair_bins}
+    assert active_repair in {b["bin_code"] for b in repair_bins}
     assert all(b["bin_type"] == "repair" for b in repair_bins)
 
     ctx.sort("worn_recyclable")
@@ -473,6 +520,7 @@ def test_sorted_garments_cannot_be_added_to_a_sealed_bin(ctx) -> None:
 
 def test_sorting_is_refused_while_the_current_quarter_is_submitted(ctx) -> None:
     now = datetime.now(UTC)
+    items_before = ctx.active_bins()["resale_bin"]["item_count"]
     with ctx.session() as session:
         garments_before = len(session.exec(select(GarmentRecord)).all())
         quarter = (now.month - 1) // 3 + 1
@@ -493,12 +541,20 @@ def test_sorting_is_refused_while_the_current_quarter_is_submitted(ctx) -> None:
     assert response.status_code == 409
     with ctx.session() as session:
         assert len(session.exec(select(GarmentRecord)).all()) == garments_before
-    assert ctx.active_bins()["resale_bin"]["item_count"] == 0
+    assert ctx.active_bins()["resale_bin"]["item_count"] == items_before
 
 
 def test_weights_are_rounded_to_the_stored_precision(ctx) -> None:
+    before = ctx.active_bins()["resale_bin"]["total_weight_kg"]
     ctx.sort("good_reusable", weight_kg=0.12345)
     data = ctx.sort("good_reusable", weight_kg=0.12345).json()
 
     assert data["garment"]["weight_kg"] == pytest.approx(0.123)
-    assert data["bin"]["total_weight_kg"] == pytest.approx(0.246)
+    assert data["bin"]["total_weight_kg"] == pytest.approx(before + 0.246)
+
+
+def test_admins_cannot_sort(ctx) -> None:
+    with ctx.session() as session:
+        admin = session.get(User, ctx.admin_id)
+        assert admin.role is UserRole.ADMIN
+    assert ctx.sort("good_reusable", actor_id=ctx.admin_id).status_code == 403

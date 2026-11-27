@@ -22,18 +22,23 @@ export function ImportResultStep({
         <CheckCircle2 className="size-6" aria-hidden="true" />
       </span>
       <div className="flex flex-col gap-1.5">
-        <h3 className="text-lg font-semibold text-foreground">Report Saved to Database</h3>
+        <h3 className="text-lg font-semibold text-foreground">Report Saved</h3>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          {result?.message ??
-            'Verified rows have been persisted to MySQL and linked to the compliance dashboard.'}
+          {result?.message ?? 'The saved outcomes now appear on the compliance dashboard.'}
         </p>
       </div>
       {result ? (
         <Alert variant="success" role="status" className="text-left">
           <CheckCircle2 aria-hidden="true" />
           <AlertDescription className="text-xs font-semibold">
-            {result.site_name} • Report #{result.report_id} • {result.imported_rows} row(s) •{' '}
-            {result.total_categorized_weight_kg.toFixed(2)} kg recorded
+            <ul className="flex flex-col gap-0.5">
+              {result.reports.map((report) => (
+                <li key={report.report_id}>
+                  {report.site_name} • Report #{report.report_id} • {report.imported_rows} row(s)
+                </li>
+              ))}
+            </ul>
+            <p>{result.total_categorized_weight_kg.toFixed(2)} kg recorded</p>
           </AlertDescription>
         </Alert>
       ) : null}

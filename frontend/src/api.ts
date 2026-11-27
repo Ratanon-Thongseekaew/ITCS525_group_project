@@ -112,33 +112,6 @@ export interface SortGarmentResponse {
   message: string
 }
 
-export interface ContractorDispositionWeights {
-  upcycled_kg: number
-  fibre_to_fibre_kg: number
-  downcycled_kg: number
-  exported_kg: number
-  landfilled_kg: number
-  incinerated_energy_recovery_kg: number
-}
-
-export interface ContractorReportValidationRowRequest {
-  row: number
-  received_kg: number
-  dispositions: ContractorDispositionWeights
-}
-
-export interface ContractorReportValidationRowResult {
-  row: number
-  categorized_weight_kg: number
-  uncategorized_weight_kg: number
-  is_valid: boolean
-  errors: string[]
-}
-
-export interface ContractorReportValidationResponse {
-  rows: ContractorReportValidationRowResult[]
-}
-
 export type DashboardFrequency = 'monthly' | 'quarterly' | 'annual'
 export type DashboardExceptionStatus = 'pending' | 'disputed'
 
@@ -413,17 +386,6 @@ export function saveEprAdjustment(year: number, quarter: number, payload: EprAdj
   return writeEprManagement('adjustments', year, quarter, payload)
 }
 
-export async function validateContractorReport(
-  rows: ContractorReportValidationRowRequest[],
-): Promise<ContractorReportValidationResponse> {
-  const response = await fetch(`${API_URL}/api/contractor-reports/validate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rows }),
-  })
-  return handleResponse<ContractorReportValidationResponse>(response)
-}
-
 // Sorting reads are per site and writes name the acting staff member (`actor_id`) until the
 // frontend uses real login, the same stopgap the handoff pages use.
 async function sortingRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -620,12 +582,10 @@ export async function deleteUser(token: string, userId: number): Promise<void> {
 
 export interface ContractorReportOptionItem {
   id: number
-  code?: string | null
   name: string
 }
 
 export interface ContractorReportOptionsResponse {
-  sites: ContractorReportOptionItem[]
   contractors: ContractorReportOptionItem[]
 }
 
@@ -639,16 +599,22 @@ export interface ContractorDispositionWeightsPayload {
 }
 
 export interface ContractorReportParsedRow {
+  /** The spreadsheet line number; the header is line 1. */
   row: number
   bin_id: string
-  contractor: string
-  store_weight_kg: number
+  /** The bin's sorting center, or null when the bin wasn't found. */
+  site_name: string | null
+  /** Weighed by store staff at pickup, from the bin's handoff. */
+  staff_weight_kg: number | null
   received_kg: number
   dispositions: ContractorDispositionWeightsPayload
   categorized_weight_kg: number
   uncategorized_weight_kg: number
   status: 'Verified' | 'Warning' | 'Error'
+  /** Why the row is rejected; empty unless the status is Error. */
   errors: string[]
+  /** What to check before saving; the row can still be saved. */
+  warnings: string[]
 }
 
 export interface ContractorReportFileParseResponse {
@@ -657,24 +623,29 @@ export interface ContractorReportFileParseResponse {
 }
 
 export interface ContractorReportImportRequest {
-  site_id: number
-  contractor_name: string
+  /** The signed-in manager or admin, recorded as the uploader. */
+  actor_id: number
+  contractor_id: number
   report_month: string
   source_filename: string
   rows: Array<{
     row: number
     bin_id: string
-    contractor: string
-    store_weight_kg: number
     received_kg: number
     dispositions: ContractorDispositionWeightsPayload
   }>
 }
 
-export interface ContractorReportImportResponse {
+export interface ContractorReportImportSiteResult {
   report_id: number
   site_id: number
   site_name: string
+  imported_rows: number
+}
+
+export interface ContractorReportImportResponse {
+  /** One saved report per sorting center found in the file. */
+  reports: ContractorReportImportSiteResult[]
   contractor_name: string
   report_month: string
   imported_rows: number
@@ -706,14 +677,30 @@ export async function fetchContractorReportOptions(): Promise<ContractorReportOp
   return parseImportApiResponse<ContractorReportOptionsResponse>(response)
 }
 
+export interface ContractorReportFileParseInput {
+  /** The signed-in manager or admin. */
+  actorId: number
+  filename: string
+  contentBase64: string
+  /** Rows not picked up in this month (YYYY-MM) are rejected. */
+  reportMonth: string
+  /** Rows handed off to another contractor are rejected. */
+  contractorId: number
+}
+
 export async function parseAndValidateContractorFile(
-  filename: string,
-  contentBase64: string,
+  input: ContractorReportFileParseInput,
 ): Promise<ContractorReportFileParseResponse> {
   const response = await fetch(`${IMPORT_API_BASE}/api/contractor-reports/parse-and-validate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename, content_base64: contentBase64 }),
+    body: JSON.stringify({
+      actor_id: input.actorId,
+      filename: input.filename,
+      content_base64: input.contentBase64,
+      report_month: input.reportMonth,
+      contractor_id: input.contractorId,
+    }),
   })
   return parseImportApiResponse<ContractorReportFileParseResponse>(response)
 }

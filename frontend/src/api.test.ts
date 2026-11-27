@@ -11,9 +11,9 @@ import {
   getResaleStoreSummary,
   handoffPhotoUrl,
   listSites,
+  parseAndValidateContractorFile,
   recordHandoffAtPickup,
   resetUserPassword,
-  validateContractorReport,
 } from './api'
 
 afterEach(() => {
@@ -42,34 +42,32 @@ test('sends dashboard filters as query parameters', async () => {
   )
 })
 
-test('sends all six disposition categories for contractor report validation', async () => {
+test('sends the actor, month and contractor with a contractor report file', async () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-    new Response(JSON.stringify({ rows: [] }), {
+    new Response(JSON.stringify({ filename: 'report.csv', rows: [] }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     }),
   )
-  const rows = [
-    {
-      row: 1,
-      received_kg: 100,
-      dispositions: {
-        upcycled_kg: 10,
-        fibre_to_fibre_kg: 20,
-        downcycled_kg: 10,
-        exported_kg: 5,
-        landfilled_kg: 10,
-        incinerated_energy_recovery_kg: 5,
-      },
-    },
-  ]
 
-  await validateContractorReport(rows)
+  await parseAndValidateContractorFile({
+    actorId: 4,
+    filename: 'report.csv',
+    contentBase64: 'YmluX2lk',
+    reportMonth: '2026-10',
+    contractorId: 2,
+  })
 
-  expect(fetchMock).toHaveBeenCalledWith('/api/contractor-reports/validate', {
+  expect(fetchMock).toHaveBeenCalledWith('/api/contractor-reports/parse-and-validate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rows }),
+    body: JSON.stringify({
+      actor_id: 4,
+      filename: 'report.csv',
+      content_base64: 'YmluX2lk',
+      report_month: '2026-10',
+      contractor_id: 2,
+    }),
   })
 })
 

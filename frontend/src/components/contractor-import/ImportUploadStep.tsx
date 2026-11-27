@@ -1,13 +1,5 @@
 import { useRef, type ChangeEvent, type DragEvent } from 'react'
-import {
-  AlertCircle,
-  ArrowRight,
-  Download,
-  FileSpreadsheet,
-  HelpCircle,
-  LoaderCircle,
-  UploadCloud,
-} from 'lucide-react'
+import { AlertCircle, Download, FileSpreadsheet, LoaderCircle, UploadCloud } from 'lucide-react'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -20,15 +12,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { FormattingGuideDialog } from './FormattingGuideDialog'
+import { MAX_DATA_ROWS, MAX_FILE_MB } from './report-file'
 import type { ImportOption } from './types'
 
-const FORMATTING_GUIDE =
-  'Formatting guide: Include bin_id, contractor, received_kg, and all 6 disposition categories (upcycled_kg, fibre_to_fibre_kg, downcycled_kg, exported_kg, landfilled_kg, incinerated_energy_recovery_kg).'
-
 interface ImportUploadStepProps {
-  siteOptions: readonly ImportOption[]
-  siteId: string
-  onSiteChange: (value: string) => void
   contractorOptions: readonly ImportOption[]
   contractor: string
   onContractorChange: (value: string) => void
@@ -38,7 +26,6 @@ interface ImportUploadStepProps {
   error: string | null
   onFileSelected: (file: File) => void
   onDownloadTemplate: () => void
-  onNext: () => void
   onCancel: () => void
 }
 
@@ -56,7 +43,7 @@ function OptionSelect({
   return (
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger id={id} className="[&>span]:truncate">
-        <SelectValue />
+        <SelectValue placeholder="Select contractor" />
       </SelectTrigger>
       <SelectContent>
         {options.map((option) => (
@@ -69,11 +56,11 @@ function OptionSelect({
   )
 }
 
-/** Step 1: choose the site, month, and contractor, then upload a file or review the sample. */
+/**
+ * Step 1: choose the month and contractor, then upload a file. Each row's sorting center comes
+ * from its bin.
+ */
 export function ImportUploadStep({
-  siteOptions,
-  siteId,
-  onSiteChange,
   contractorOptions,
   contractor,
   onContractorChange,
@@ -83,7 +70,6 @@ export function ImportUploadStep({
   error,
   onFileSelected,
   onDownloadTemplate,
-  onNext,
   onCancel,
 }: ImportUploadStepProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -104,16 +90,7 @@ export function ImportUploadStep({
     <div className="flex flex-col gap-6">
       <h3 className="text-sm font-semibold text-foreground">Upload File</h3>
 
-      <FieldGroup className="grid gap-4 md:grid-cols-3">
-        <Field className="gap-1.5">
-          <FieldLabel htmlFor="site-select">Sorting Center (Site)</FieldLabel>
-          <OptionSelect
-            id="site-select"
-            value={siteId}
-            options={siteOptions}
-            onChange={onSiteChange}
-          />
-        </Field>
+      <FieldGroup className="grid gap-4 md:grid-cols-2">
         <Field className="gap-1.5">
           <FieldLabel htmlFor="report-month">Report Month</FieldLabel>
           <Input
@@ -178,8 +155,8 @@ export function ImportUploadStep({
       <div className="flex flex-col justify-between gap-1 border-b pb-4 text-xs text-muted-foreground sm:flex-row">
         <span>Supported Formats: CSV, XLSX (6 EPR disposition categories)</span>
         <div className="flex gap-4">
-          <span>Maximum File: 1</span>
-          <span>Maximum File Size: 100MB</span>
+          <span>Maximum File Size: {MAX_FILE_MB} MB</span>
+          <span>Maximum Rows: {MAX_DATA_ROWS.toLocaleString()}</span>
         </div>
       </div>
 
@@ -206,23 +183,10 @@ export function ImportUploadStep({
       </div>
 
       <div className="flex flex-col items-center justify-between gap-3 border-t pt-4 sm:flex-row">
-        <Button
-          type="button"
-          variant="link"
-          size="sm"
-          className="self-start px-0 text-muted-foreground sm:self-auto"
-          onClick={() => alert(FORMATTING_GUIDE)}
-        >
-          <HelpCircle aria-hidden="true" />
-          Formatting Guide
-        </Button>
+        <FormattingGuideDialog />
         <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
           <Button type="button" variant="ghost" onClick={onCancel}>
             Cancel
-          </Button>
-          <Button type="button" onClick={onNext}>
-            Next
-            <ArrowRight aria-hidden="true" />
           </Button>
         </div>
       </div>

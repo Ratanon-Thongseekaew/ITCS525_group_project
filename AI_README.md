@@ -63,7 +63,7 @@ This is a minimal full-stack monorepo:
 │   │   └── users.py         Admin-only user management routes
 │   ├── alembic/             Migration environment and versioned revisions
 │   ├── alembic.ini          Alembic configuration
-│   ├── seed.py              Development seed: dashboard, handoff and sorting demo data
+│   ├── seed.py              Demo seed: resets the database and loads demo data
 │   ├── uploads/             Uploaded scale photos (gitignored, `UPLOAD_DIR`)
 │   ├── tests/
 │   │   ├── test_auth.py     Login, token, role-guard and user-management tests
@@ -242,7 +242,8 @@ names the acting user with `actor_id` until login is connected (`422` unknown us
   `condition` is `good_reusable` (resale bin), `worn_recyclable` (recycle bin) or
   `repair_upcycle` (repair bin, change request #13). The garment goes to the oldest open bin
   of that type with room at the actor's site. A full bin is skipped; a new bin
-  (`BIN-RS|RC|RP-###`) is created when none has room. A `bin_id` of the wrong type, status or
+  (`{site code}-RS|RC|RP-###`, counted per site, e.g. `BKK-RC-001`) is created when none has
+  room. Bin codes, including custom ones, are unique across all sites. A `bin_id` of the wrong type, status or
   capacity is ignored; another site's bin returns `403`. `weight_kg` must be 0-50.
 - `GET /api/bins/active?actor_id=&site_id=` returns `resale_bin`, `recycle_bin` and `repair_bin`
   for one site, so a manager must pass `site_id` (`422` otherwise).
@@ -395,20 +396,66 @@ Photos are validated by content type and file signature (JPEG, PNG, WebP, up to
 a relative path in `handoffs.scale_photo_url`. Responses expose that as
 `/api/handoffs/{id}/scale-photo`. Timestamps in requests must include a UTC
 offset. The `scheduled` status remains in the database enum, but no endpoint
-creates it. `backend/seed.py` runs `seed_dashboard_data` (`DASH-` records), then
-`seed_handoff_data` (`HAND-` ready bins and picked-up handoffs), then `seed_sorting_data`
-(`SORT-` empty open bins of each type per site, no garment records so EPR totals are unchanged),
-and `seed_direct_resale_data` (four closed, unprocessed Bangkok resale bins). The resale demo
-seed is idempotent and adds no garment records; `seed_development_data` runs all four and is
-what `main()` and the tests use.
+creates it.
 
-### `POST /api/contractor-reports/validate` (EPR change request)
+### Demo seed (`backend/seed.py`)
 
-Validates monthly contractor rows before import. Each row carries six separate
-disposition weights, including distinct `landfilled_kg` and
-`incinerated_energy_recovery_kg` fields. The endpoint rejects rows whose
-categorized total exceeds received weight and returns the remaining
-`uncategorized_weight_kg` explicitly.
+`python backend/seed.py [--yes] [--allow-remote]` deletes every application row
+(`reset_database`; the schema and `alembic_version` stay), then loads demo data via
+`seed_demo_data(session, today)`. The data is deterministic for a given `today`. It
+refuses non-local database hosts unless `--allow-remote` is passed. It uses the app's own
+rules: `add_bin` for `{store}-{RS|RC|RP}-NNN` codes, `Handoff.record_pickup_weights`,
+`submit_epr_quarter`/`add_epr_adjustment`, and `hash_password`.
+
+- Data: five stores (`BKK`, `CNX`, `HKT`, `KKC`, `HDY`), three contractors, and 12 months
+  of history before the current month. Last month's GreenLoop handoffs (BKK, KKC) are
+  unreported, and its EPR quarter stays a draft, so the import page has work. The current
+  month is in progress (partly filled active bins, ready bins, and picked-up, disputed, and
+  approved handoffs). It also includes unprocessed resale bins.
+- Accounts: `admin@example.com`, plus `manager.<store>@example.com` and
+  `staff.<store>@example.com` per store. All use one password, `DEMO_PASSWORD` or
+  `TextileDemo2026!`, stored as per-account salted hashes, with `must_change_password` off.
+- `write_demo_reports` writes import demo CSVs to `backend/demo_reports/` (ignored by Git).
+- Tests use the `demo_engine` fixture in `backend/tests/conftest.py`. The seed is loaded
+  once per run with `today` pinned to 2026-11-27, and each test gets an in-memory copy.
+
+### Contractor monthly outcome report import (`/api/contractor-reports`)
+
+A report file (CSV or XLSX, up to 5 MB and 2,000 rows) comes from one
+contractor and covers one month. Its columns are `bin_id`, `received_kg`, and
+the six disposition categories (`upcycled_kg`, `fibre_to_fibre_kg`,
+`downcycled_kg`, `exported_kg`, `landfilled_kg`,
+`incinerated_energy_recovery_kg`); a file missing any of them is rejected, and
+other columns (such as the old `contractor` and `store_weight_kg`) are ignored.
+XLSX cells are placed by their cell reference, so blank cells don't shift
+columns.
+
+Rows are checked as follows (row numbers are spreadsheet lines, header = 1):
+
+- Weights must be plain non-negative numbers below one billion kg; a blank
+  category is 0, a blank `received_kg` or an unreadable value rejects the row.
+- The categories may add up to less than `received_kg` (flagged as
+  uncategorized) but not more (rejected).
+- `bin_id` must be an existing bin whose handoff the selected contractor picked
+  up in the report month. Bin codes are unique across sites, so the bin decides
+  the row's sorting center. A November report can be imported later, subject to
+  the EPR quarter lock.
+- Each bin appears once per file: the first row counts, later repeats are
+  rejected.
+- Flagged, still saveable: an uncategorized remainder, received weight more than
+  3% off the handoff's `staff_weight_kg`, and a bin that already has outcomes
+  (saving replaces them; re-imports update and never duplicate).
+
+`GET /options` lists active contractors. `POST /parse-and-validate` takes
+`actor_id` (a manager or admin), the file as base64, `report_month`, and
+`contractor_id`, and returns each row's `site_name`, `staff_weight_kg`, `status`,
+`errors`, and `warnings`. `POST /import` takes `actor_id`, `contractor_id`,
+`report_month`, and the rows, checks them again (`422` and nothing saved if any
+fails), records the actor as uploader, stores `received_kg` on the handoff
+(`contractor_received_kg`), and saves one report per site, returned as `reports`.
+A concurrent save of the same report returns `409`. The import page defaults the
+month to the previous month. For demos, use the report files the seed writes to
+`backend/demo_reports/`.
 
 Keep response models in `backend/app/schemas.py`. When an API response changes,
 update all of the following together:
@@ -436,7 +483,7 @@ npm run db:migrate      # Apply all committed Alembic migrations
 npm run db:rollback     # Roll back one Alembic revision
 npm run db:revision -- -m "message"  # Autogenerate a new revision
 npm run db:check        # Compare SQLModel metadata with upgraded MySQL
-python backend/seed.py  # Load dashboard and handoff demo data (idempotent)
+python backend/seed.py  # Reset the local database and load demo data (asks first)
 npm run guardrails      # Enforce repository architecture policies
 npm run test:guardrails # Test the executable policy checker
 npm run build           # Type-check and build the frontend
@@ -697,9 +744,9 @@ text-resale-foreground`) for the sorting quick-tap buttons, and the soft pair
 - Store uploaded files under `UPLOAD_DIR` (default `backend/uploads/`, ignored
   by Git) and keep only a relative path in the database. File uploads use
   `python-multipart`, a backend dependency.
-- Add development data to `backend/seed.py` as its own idempotent function
-  and call it from `seed_development_data`; keep `seed_dashboard_data`
-  unchanged so its counts and tests stay stable.
+- Add demo data to `backend/seed.py` through the app's own functions, so it
+  follows the same rules as real use. Tests should look demo records up by
+  attributes (store code, status, role) rather than hardcoded codes or totals.
 - Define persistent models in `backend/app/models.py` and evolve the database
   only through reviewed Alembic revisions. Do not restore `create_all()` in the
   application lifespan.
