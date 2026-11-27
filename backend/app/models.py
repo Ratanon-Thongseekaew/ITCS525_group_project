@@ -170,7 +170,7 @@ class Contractor(TimestampMixin, table=True):
 class Bin(TimestampMixin, table=True):
     __tablename__ = "bins"
     __table_args__ = (
-        UniqueConstraint("site_id", "code", name="uq_bins_site_code"),
+        UniqueConstraint("code", name="uq_bins_code"),
         CheckConstraint("item_count >= 0", name="ck_bins_item_count_nonnegative"),
         CheckConstraint("total_weight_kg >= 0", name="ck_bins_weight_nonnegative"),
         CheckConstraint("max_capacity > 0", name="ck_bins_capacity_positive"),

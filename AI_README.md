@@ -242,7 +242,8 @@ names the acting user with `actor_id` until login is connected (`422` unknown us
   `condition` is `good_reusable` (resale bin), `worn_recyclable` (recycle bin) or
   `repair_upcycle` (repair bin, change request #13). The garment goes to the oldest open bin
   of that type with room at the actor's site. A full bin is skipped; a new bin
-  (`BIN-RS|RC|RP-###`) is created when none has room. A `bin_id` of the wrong type, status or
+  (`{site code}-RS|RC|RP-###`, counted per site, e.g. `BKK-RC-001`) is created when none has
+  room. Bin codes, including custom ones, are unique across all sites. A `bin_id` of the wrong type, status or
   capacity is ignored; another site's bin returns `403`. `weight_kg` must be 0-50.
 - `GET /api/bins/active?actor_id=&site_id=` returns `resale_bin`, `recycle_bin` and `repair_bin`
   for one site, so a manager must pass `site_id` (`422` otherwise).

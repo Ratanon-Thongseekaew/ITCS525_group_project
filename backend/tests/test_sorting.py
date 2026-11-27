@@ -193,7 +193,7 @@ def test_a_bin_is_created_when_none_is_active(ctx) -> None:
 
     data = ctx.sort("repair_upcycle").json()
 
-    assert data["bin"]["bin_code"].startswith("BIN-RP-")
+    assert data["bin"]["bin_code"].startswith("DASH-BKK-RP-")
     assert data["bin"]["bin_code"] != "SORT-BKK-RP-01"
     assert data["bin"]["bin_type"] == "repair"
     assert data["bin"]["status"] == "active"
@@ -389,7 +389,7 @@ def test_active_bins_need_a_single_site_for_managers(ctx) -> None:
 def test_create_bin_generates_codes_and_rejects_duplicates(ctx) -> None:
     first = ctx.make_bin("repair")
     assert first.status_code == 201
-    assert first.json()["bin_code"].startswith("BIN-RP-")
+    assert first.json()["bin_code"].startswith("DASH-BKK-RP-")
     second = ctx.make_bin("repair")
     assert second.json()["bin_code"] != first.json()["bin_code"]
     assert first.json()["status"] == "active"
@@ -401,6 +401,25 @@ def test_create_bin_generates_codes_and_rejects_duplicates(ctx) -> None:
     assert ctx.make_bin("repair", bin_code="COUNTER-2").status_code == 409
     assert ctx.make_bin("repair", max_capacity=0).status_code == 422
     assert ctx.make_bin("repair", max_capacity=501).status_code == 422
+
+
+def test_generated_bin_codes_are_prefixed_with_the_site_code(ctx) -> None:
+    bkk = ctx.make_bin("recycle").json()
+    cnx = ctx.make_bin("recycle", actor_id=ctx.cnx_staff_id).json()
+
+    # Each site counts its own bins, so both get the same number under different prefixes.
+    assert bkk["bin_code"].startswith("DASH-BKK-RC-")
+    assert cnx["bin_code"].startswith("DASH-CNX-RC-")
+    assert bkk["bin_code"].removeprefix("DASH-BKK-") == cnx["bin_code"].removeprefix("DASH-CNX-")
+
+
+def test_custom_bin_code_must_be_unique_across_sites(ctx) -> None:
+    assert ctx.make_bin("repair", bin_code="SHARED-1").status_code == 201
+
+    response = ctx.make_bin("repair", bin_code="SHARED-1", actor_id=ctx.cnx_staff_id)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "A bin with this code already exists."
 
 
 def test_list_bins_filters_by_type_and_status(ctx) -> None:
