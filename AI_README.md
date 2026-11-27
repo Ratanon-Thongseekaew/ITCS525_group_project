@@ -182,7 +182,8 @@ React Router owns client-side navigation. The current frontend routes are:
   `/login`, a temporary password only opens `/change-password`, and only admins
   open `/admin/*`. `/design-system` is public.
 - The guards are navigation only. The dashboard, sorting, handoff, EPR, and
-  import APIs are still unauthenticated, and their account pickers remain.
+  import APIs are still unauthenticated: they take an `actor_id` that the frontend fills in from
+  the signed-in user, so the server does not yet check who is calling.
 - Tests that render a guarded route through `App` call `signInAs(role)` from
   `src/test/auth.ts` first and clear `sessionStorage` afterwards.
 
@@ -258,13 +259,16 @@ names the acting user with `actor_id` until login is connected (`422` unknown us
   resale capture percentage, and the active bin code and item count per type. Open bins belong
   to one site, so they are only reported when the request covers a single site.
 - `GET /api/garments/recent?actor_id=&site_id=&limit=` returns the latest garments.
+- `GET /api/sorting/sites?actor_id=` returns `[{id, code, name}]` for the sites the actor may read
+  (staff: their own; manager: their sites, or all when none is assigned; admin: all).
 
-The staff screen still uses `useHandoffWorkspace` and `HandoffActorBar`, a temporary picker, to
-choose the staff member, and loads nothing until one is chosen. `/manager/sorting` (`SortingOverviewPage`) is a read-only
-overview for managers: a temporary manager picker, a site switcher with an "All sites" option,
-today's counts, the bins and the recent garments, with the site on every row. It offers no sorting,
-sealing or bin creation. Sealed Repair bins have no next step yet. Handoff only covers recycle
-bins.
+The staff screen uses the signed-in staff account (`useSession`): its id is the `actor_id` and
+its store is the site, shown with `StaffAccountBar`. It loads nothing for a non-staff account or a
+staff account without a store. `/manager/sorting` (`SortingOverviewPage`) is a read-only overview
+for the signed-in manager or administrator (staff see a message): a site switcher fed by
+`GET /api/sorting/sites?actor_id=` with an "All sites" option, today's counts, the bins and the
+recent garments, with the site on every row. It offers no sorting, sealing or bin creation.
+Sealed Repair bins have no next step yet. Handoff only covers recycle bins.
 
 ### Authentication and user management
 
@@ -668,8 +672,6 @@ text-resale-foreground`) for the sorting quick-tap buttons, and the soft pair
   - `FilterSelect`: a compact list filter. `labelMode="hidden"` names it with
     `aria-label`; `"inline"` shows a label before it. Long values truncate
     with a `title` tooltip.
-  - `TemporaryAccountPicker`: the dashed "Temporary" notice that holds an
-    account picker until login exists. Remove it with real login.
   - `Stepper`: progress through a multi-step flow (`aria-current="step"`).
   - `RecordCard` and `RecordDetail`: a bin or record row with an icon tile,
     identity, a `dl` of details, a status slot, and optional children. With

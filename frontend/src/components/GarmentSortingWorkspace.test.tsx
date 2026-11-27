@@ -4,33 +4,14 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import * as api from '@/api'
-import type { HandoffWorkspace } from '@/lib/use-handoff-workspace'
+import { signInAs } from '@/test/auth'
 import { GarmentSortingWorkspace } from './GarmentSortingWorkspace'
 
-const STAFF = { id: 7, username: 'staff.bkk@example.test', role: 'staff' as const, site_ids: [1] }
+const BANGKOK = { id: 1, code: 'DASH-BKK', name: 'Bangkok Flagship' }
 
-const { workspaceRef } = vi.hoisted(() => ({
-  workspaceRef: { current: null as HandoffWorkspace | null },
-}))
-
-// The real hook reads staff accounts from the API and browser storage; the screen only needs
-// the chosen staff member and their site.
-vi.mock('@/lib/use-handoff-workspace', () => ({
-  useHandoffWorkspace: () => workspaceRef.current,
-}))
-
-function workspaceFor(actor: typeof STAFF | null): HandoffWorkspace {
-  return {
-    options: null,
-    staffAccounts: [STAFF],
-    isLoading: false,
-    error: null,
-    retry: vi.fn(),
-    actor,
-    setActorId: vi.fn(),
-    siteId: actor ? 1 : null,
-    siteName: actor ? 'Bangkok Flagship' : null,
-  }
+/** The signed-in staff member, working at the Bangkok store (the user id is what the API sees). */
+function signInAsStaff(overrides: Parameters<typeof signInAs>[1] = {}) {
+  return signInAs('staff', { id: 7, store: BANGKOK, ...overrides })
 }
 
 describe('GarmentSortingWorkspace', () => {
@@ -133,7 +114,7 @@ describe('GarmentSortingWorkspace', () => {
   ]
 
   beforeEach(() => {
-    workspaceRef.current = workspaceFor(STAFF)
+    signInAsStaff()
     vi.spyOn(api, 'getSortingStats').mockResolvedValue(mockStats)
     vi.spyOn(api, 'getActiveBins').mockResolvedValue(mockActiveBins)
     vi.spyOn(api, 'getBins').mockResolvedValue(mockBins)
@@ -181,6 +162,7 @@ describe('GarmentSortingWorkspace', () => {
 
   afterEach(() => {
     cleanup()
+    window.sessionStorage.clear()
     vi.restoreAllMocks()
   })
 
@@ -393,16 +375,45 @@ describe('GarmentSortingWorkspace', () => {
     expect(screen.getByText('Ready for handoff')).toBeInTheDocument()
   })
 
-  test('does not load data or sort until a staff member is chosen', async () => {
-    workspaceRef.current = workspaceFor(null)
+  test('does not load data or sort for a staff account without a store', async () => {
+    window.sessionStorage.clear()
+    signInAsStaff({ store: null })
     render(<GarmentSortingWorkspace />)
 
+    expect(
+      screen.getByText('A staff account assigned to a store is required to sort garments.'),
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Good \/ Reusable/i })).toBeDisabled()
     expect(screen.getByRole('button', { name: /Repair \/ Upcycle/i })).toBeDisabled()
     fireEvent.keyDown(window, { key: 'u' })
 
     expect(api.getSortingStats).not.toHaveBeenCalled()
     expect(api.sortGarment).not.toHaveBeenCalled()
+  })
+
+  test('is for staff accounts only: a manager sees a message and nothing loads', async () => {
+    window.sessionStorage.clear()
+    signInAs('manager')
+    render(<GarmentSortingWorkspace />)
+
+    expect(
+      screen.getByText('Garment Sorting is available to staff accounts only.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Good \/ Reusable/i })).toBeDisabled()
+    fireEvent.keyDown(window, { key: 'r' })
+
+    expect(api.getSortingStats).not.toHaveBeenCalled()
+    expect(api.sortGarment).not.toHaveBeenCalled()
+  })
+
+  test('shows the signed-in staff member and store, with no account picker', async () => {
+    render(<GarmentSortingWorkspace />)
+
+    const account = screen.getByRole('group', { name: 'Signed-in staff account' })
+    expect(account).toHaveTextContent('Test staff')
+    expect(account).toHaveTextContent('Bangkok Flagship')
+    expect(screen.queryByText(/login isn.t available yet/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: /staff member/i })).not.toBeInTheDocument()
   })
 
   test('ignores held keys and browser shortcuts such as Cmd+C', async () => {

@@ -32,6 +32,7 @@ from .schemas import (
     GarmentItem,
     GarmentSortRequest,
     SortGarmentResponse,
+    SortingSite,
     SortingStatsResponse,
     UserRole,
 )
@@ -250,6 +251,15 @@ def commit_or_conflict(session: Session) -> None:
     except IntegrityError:
         session.rollback()
         raise HTTPException(status_code=409, detail=BIN_CODE_CONFLICT) from None
+
+
+@router.get("/sorting/sites", response_model=list[SortingSite])
+def get_sorting_sites(actor_id: ActorIdQuery, session: SessionDependency) -> list[SortingSite]:
+    """The sites this actor may read, for a site switcher. Staff get their own site only."""
+
+    allowed = resolve_read_sites(session, actor_id, None)
+    sites = session.exec(select(Site).where(Site.id.in_(allowed)).order_by(Site.name)).all()
+    return [SortingSite(id=site.id, code=site.code, name=site.name) for site in sites]
 
 
 @router.get("/bins", response_model=list[BinRecord])

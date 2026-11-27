@@ -414,6 +414,11 @@ export function getSortingStats(actorId: number, siteId?: number): Promise<Sorti
   )
 }
 
+/** The sites this user may read, for the manager's site switcher. */
+export function getSortingSites(actorId: number): Promise<Store[]> {
+  return sortingRequest<Store[]>(`/sorting/sites${buildQuery({ actor_id: actorId })}`)
+}
+
 export function getActiveBins(actorId: number, siteId?: number): Promise<ActiveBinsResponse> {
   return sortingRequest<ActiveBinsResponse>(
     `/bins/active${buildQuery({ actor_id: actorId, site_id: siteId })}`,

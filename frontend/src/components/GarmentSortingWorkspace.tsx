@@ -33,7 +33,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { StatCard } from '@/components/StatCard'
 import { TableCard } from '@/components/TableCard'
 import { BinProgressCard } from '@/components/staff/BinProgressCard'
-import { HandoffActorBar } from '@/components/staff/HandoffActorBar'
+import { StaffAccountBar } from '@/components/staff/StaffAccountBar'
 import { NewBinDialog, type NewBinValues } from '@/components/staff/NewBinDialog'
 import { SealBinDialog } from '@/components/staff/SealBinDialog'
 import { SortActionButton } from '@/components/staff/SortActionButton'
@@ -55,7 +55,7 @@ import {
 } from '@/components/ui/table'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { BIN_STATUS_BADGE_VARIANTS, BIN_TYPE_TONES } from '@/lib/bin-type-tones'
-import { useHandoffWorkspace } from '@/lib/use-handoff-workspace'
+import { useSession } from '@/lib/auth-session'
 import { BIN_STATUS_LABELS, BIN_TYPE_LABELS, CONDITION_LABELS } from '@/lib/sorting-labels'
 import { cn } from '@/lib/utils'
 
@@ -109,11 +109,12 @@ function errorMessage(err: unknown, fallback: string) {
 }
 
 export function GarmentSortingWorkspace() {
-  // Until staff sign in, the working staff member is chosen on screen; sorting is always done
-  // at that person's site.
-  const workspace = useHandoffWorkspace()
-  const actorId = workspace.actor?.id ?? null
-  const siteId = workspace.siteId
+  // Sorting is done by the signed-in staff member, always at their own store's site.
+  const user = useSession()?.user ?? null
+  const staff = user?.role === 'staff' ? user : null
+  const siteId = staff?.store?.id ?? null
+  // Without a store there is no site to sort at, so there is no one to act as.
+  const actorId = siteId === null ? null : (staff?.id ?? null)
 
   const [snapshot, setSnapshot] = React.useState<WorkspaceSnapshot | null>(null)
   const [loadError, setLoadError] = React.useState<string | null>(null)
@@ -322,7 +323,10 @@ export function GarmentSortingWorkspace() {
         <p className="text-xs text-muted-foreground">Rapid counter triage and bin tracking.</p>
       </div>
 
-      <HandoffActorBar workspace={workspace} />
+      <StaffAccountBar user={user} featureName="Garment Sorting" />
+      {siteId === null ? (
+        <EmptyState>A staff account assigned to a store is required to sort garments.</EmptyState>
+      ) : null}
 
       {loadError || actionError ? <ErrorState message={(actionError ?? loadError)!} /> : null}
 

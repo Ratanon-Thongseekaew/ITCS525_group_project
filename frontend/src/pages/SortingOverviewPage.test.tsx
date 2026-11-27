@@ -4,20 +4,14 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import * as api from '@/api'
+import { stubRadixBrowserApis } from '@/test/handoff-fixtures'
+import { signInAs } from '@/test/auth'
 import { SortingOverviewPage } from './SortingOverviewPage'
 
-const options: api.HandoffOptions = {
-  sites: [
-    { id: 1, code: 'DASH-BKK', name: 'Bangkok Flagship' },
-    { id: 2, code: 'DASH-CNX', name: 'Chiang Mai Outlet' },
-  ],
-  contractors: [],
-  actors: [
-    { id: 7, username: 'staff.bkk@example.test', role: 'staff', site_ids: [1] },
-    { id: 20, username: 'manager.all@example.test', role: 'manager', site_ids: [1, 2] },
-    { id: 21, username: 'manager.bkk@example.test', role: 'manager', site_ids: [1] },
-  ],
-}
+const sites: api.Store[] = [
+  { id: 1, code: 'DASH-BKK', name: 'Bangkok Flagship' },
+  { id: 2, code: 'DASH-CNX', name: 'Chiang Mai Outlet' },
+]
 
 const stats: api.SortingStatsResponse = {
   total_sorted_today: 9,
@@ -83,20 +77,17 @@ const garments: api.GarmentItem[] = [
 
 describe('SortingOverviewPage', () => {
   beforeEach(() => {
-    // jsdom has no layout; Radix Select calls this when it opens.
-    Element.prototype.scrollIntoView ??= vi.fn()
-    vi.spyOn(api, 'getHandoffOptions').mockResolvedValue(options)
+    stubRadixBrowserApis()
+    signInAs('manager', { id: 20 })
+    vi.spyOn(api, 'getSortingSites').mockResolvedValue(sites)
     vi.spyOn(api, 'getSortingStats').mockResolvedValue(stats)
     vi.spyOn(api, 'getBins').mockResolvedValue(bins)
     vi.spyOn(api, 'getRecentGarments').mockResolvedValue(garments)
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn(() => '20'),
-      setItem: vi.fn(),
-    })
   })
 
   afterEach(() => {
     cleanup()
+    window.sessionStorage.clear()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
@@ -105,6 +96,7 @@ describe('SortingOverviewPage', () => {
     render(<SortingOverviewPage />)
 
     expect(await screen.findAllByText('BIN-RC-007')).toHaveLength(2)
+    expect(api.getSortingSites).toHaveBeenCalledWith(20)
     expect(api.getBins).toHaveBeenCalledWith(20, undefined)
     expect(api.getSortingStats).toHaveBeenCalledWith(20, undefined)
     expect(screen.getAllByText('Bangkok Flagship').length).toBeGreaterThan(0)
@@ -114,36 +106,56 @@ describe('SortingOverviewPage', () => {
     expect(screen.getByText('9')).toBeInTheDocument()
   })
 
-  test('is read only: it offers no sorting, sealing or bin creation', async () => {
+  test('is read only and has no account picker', async () => {
     render(<SortingOverviewPage />)
     await screen.findAllByText('BIN-RC-007')
 
     for (const name of [/Good \/ Reusable/i, /Seal/i, /New Bin/i]) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
     }
+    expect(screen.queryByText(/login isn.t available yet/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: /Manager/i })).not.toBeInTheDocument()
   })
 
-  test('asks for a manager account before loading anything', async () => {
-    vi.stubGlobal('localStorage', { getItem: vi.fn(() => null), setItem: vi.fn() })
-    render(<SortingOverviewPage />)
-
-    expect(
-      await screen.findByText('Choose your manager account to see sorting data.'),
-    ).toBeInTheDocument()
-    await waitFor(() => expect(api.getHandoffOptions).toHaveBeenCalled())
-    expect(api.getBins).not.toHaveBeenCalled()
-  })
-
-  test('does not list staff accounts as managers', async () => {
+  test('shows the signed-in manager', async () => {
     render(<SortingOverviewPage />)
     await screen.findAllByText('BIN-RC-007')
 
-    fireEvent.click(screen.getByRole('combobox', { name: /Manager/i }))
+    expect(screen.getByRole('group', { name: 'Signed-in account and site' })).toHaveTextContent(
+      'Test manager',
+    )
+  })
+
+  test('offers the sites from the API and loads one site when it is chosen', async () => {
+    render(<SortingOverviewPage />)
+    await screen.findAllByText('BIN-RC-007')
+
+    fireEvent.keyDown(screen.getByRole('combobox', { name: /Site/i }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('option', { name: 'Chiang Mai Outlet' }))
+
+    await waitFor(() => expect(api.getBins).toHaveBeenCalledWith(20, 2))
+    expect(api.getSortingStats).toHaveBeenCalledWith(20, 2)
+  })
+
+  test('is for managers and administrators: staff see a message and nothing loads', async () => {
+    window.sessionStorage.clear()
+    signInAs('staff')
+    render(<SortingOverviewPage />)
 
     expect(
-      await screen.findByRole('option', { name: 'manager.bkk@example.test' }),
+      screen.getByText('Sorting Overview is available to manager and administrator accounts only.'),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: 'staff.bkk@example.test' })).not.toBeInTheDocument()
+    expect(api.getSortingSites).not.toHaveBeenCalled()
+    expect(api.getBins).not.toHaveBeenCalled()
+  })
+
+  test('lets an administrator in too', async () => {
+    window.sessionStorage.clear()
+    signInAs('admin', { id: 30 })
+    render(<SortingOverviewPage />)
+
+    await screen.findAllByText('BIN-RC-007')
+    expect(api.getBins).toHaveBeenCalledWith(30, undefined)
   })
 
   test('shows an error when the overview cannot be loaded', async () => {

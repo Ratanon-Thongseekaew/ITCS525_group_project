@@ -320,7 +320,13 @@ def test_stats_only_count_garments_received_today(ctx) -> None:
     assert ctx.stats()["total_sorted_today"] == before
 
 
-READ_PATHS = ("/api/bins", "/api/bins/active", "/api/sorting/stats", "/api/garments/recent")
+READ_PATHS = (
+    "/api/bins",
+    "/api/bins/active",
+    "/api/sorting/stats",
+    "/api/garments/recent",
+    "/api/sorting/sites",
+)
 
 
 @pytest.mark.parametrize("path", READ_PATHS)
@@ -329,7 +335,8 @@ def test_reads_require_a_known_actor(ctx, path) -> None:
     assert ctx.read(path, actor_id=999_999).status_code == 422
 
 
-@pytest.mark.parametrize("path", READ_PATHS)
+# The sites list takes no site: it always names what the actor may read.
+@pytest.mark.parametrize("path", [path for path in READ_PATHS if path != "/api/sorting/sites"])
 def test_staff_cannot_read_another_site(ctx, path) -> None:
     cnx_site = ctx.site_id("CNX")
 
@@ -558,3 +565,33 @@ def test_admins_cannot_sort(ctx) -> None:
         admin = session.get(User, ctx.admin_id)
         assert admin.role is UserRole.ADMIN
     assert ctx.sort("good_reusable", actor_id=ctx.admin_id).status_code == 403
+
+
+def test_sites_for_staff_are_their_own_site_only(ctx) -> None:
+    sites = ctx.read("/api/sorting/sites").json()
+
+    assert [site["id"] for site in sites] == [ctx.bkk_site_id]
+    assert set(sites[0]) == {"id", "code", "name"}
+
+
+def test_sites_for_a_manager_are_the_sites_they_belong_to(ctx) -> None:
+    assert [site["id"] for site in ctx.read("/api/sorting/sites", ctx.manager_id).json()] == [
+        ctx.bkk_site_id
+    ]
+
+    ctx.add_cnx_to_manager()
+    both = ctx.read("/api/sorting/sites", ctx.manager_id).json()
+
+    assert {site["id"] for site in both} == {ctx.bkk_site_id, ctx.site_id("CNX")}
+    assert [site["name"] for site in both] == sorted(site["name"] for site in both)
+
+
+def test_sites_for_an_administrator_or_a_manager_without_a_site_are_every_site(ctx) -> None:
+    with ctx.session() as session:
+        for membership in session.exec(select(UserSite).where(UserSite.user_id == ctx.manager_id)):
+            session.delete(membership)
+        session.commit()
+        every_site = {site.id for site in session.exec(select(Site)).all()}
+
+    for actor_id in (ctx.manager_id, ctx.admin_id):
+        assert {s["id"] for s in ctx.read("/api/sorting/sites", actor_id).json()} == every_site
