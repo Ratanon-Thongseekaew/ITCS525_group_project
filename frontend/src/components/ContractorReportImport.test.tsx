@@ -174,14 +174,11 @@ test('saves the non-rejected rows with the actor and contractor ids', async () =
   expect(request.rows[0]).not.toHaveProperty('store_weight_kg')
 })
 
-test('the sample report can be reviewed but not saved', async () => {
+test('there is no built-in sample report', async () => {
   renderImport()
   await screen.findByText('GreenLoop Partner')
 
-  fireEvent.click(screen.getByRole('button', { name: /Review Sample/ }))
-
-  expect(await screen.findByText('Sample: review only')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: /Samples Are Not Saved/ })).toBeDisabled()
+  expect(screen.queryByRole('button', { name: /Review Sample/ })).not.toBeInTheDocument()
 })
 
 test('the formatting guide opens as a dialog listing the columns', async () => {
@@ -199,7 +196,8 @@ test('staff accounts cannot import reports', async () => {
   renderImport()
   await screen.findByText('GreenLoop Partner')
 
-  fireEvent.click(screen.getByRole('button', { name: /Review Sample/ }))
+  const file = new File(['bin_id\n'], 'report.csv', { type: 'text/csv' })
+  fireEvent.change(screen.getByLabelText('Contractor report file'), { target: { files: [file] } })
 
   expect(
     await screen.findByText('Sign in as a manager or admin to import reports.'),

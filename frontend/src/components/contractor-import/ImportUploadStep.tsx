@@ -1,12 +1,5 @@
 import { useRef, type ChangeEvent, type DragEvent } from 'react'
-import {
-  AlertCircle,
-  ArrowRight,
-  Download,
-  FileSpreadsheet,
-  LoaderCircle,
-  UploadCloud,
-} from 'lucide-react'
+import { AlertCircle, Download, FileSpreadsheet, LoaderCircle, UploadCloud } from 'lucide-react'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -33,8 +26,6 @@ interface ImportUploadStepProps {
   error: string | null
   onFileSelected: (file: File) => void
   onDownloadTemplate: () => void
-  /** Opens a built-in sample report in the review step; it can't be saved. */
-  onReviewSample: () => void
   onCancel: () => void
 }
 
@@ -66,8 +57,8 @@ function OptionSelect({
 }
 
 /**
- * Step 1: choose the month and contractor, then upload a file or review the sample. Each row's
- * sorting center comes from its bin.
+ * Step 1: choose the month and contractor, then upload a file. Each row's sorting center comes
+ * from its bin.
  */
 export function ImportUploadStep({
   contractorOptions,
@@ -79,7 +70,6 @@ export function ImportUploadStep({
   error,
   onFileSelected,
   onDownloadTemplate,
-  onReviewSample,
   onCancel,
 }: ImportUploadStepProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -197,10 +187,6 @@ export function ImportUploadStep({
         <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
           <Button type="button" variant="ghost" onClick={onCancel}>
             Cancel
-          </Button>
-          <Button type="button" variant="outline" onClick={onReviewSample}>
-            Review Sample
-            <ArrowRight aria-hidden="true" />
           </Button>
         </div>
       </div>

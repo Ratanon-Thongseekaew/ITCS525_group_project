@@ -17,7 +17,6 @@ import {
   MAX_FILE_MB,
   REPORT_COLUMNS,
   rejectedRowsCsv,
-  SAMPLE_REPORT_CSV,
 } from '@/components/contractor-import/report-file'
 import type { ReportRow } from '@/components/contractor-import/types'
 import { Stepper } from '@/components/Stepper'
@@ -84,7 +83,6 @@ export default function ContractorReportImport() {
   const [reportMonth, setReportMonth] = useState<string>(() => previousMonth())
 
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
-  const [isSample, setIsSample] = useState<boolean>(false)
   const [validatedRows, setValidatedRows] = useState<ReportRow[]>([])
   const [validationError, setValidationError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -108,11 +106,11 @@ export default function ContractorReportImport() {
 
   const contractorName = contractors.find((item) => item.id === contractorId)?.name ?? ''
 
-  const reviewReport = async (
-    filename: string,
-    readBase64: () => Promise<string>,
-    sample: boolean,
-  ) => {
+  const handleFileSelected = async (file: File) => {
+    if (file.size > MAX_FILE_MB * 1024 * 1024) {
+      setValidationError(`The file is larger than ${MAX_FILE_MB} MB.`)
+      return
+    }
     if (actorId === null) {
       setValidationError('Sign in as a manager or admin to import reports.')
       return
@@ -128,14 +126,13 @@ export default function ContractorReportImport() {
       // The month and contractor are checked against each bin's handoff.
       const parsed = await parseAndValidateContractorFile({
         actorId,
-        filename,
-        contentBase64: await readBase64(),
+        filename: file.name,
+        contentBase64: await fileToBase64(file),
         reportMonth,
         contractorId,
       })
       setValidatedRows(parsed.rows.map(toReportRow))
       setUploadedFileName(parsed.filename)
-      setIsSample(sample)
       setStep(2)
     } catch (error) {
       setValidationError(
@@ -146,22 +143,7 @@ export default function ContractorReportImport() {
     }
   }
 
-  const handleFileSelected = (file: File) => {
-    if (file.size > MAX_FILE_MB * 1024 * 1024) {
-      setValidationError(`The file is larger than ${MAX_FILE_MB} MB.`)
-      return
-    }
-    void reviewReport(file.name, () => fileToBase64(file), false)
-  }
-
-  const handleStartSampleReview = () =>
-    void reviewReport(
-      `contractor_report_${reportMonth}_sample.csv`,
-      async () => btoa(SAMPLE_REPORT_CSV),
-      true,
-    )
-
-  const savableRows = isSample ? [] : validatedRows.filter((row) => row.status !== 'Error')
+  const savableRows = validatedRows.filter((row) => row.status !== 'Error')
 
   const handleSaveRecords = async () => {
     if (actorId === null || contractorId === null) return
@@ -218,14 +200,13 @@ export default function ContractorReportImport() {
               onReportMonthChange={setReportMonth}
               isProcessing={isProcessing}
               error={validationError ?? contractorsError}
-              onFileSelected={handleFileSelected}
+              onFileSelected={(file) => void handleFileSelected(file)}
               onDownloadTemplate={() =>
                 downloadCsv(
                   'contractor_monthly_report_template.csv',
                   `${REPORT_COLUMNS.join(',')}\n`,
                 )
               }
-              onReviewSample={handleStartSampleReview}
               onCancel={() => navigate('/manager')}
             />
           ) : null}
@@ -236,7 +217,6 @@ export default function ContractorReportImport() {
               reportMonth={reportMonth}
               fileName={uploadedFileName}
               contractor={contractorName}
-              isSample={isSample}
               savableCount={savableRows.length}
               isSaving={isSaving}
               error={saveError}

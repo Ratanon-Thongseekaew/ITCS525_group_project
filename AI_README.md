@@ -454,7 +454,8 @@ Rows are checked as follows (row numbers are spreadsheet lines, header = 1):
 fails), records the actor as uploader, stores `received_kg` on the handoff
 (`contractor_received_kg`), and saves one report per site, returned as `reports`.
 A concurrent save of the same report returns `409`. The import page defaults the
-month to the previous month; its built-in sample can be reviewed but not saved.
+month to the previous month. For demos, use the report files the seed writes to
+`backend/demo_reports/`.
 
 Keep response models in `backend/app/schemas.py`. When an API response changes,
 update all of the following together:

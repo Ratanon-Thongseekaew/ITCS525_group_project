@@ -64,8 +64,6 @@ interface ImportReviewStepProps {
   reportMonth: string
   fileName: string | null
   contractor: string
-  /** The built-in sample: shown for review only, never saved. */
-  isSample: boolean
   savableCount: number
   isSaving: boolean
   error: string | null
@@ -80,7 +78,6 @@ export function ImportReviewStep({
   reportMonth,
   fileName,
   contractor,
-  isSample,
   savableCount,
   isSaving,
   error,
@@ -102,15 +99,9 @@ export function ImportReviewStep({
             <span className="font-semibold text-foreground">{fileName}</span> ({contractor})
           </p>
         </div>
-        {isSample ? (
-          <Badge variant="info" className="self-start sm:self-auto">
-            Sample: review only
-          </Badge>
-        ) : (
-          <Badge variant="success" className="self-start sm:self-auto">
-            Ready for Review
-          </Badge>
-        )}
+        <Badge variant="success" className="self-start sm:self-auto">
+          Ready for Review
+        </Badge>
       </div>
 
       <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -211,14 +202,10 @@ export function ImportReviewStep({
         <Button
           type="button"
           className="w-full sm:w-auto"
-          disabled={isSample || isSaving || savableCount === 0}
+          disabled={isSaving || savableCount === 0}
           onClick={onSave}
         >
-          {isSample
-            ? 'Samples Are Not Saved'
-            : isSaving
-              ? 'Saving...'
-              : `Save Valid Records (${savableCount})`}
+          {isSaving ? 'Saving...' : `Save Valid Records (${savableCount})`}
           <ArrowRight aria-hidden="true" />
         </Button>
       </div>
