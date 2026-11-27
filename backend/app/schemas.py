@@ -229,7 +229,6 @@ ShortText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=5
 
 
 class GarmentSortRequest(BaseModel):
-    actor_id: int = Field(gt=0)
     condition: GarmentCondition
     category: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)
@@ -292,7 +291,6 @@ class ResaleBinRecord(BaseModel):
 
 
 class BinCreateRequest(BaseModel):
-    actor_id: int = Field(gt=0)
     bin_type: BinType
     bin_code: (
         Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)] | None
@@ -308,7 +306,6 @@ class SortingSite(BaseModel):
 
 
 class BinCloseRequest(BaseModel):
-    actor_id: int = Field(gt=0)
     notes: ShortText | None = None
 
 

@@ -94,12 +94,12 @@ interface WorkspaceSnapshot {
   recentGarments: GarmentItem[]
 }
 
-async function loadWorkspaceSnapshot(actorId: number, siteId: number): Promise<WorkspaceSnapshot> {
+async function loadWorkspaceSnapshot(token: string, siteId: number): Promise<WorkspaceSnapshot> {
   const [stats, activeBins, allBins, recentGarments] = await Promise.all([
-    getSortingStats(actorId, siteId),
-    getActiveBins(actorId, siteId),
-    getBins(actorId, siteId),
-    getRecentGarments(actorId, siteId, 10),
+    getSortingStats(token, siteId),
+    getActiveBins(token, siteId),
+    getBins(token, siteId),
+    getRecentGarments(token, siteId, 10),
   ])
   return { siteId, stats, activeBins, allBins, recentGarments }
 }
@@ -110,7 +110,10 @@ function errorMessage(err: unknown, fallback: string) {
 
 export function GarmentSortingWorkspace() {
   // Sorting is done by the signed-in staff member, always at their own store's site.
-  const user = useSession()?.user ?? null
+  const session = useSession()
+  const user = session?.user ?? null
+  // The API reads who is sorting from the token.
+  const token = session?.token ?? ''
   const staff = user?.role === 'staff' ? user : null
   const siteId = staff?.store?.id ?? null
   // Without a store there is no site to sort at, so there is no one to act as.
@@ -148,21 +151,21 @@ export function GarmentSortingWorkspace() {
     if (siteId === null || actorId === null) return
     try {
       setRefreshing(true)
-      setSnapshot(await loadWorkspaceSnapshot(actorId, siteId))
+      setSnapshot(await loadWorkspaceSnapshot(token, siteId))
       setLoadError(null)
     } catch (err) {
       setLoadError(errorMessage(err, 'Failed to load the sorting workspace.'))
     } finally {
       setRefreshing(false)
     }
-  }, [actorId, siteId])
+  }, [actorId, siteId, token])
 
   React.useEffect(() => {
     if (siteId === null || actorId === null) return
     let ignore = false
-    async function loadInitialData(forActor: number, forSite: number) {
+    async function loadInitialData(forToken: string, forSite: number) {
       try {
-        const data = await loadWorkspaceSnapshot(forActor, forSite)
+        const data = await loadWorkspaceSnapshot(forToken, forSite)
         if (!ignore) {
           setSnapshot(data)
           setLoadError(null)
@@ -171,11 +174,11 @@ export function GarmentSortingWorkspace() {
         if (!ignore) setLoadError(errorMessage(err, 'Failed to load the sorting workspace.'))
       }
     }
-    void loadInitialData(actorId, siteId)
+    void loadInitialData(token, siteId)
     return () => {
       ignore = true
     }
-  }, [actorId, siteId])
+  }, [actorId, siteId, token])
 
   // Handle Quick Sort submission
   const handleSort = React.useCallback(
@@ -189,8 +192,7 @@ export function GarmentSortingWorkspace() {
       try {
         setSortingInProgress(true)
         setActionError(null)
-        const response = await sortGarment({
-          actor_id: actorId,
+        const response = await sortGarment(token, {
           condition,
           category: selectedCategory,
           weight_kg: parsedWeight,
@@ -216,7 +218,7 @@ export function GarmentSortingWorkspace() {
         setSortingInProgress(false)
       }
     },
-    [actorId, notes, refreshData, selectedCategory, sortingInProgress, weightKg],
+    [actorId, notes, refreshData, selectedCategory, sortingInProgress, token, weightKg],
   )
 
   // Ref to always access the latest handleSort in event listener
@@ -254,7 +256,7 @@ export function GarmentSortingWorkspace() {
     if (actorId === null) return
     try {
       setActionError(null)
-      await createBin({ actor_id: actorId, ...values })
+      await createBin(token, values)
       setShowNewBinModal(false)
       await refreshData()
     } catch (err) {
@@ -269,7 +271,7 @@ export function GarmentSortingWorkspace() {
     if (actorId === null) return
     try {
       setActionError(null)
-      await closeBin(binId, actorId, closeNotes)
+      await closeBin(token, binId, closeNotes)
       setClosingBinId(null)
       await refreshData()
     } catch (err) {

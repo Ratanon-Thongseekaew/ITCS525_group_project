@@ -40,7 +40,6 @@ export type BinStatus = 'active' | 'ready' | 'handed_off' | 'closed'
 export type GarmentCondition = 'good_reusable' | 'worn_recyclable' | 'repair_upcycle'
 
 export interface GarmentSortRequest {
-  actor_id: number
   condition: GarmentCondition
   category?: string
   weight_kg?: number
@@ -78,7 +77,6 @@ export interface BinRecord {
 }
 
 export interface BinCreateRequest {
-  actor_id: number
   bin_type: BinType
   bin_code?: string
   max_capacity?: number
@@ -413,15 +411,14 @@ export function saveEprAdjustment(
   return writeEprManagement(token, 'adjustments', year, quarter, payload)
 }
 
-// Sorting reads are per site and writes name the acting staff member (`actor_id`) until the
-// frontend uses real login, the same stopgap the handoff pages use.
+// Sorting and direct resale requests are sent with the signed-in user's token. The server reads
+// who is acting from it: staff only reach their own site.
 async function sortingRequest<T>(
+  token: string,
   path: string,
   init: SignedRequestInit = {},
-  token?: string,
 ): Promise<T> {
-  const url = `${API_URL}/api${path}`
-  const response = await (token === undefined ? fetch(url, init) : signedFetch(token, url, init))
+  const response = await signedFetch(token, `${API_URL}/api${path}`, init)
   if (!response.ok) {
     const error = (await response.json().catch(() => null)) as { detail?: unknown } | null
     if (typeof error?.detail === 'string') throw new Error(error.detail)
@@ -430,52 +427,45 @@ async function sortingRequest<T>(
   return response.json() as Promise<T>
 }
 
-function postJson<T>(path: string, body: unknown, token?: string) {
-  return sortingRequest<T>(
-    path,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    },
-    token,
-  )
+function postJson<T>(token: string, path: string, body: unknown) {
+  return sortingRequest<T>(token, path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
 }
 
-// Reads name the acting user (`actor_id`). Staff only reach their own site; managers pick one of
-// their sites, or leave `siteId` out for all of them combined (the list endpoints only).
-export function getSortingStats(actorId: number, siteId?: number): Promise<SortingStatsResponse> {
+// Staff only reach their own site; managers pick one of their sites, or leave `siteId` out for
+// all of them combined (the list endpoints only).
+export function getSortingStats(token: string, siteId?: number): Promise<SortingStatsResponse> {
   return sortingRequest<SortingStatsResponse>(
-    `/sorting/stats${buildQuery({ actor_id: actorId, site_id: siteId })}`,
+    token,
+    `/sorting/stats${buildQuery({ site_id: siteId })}`,
   )
 }
 
 /** The sites this user may read, for the manager's site switcher. */
-export function getSortingSites(actorId: number): Promise<Store[]> {
-  return sortingRequest<Store[]>(`/sorting/sites${buildQuery({ actor_id: actorId })}`)
+export function getSortingSites(token: string): Promise<Store[]> {
+  return sortingRequest<Store[]>(token, '/sorting/sites')
 }
 
-export function getActiveBins(actorId: number, siteId?: number): Promise<ActiveBinsResponse> {
-  return sortingRequest<ActiveBinsResponse>(
-    `/bins/active${buildQuery({ actor_id: actorId, site_id: siteId })}`,
-  )
+export function getActiveBins(token: string, siteId?: number): Promise<ActiveBinsResponse> {
+  return sortingRequest<ActiveBinsResponse>(token, `/bins/active${buildQuery({ site_id: siteId })}`)
 }
 
 export function getBins(
-  actorId: number,
+  token: string,
   siteId?: number,
   filters?: { bin_type?: BinType; status?: BinStatus },
 ): Promise<BinRecord[]> {
-  return sortingRequest<BinRecord[]>(
-    `/bins${buildQuery({ actor_id: actorId, site_id: siteId, ...filters })}`,
-  )
+  return sortingRequest<BinRecord[]>(token, `/bins${buildQuery({ site_id: siteId, ...filters })}`)
 }
 
 export function getDirectResaleBins(token: string, siteId: number, signal?: AbortSignal) {
   return sortingRequest<DirectResaleBinRecord[]>(
+    token,
     `/resale-bins${buildQuery({ site_id: siteId })}`,
     { signal },
-    token,
   )
 }
 
@@ -485,28 +475,32 @@ export function processDirectResaleBin(
   binId: number,
   payload: ProcessDirectResaleBinRequest,
 ) {
-  return postJson<DirectResaleBinRecord>(`/resale-bins/${binId}/process`, payload, token)
+  return postJson<DirectResaleBinRecord>(token, `/resale-bins/${binId}/process`, payload)
 }
 
-export function createBin(payload: BinCreateRequest): Promise<BinRecord> {
-  return postJson<BinRecord>('/bins', payload)
+export function createBin(token: string, payload: BinCreateRequest): Promise<BinRecord> {
+  return postJson<BinRecord>(token, '/bins', payload)
 }
 
-export function closeBin(binId: number, actorId: number, notes?: string): Promise<BinRecord> {
-  return postJson<BinRecord>(`/bins/${binId}/close`, { actor_id: actorId, notes })
+export function closeBin(token: string, binId: number, notes?: string): Promise<BinRecord> {
+  return postJson<BinRecord>(token, `/bins/${binId}/close`, { notes })
 }
 
-export function sortGarment(payload: GarmentSortRequest): Promise<SortGarmentResponse> {
-  return postJson<SortGarmentResponse>('/garments/sort', payload)
+export function sortGarment(
+  token: string,
+  payload: GarmentSortRequest,
+): Promise<SortGarmentResponse> {
+  return postJson<SortGarmentResponse>(token, '/garments/sort', payload)
 }
 
 export function getRecentGarments(
-  actorId: number,
+  token: string,
   siteId?: number,
   limit = 15,
 ): Promise<GarmentItem[]> {
   return sortingRequest<GarmentItem[]>(
-    `/garments/recent${buildQuery({ actor_id: actorId, site_id: siteId, limit })}`,
+    token,
+    `/garments/recent${buildQuery({ site_id: siteId, limit })}`,
   )
 }
 

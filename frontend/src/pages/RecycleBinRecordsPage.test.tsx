@@ -97,7 +97,7 @@ test('shows only the records for the manager’s sites', async () => {
   renderPage()
   await waitForRecords()
 
-  expect(getSortingSites).toHaveBeenCalledWith(MANAGER_ID)
+  expect(getSortingSites).toHaveBeenCalledWith('test-token')
   expect(screen.getByText('Showing 3 of 3 records')).toBeInTheDocument()
   expect(screen.queryByRole('heading', { name: '#bin-other' })).not.toBeInTheDocument()
 })

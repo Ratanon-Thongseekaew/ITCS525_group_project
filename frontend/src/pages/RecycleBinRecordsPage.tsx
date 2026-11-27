@@ -34,7 +34,9 @@ const sortOptions = toOptions(handoffRecordSortLabels)
  * approve Disputed handoffs, and close handoffs whose outcome report is in.
  */
 export function RecycleBinRecordsPage() {
-  const user = useSession()?.user ?? null
+  const session = useSession()
+  const user = session?.user ?? null
+  const token = session?.token ?? ''
   // Staff record handoffs from their own screen; reviewing them is for managers and administrators.
   const viewer = user && user.role !== 'staff' ? user : null
   const viewerId = viewer?.id ?? null
@@ -44,7 +46,7 @@ export function RecycleBinRecordsPage() {
 
   const sitesResource = useApiResource(
     viewerId === null ? null : `handoff-review-sites:${viewerId}`,
-    () => getSortingSites(viewerId!),
+    () => getSortingSites(token),
     'Your sites could not be loaded.',
   )
   const sites = sitesResource.data
