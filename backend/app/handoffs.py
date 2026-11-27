@@ -1,7 +1,9 @@
 """Recycle bin handoffs: schedule a contractor pickup, record pickup evidence, approve, close.
 
-Until login is connected, write requests name the acting user with ``actor_id`` (the same
-stopgap the EPR endpoints use).
+Every route needs a signed-in user, read from the login token. Reads follow the sorting site
+rules: staff see their own store, managers their assigned stores (or all stores when they have
+none), and administrators every store. Pickups are recorded by staff of the bin's store; approve
+and close are for managers and administrators of the handoff's store.
 """
 
 import os
@@ -20,8 +22,8 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from .auth import ActiveUser, ManagementUser
 from .database import REPOSITORY_ROOT, get_session
-from .epr import require_management_actor
 from .models import (
     Bin,
     BinStatus,
@@ -36,8 +38,6 @@ from .models import (
     UserSite,
 )
 from .schemas import (
-    HandoffActorOption,
-    HandoffActorRequest,
     HandoffContractorOption,
     HandoffListResponse,
     HandoffOptionsResponse,
@@ -49,6 +49,7 @@ from .schemas import (
     HandoffSiteOption,
     UserRole,
 )
+from .sorting import resolve_read_sites
 
 router = APIRouter(prefix="/api/handoffs", tags=["handoffs"])
 SessionDependency = Annotated[Session, Depends(get_session)]
@@ -138,6 +139,7 @@ def load_records(
     *,
     handoff_id: int | None = None,
     site_id: int | None = None,
+    site_ids: list[int] | None = None,
     status: HandoffRecordStatus | None = None,
 ) -> list[HandoffRecord]:
     statement = (
@@ -150,6 +152,8 @@ def load_records(
         statement = statement.where(Handoff.id == handoff_id)
     if site_id is not None:
         statement = statement.where(Handoff.site_id == site_id)
+    if site_ids is not None:
+        statement = statement.where(Handoff.site_id.in_(site_ids))
     if status is not None:
         statement = statement.where(Handoff.status == HandoffStatus(status.value))
 
@@ -253,17 +257,11 @@ def read_scale_photo(upload: UploadFile) -> tuple[bytes, str]:
 
 
 @router.get("/options", response_model=HandoffOptionsResponse)
-def get_handoff_options(session: SessionDependency) -> HandoffOptionsResponse:
+def get_handoff_options(user: ActiveUser, session: SessionDependency) -> HandoffOptionsResponse:
     sites = session.exec(select(Site).where(Site.is_active).order_by(Site.name)).all()
     contractors = session.exec(
         select(Contractor).where(Contractor.is_active).order_by(Contractor.name)
     ).all()
-    memberships: dict[int, list[int]] = defaultdict(list)
-    for user_id, membership_site_id in session.exec(
-        select(UserSite.user_id, UserSite.site_id).order_by(UserSite.site_id)
-    ).all():
-        memberships[user_id].append(membership_site_id)
-    users = session.exec(select(User).order_by(User.username)).all()
 
     return HandoffOptionsResponse(
         sites=[HandoffSiteOption(id=site.id, code=site.code, name=site.name) for site in sites],
@@ -271,20 +269,16 @@ def get_handoff_options(session: SessionDependency) -> HandoffOptionsResponse:
             HandoffContractorOption(id=contractor.id, name=contractor.name)
             for contractor in contractors
         ],
-        actors=[
-            HandoffActorOption(
-                id=user.id, username=user.username, role=user.role, site_ids=memberships[user.id]
-            )
-            for user in users
-        ],
     )
 
 
 @router.get("/bins", response_model=HandoffReadyBinsResponse)
 def get_bins_ready_for_handoff(
+    user: ActiveUser,
     session: SessionDependency,
     site_id: Annotated[int | None, Query(ge=1)] = None,
 ) -> HandoffReadyBinsResponse:
+    sites = resolve_read_sites(session, user.id, site_id)
     statement = (
         select(Bin, Site)
         .join(Site, Bin.site_id == Site.id)
@@ -293,11 +287,10 @@ def get_bins_ready_for_handoff(
             Bin.bin_type == BinType.RECYCLE,
             Bin.status == BinStatus.READY,
             Handoff.id.is_(None),
+            Bin.site_id.in_(sites),
         )
         .order_by(Bin.ready_at, Bin.id)
     )
-    if site_id is not None:
-        statement = statement.where(Bin.site_id == site_id)
 
     return HandoffReadyBinsResponse(
         bins=[
@@ -317,11 +310,13 @@ def get_bins_ready_for_handoff(
 
 @router.get("", response_model=HandoffListResponse)
 def list_handoffs(
+    user: ActiveUser,
     session: SessionDependency,
     site_id: Annotated[int | None, Query(ge=1)] = None,
     status: HandoffRecordStatus | None = None,
 ) -> HandoffListResponse:
-    return HandoffListResponse(handoffs=load_records(session, site_id=site_id, status=status))
+    sites = resolve_read_sites(session, user.id, site_id)
+    return HandoffListResponse(handoffs=load_records(session, site_ids=sites, status=status))
 
 
 def lock_ready_bin(session: Session, bin_id: int) -> Bin:
@@ -392,10 +387,10 @@ def apply_pickup(
 
 @router.post("/pickups", response_model=HandoffRecord, status_code=201)
 def record_handoff_at_pickup(
+    user: ActiveUser,
     session: SessionDependency,
     bin_id: Annotated[int, Form(gt=0)],
     contractor_id: Annotated[int, Form(gt=0)],
-    actor_id: Annotated[int, Form(gt=0)],
     picked_up_at: Annotated[AwareDatetime, Form()],
     staff_weight_kg: WeightKg,
     driver_weight_kg: WeightKg,
@@ -409,7 +404,7 @@ def record_handoff_at_pickup(
         raise HTTPException(status_code=422, detail="The pickup time can't be in the future.")
     bin_record = lock_ready_bin(session, bin_id)
     contractor = require_active_contractor(session, contractor_id)
-    actor = require_site_staff(session, actor_id, bin_record.site_id)
+    actor = require_site_staff(session, user.id, bin_record.site_id)
 
     handoff = Handoff(
         site_id=bin_record.site_id,
@@ -434,8 +429,11 @@ def record_handoff_at_pickup(
 
 
 @router.get("/{handoff_id}/scale-photo", response_class=FileResponse)
-def get_scale_photo(handoff_id: int, session: SessionDependency) -> FileResponse:
+def get_scale_photo(handoff_id: int, user: ActiveUser, session: SessionDependency) -> FileResponse:
     handoff = session.get(Handoff, handoff_id)
+    if handoff is not None:
+        # The photo is part of the handoff record, so it follows the same site rules.
+        resolve_read_sites(session, user.id, handoff.site_id)
     stored = handoff.scale_photo_url if handoff else None
     if not stored or not stored.startswith(f"{SCALE_PHOTO_FOLDER}/"):
         raise HTTPException(status_code=404, detail="No uploaded scale photo for this handoff.")
@@ -448,14 +446,14 @@ def get_scale_photo(handoff_id: int, session: SessionDependency) -> FileResponse
 
 @router.post("/{handoff_id}/approve", response_model=HandoffRecord)
 def approve_disputed_handoff(
-    handoff_id: int, payload: HandoffActorRequest, session: SessionDependency
+    handoff_id: int, user: ManagementUser, session: SessionDependency
 ) -> HandoffRecord:
     handoff = lock_handoff(session, handoff_id)
+    resolve_read_sites(session, user.id, handoff.site_id)
     if handoff.status is not HandoffStatus.DISPUTED:
         raise HTTPException(status_code=409, detail="Only disputed handoffs need approval.")
-    require_management_actor(session, payload.actor_id)
 
-    handoff.approved_by_user_id = payload.actor_id
+    handoff.approved_by_user_id = user.id
     handoff.approved_at = utc_now()
     handoff.status = HandoffStatus.APPROVED
     session.add(handoff)
@@ -465,9 +463,10 @@ def approve_disputed_handoff(
 
 @router.post("/{handoff_id}/close", response_model=HandoffRecord)
 def close_handoff(
-    handoff_id: int, payload: HandoffActorRequest, session: SessionDependency
+    handoff_id: int, user: ManagementUser, session: SessionDependency
 ) -> HandoffRecord:
     handoff = lock_handoff(session, handoff_id)
+    resolve_read_sites(session, user.id, handoff.site_id)
     if handoff.status is HandoffStatus.DISPUTED:
         raise HTTPException(
             status_code=409, detail="A manager must approve this disputed handoff before closing."
@@ -476,7 +475,6 @@ def close_handoff(
         raise HTTPException(
             status_code=409, detail="Only picked-up or approved handoffs can be closed."
         )
-    require_management_actor(session, payload.actor_id)
 
     # Same rule as the dashboard's "pending": a handoff is reported once its contractor's
     # outcome report has an entry for it.

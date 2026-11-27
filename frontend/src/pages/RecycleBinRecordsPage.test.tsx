@@ -131,7 +131,7 @@ test('approves a disputed record as the signed-in manager', async () => {
   await waitForDialogToClose()
 
   expect(await within(card('bin-disputed')).findByText('Approved')).toBeInTheDocument()
-  expect(approveHandoff).toHaveBeenCalledWith(1, MANAGER_ID)
+  expect(approveHandoff).toHaveBeenCalledWith('test-token', 1)
   expect(within(card('bin-disputed')).getByText('Approved by manager@example.com')).toBeVisible()
 })
 
@@ -161,7 +161,7 @@ test('closes a reported record after review', async () => {
   await waitForDialogToClose()
 
   expect(await within(card('bin-ready')).findByText('Closed')).toBeInTheDocument()
-  expect(closeHandoff).toHaveBeenCalledWith(3, MANAGER_ID)
+  expect(closeHandoff).toHaveBeenCalledWith('test-token', 3)
   expect(
     within(card('bin-ready')).queryByRole('button', { name: /Close Handoff/ }),
   ).not.toBeInTheDocument()
@@ -218,7 +218,11 @@ test('loads one site when a manager of several sites chooses it', async () => {
   expect(screen.getByLabelText('Site:')).toHaveTextContent('All sites')
   chooseOption('Site:', 'Bangkok Sorting Center')
   await waitForRecords()
-  expect(getHandoffs).toHaveBeenLastCalledWith({ site_id: 1 }, expect.any(AbortSignal))
+  expect(getHandoffs).toHaveBeenLastCalledWith(
+    'test-token',
+    { site_id: 1 },
+    expect.any(AbortSignal),
+  )
 })
 
 test('loads nothing for a staff account', async () => {

@@ -5,6 +5,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { formatRecordedWeight, formatVariancePercent, formatWeightKg } from '@/lib/handoff-format'
+import { useSession } from '@/lib/auth-session'
 import { canApprove, canClose, getOutcomeTotal, getRecordedWeight } from '@/lib/handoff-records'
 import { errorMessage } from '@/lib/use-api-resource'
 import type { HandoffRecord } from '@/types/handoff'
@@ -13,8 +14,6 @@ type ReviewAction = 'approve' | 'close'
 
 interface HandoffReviewActionsProps {
   record: HandoffRecord
-  /** The signed-in manager or administrator, sent as the API's `actor_id`. */
-  actorId: number
   /** Called with the updated record after an approval or close succeeds. */
   onUpdated: (record: HandoffRecord) => void
 }
@@ -22,7 +21,9 @@ interface HandoffReviewActionsProps {
 const ACTION_FAILED = 'The handoff could not be updated. Try again.'
 
 /** A manager's approve and close controls for one handoff record. */
-export function HandoffReviewActions({ record, actorId, onUpdated }: HandoffReviewActionsProps) {
+export function HandoffReviewActions({ record, onUpdated }: HandoffReviewActionsProps) {
+  // The API records the signed-in manager or administrator.
+  const token = useSession()?.token ?? ''
   const [confirming, setConfirming] = useState<ReviewAction | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -39,8 +40,8 @@ export function HandoffReviewActions({ record, actorId, onUpdated }: HandoffRevi
     try {
       const updated =
         action === 'approve'
-          ? await approveHandoff(record.id, actorId)
-          : await closeHandoff(record.id, actorId)
+          ? await approveHandoff(token, record.id)
+          : await closeHandoff(token, record.id)
       setConfirming(null)
       onUpdated(updated)
     } catch (caught) {

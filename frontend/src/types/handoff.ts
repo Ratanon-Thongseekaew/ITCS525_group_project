@@ -2,7 +2,6 @@
 import type { HandoffOutcomes, HandoffRecordStatus } from '@/api'
 
 export type {
-  HandoffActorOption,
   HandoffContractorOption,
   HandoffOptions,
   HandoffOutcomes,

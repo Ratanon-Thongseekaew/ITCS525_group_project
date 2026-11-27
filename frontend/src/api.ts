@@ -833,17 +833,9 @@ export interface HandoffContractorOption {
   name: string
 }
 
-export interface HandoffActorOption {
-  id: number
-  username: string
-  role: UserRole
-  site_ids: number[]
-}
-
 export interface HandoffOptions {
   sites: HandoffSiteOption[]
   contractors: HandoffContractorOption[]
-  actors: HandoffActorOption[]
 }
 
 export interface HandoffReadyBin {
@@ -901,10 +893,10 @@ export interface HandoffListResponse {
   handoffs: HandoffRecord[]
 }
 
+// The server records the signed-in staff member as the one who handed the bin over.
 export interface HandoffPickupRequest {
   bin_id: number
   contractor_id: number
-  actor_id: number
   // ISO 8601 with a UTC offset, not in the future.
   picked_up_at: string
   staff_weight_kg: number
@@ -915,22 +907,18 @@ export interface HandoffPickupRequest {
   scale_photo: Blob
 }
 
-async function handoffRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}/api/handoffs${path}`, init)
+async function handoffRequest<T>(
+  token: string,
+  path: string,
+  init: SignedRequestInit = {},
+): Promise<T> {
+  const response = await signedFetch(token, `${API_URL}/api/handoffs${path}`, init)
   if (!response.ok) {
     const error = (await response.json().catch(() => null)) as { detail?: unknown } | null
     if (typeof error?.detail === 'string') throw new Error(error.detail)
     throw new Error('The handoff request failed. Check the entered values and try again.')
   }
   return response.json() as Promise<T>
-}
-
-function postHandoffJson<T>(path: string, payload: unknown) {
-  return handoffRequest<T>(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
 }
 
 function buildQuery(params: Record<string, string | number | undefined>) {
@@ -942,29 +930,32 @@ function buildQuery(params: Record<string, string | number | undefined>) {
   return text ? `?${text}` : ''
 }
 
-export function getHandoffOptions(signal?: AbortSignal) {
-  return handoffRequest<HandoffOptions>('/options', { signal })
+export function getHandoffOptions(token: string, signal?: AbortSignal) {
+  return handoffRequest<HandoffOptions>(token, '/options', { signal })
 }
 
-export function getHandoffReadyBins(siteId?: number, signal?: AbortSignal) {
-  return handoffRequest<HandoffReadyBinsResponse>(`/bins${buildQuery({ site_id: siteId })}`, {
-    signal,
-  })
+// Staff only reach their own site; managers their assigned sites, or all of them without one.
+export function getHandoffReadyBins(token: string, siteId?: number, signal?: AbortSignal) {
+  return handoffRequest<HandoffReadyBinsResponse>(
+    token,
+    `/bins${buildQuery({ site_id: siteId })}`,
+    { signal },
+  )
 }
 
 export function getHandoffs(
+  token: string,
   filters: { site_id?: number; status?: HandoffRecordStatus } = {},
   signal?: AbortSignal,
 ) {
-  return handoffRequest<HandoffListResponse>(buildQuery(filters), { signal })
+  return handoffRequest<HandoffListResponse>(token, buildQuery(filters), { signal })
 }
 
 /** Creates a handoff and records its pickup evidence in one step, when the driver arrives. */
-export function recordHandoffAtPickup(payload: HandoffPickupRequest) {
+export function recordHandoffAtPickup(token: string, payload: HandoffPickupRequest) {
   const form = new FormData()
   form.set('bin_id', String(payload.bin_id))
   form.set('contractor_id', String(payload.contractor_id))
-  form.set('actor_id', String(payload.actor_id))
   form.set('picked_up_at', payload.picked_up_at)
   form.set('staff_weight_kg', String(payload.staff_weight_kg))
   form.set('driver_weight_kg', String(payload.driver_weight_kg))
@@ -972,7 +963,7 @@ export function recordHandoffAtPickup(payload: HandoffPickupRequest) {
   form.set('vehicle_plate_number', payload.vehicle_plate_number)
   form.set('scale_photo', payload.scale_photo)
   // No Content-Type header: the browser adds the multipart boundary itself.
-  return handoffRequest<HandoffRecord>('/pickups', { method: 'POST', body: form })
+  return handoffRequest<HandoffRecord>(token, '/pickups', { method: 'POST', body: form })
 }
 
 /** Makes an uploaded scale photo path usable when VITE_API_URL points at another origin. */
@@ -981,10 +972,23 @@ export function handoffPhotoUrl(url: string | null) {
   return url.startsWith('/api/') ? `${API_URL}${url}` : url
 }
 
-export function approveHandoff(handoffId: number, actorId: number) {
-  return postHandoffJson<HandoffRecord>(`/${handoffId}/approve`, { actor_id: actorId })
+/** Whether a scale photo is stored by the API, and so needs the signed-in user's token. */
+export function isApiPhotoUrl(url: string) {
+  return url.startsWith('/api/')
 }
 
-export function closeHandoff(handoffId: number, actorId: number) {
-  return postHandoffJson<HandoffRecord>(`/${handoffId}/close`, { actor_id: actorId })
+/** Downloads an API-stored scale photo with the token; a link can't send the header itself. */
+export async function fetchHandoffPhoto(token: string, url: string): Promise<Blob> {
+  const response = await signedFetch(token, `${API_URL}${url}`)
+  if (!response.ok) throw await toApiError(response)
+  return response.blob()
+}
+
+// The server records the signed-in manager or administrator.
+export function approveHandoff(token: string, handoffId: number) {
+  return handoffRequest<HandoffRecord>(token, `/${handoffId}/approve`, { method: 'POST' })
+}
+
+export function closeHandoff(token: string, handoffId: number) {
+  return handoffRequest<HandoffRecord>(token, `/${handoffId}/close`, { method: 'POST' })
 }

@@ -14,6 +14,7 @@ import {
   validatePickupEvidence,
   type PickupEvidenceErrors,
 } from '@/lib/handoff-evidence'
+import { useSession } from '@/lib/auth-session'
 import { currentPickupSlot, formatPackedAt, toOffsetIso } from '@/lib/handoff-format'
 import { errorMessage } from '@/lib/use-api-resource'
 import type { HandoffContractorOption, HandoffReadyBin, HandoffRecord } from '@/types/handoff'
@@ -23,7 +24,6 @@ type ScheduleErrors = { contractor?: string; date?: string; time?: string }
 interface NewHandoffRecordDialogProps {
   bin: HandoffReadyBin
   contractors: readonly HandoffContractorOption[]
-  actorId: number
   onClose: () => void
   onRecorded: (record: HandoffRecord) => void
   onCloseAutoFocus?: (event: Event) => void
@@ -33,11 +33,12 @@ interface NewHandoffRecordDialogProps {
 export function NewHandoffRecordDialog({
   bin,
   contractors,
-  actorId,
   onClose,
   onRecorded,
   onCloseAutoFocus,
 }: NewHandoffRecordDialogProps) {
+  // The API records the signed-in staff member as the one who handed the bin over.
+  const token = useSession()?.token ?? ''
   const [slot] = useState(() => currentPickupSlot())
   const [contractorId, setContractorId] = useState('')
   const [date, setDate] = useState(slot.date)
@@ -65,10 +66,9 @@ export function NewHandoffRecordDialog({
     setPending(true)
     setRequestError(null)
     try {
-      const record = await recordHandoffAtPickup({
+      const record = await recordHandoffAtPickup(token, {
         bin_id: bin.id,
         contractor_id: Number(contractorId),
-        actor_id: actorId,
         picked_up_at: toOffsetIso(date, time),
         ...toPickupPayload(evidence),
       })

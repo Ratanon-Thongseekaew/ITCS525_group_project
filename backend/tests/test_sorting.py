@@ -501,7 +501,7 @@ def test_sealing_a_recycling_bin_makes_it_ready_for_handoff(ctx) -> None:
     assert data["notes"].endswith("Full, moved to backroom")
     assert ctx.active_bins()["recycle_bin"] is None
 
-    handoff_bins = ctx.client.get(f"/api/handoffs/bins?site_id={ctx.bkk_site_id}").json()["bins"]
+    handoff_bins = ctx.read("/api/handoffs/bins", site_id=ctx.bkk_site_id).json()["bins"]
     assert recycle_bin["id"] in {b["id"] for b in handoff_bins}
 
 

@@ -616,17 +616,9 @@ class HandoffContractorOption(BaseModel):
     name: str
 
 
-class HandoffActorOption(BaseModel):
-    id: int
-    username: str
-    role: UserRole
-    site_ids: list[int]
-
-
 class HandoffOptionsResponse(BaseModel):
     sites: list[HandoffSiteOption]
     contractors: list[HandoffContractorOption]
-    actors: list[HandoffActorOption]
 
 
 class HandoffReadyBin(BaseModel):
@@ -641,10 +633,6 @@ class HandoffReadyBin(BaseModel):
 
 class HandoffReadyBinsResponse(BaseModel):
     bins: list[HandoffReadyBin]
-
-
-class HandoffActorRequest(BaseModel):
-    actor_id: int = Field(gt=0)
 
 
 class HandoffOutcomes(BaseModel):
