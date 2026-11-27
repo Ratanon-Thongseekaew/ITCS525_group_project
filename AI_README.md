@@ -189,8 +189,9 @@ React Router owns client-side navigation. The current frontend routes are:
   `/api/auth/me` on page load. A `401` on any signed-in request in `api.ts` ends
   the session, which returns the user to `/login`.
 - `RequireAuth` guards every workspace and print route: signed-out visitors go to
-  `/login`, a temporary password only opens `/change-password`, and only admins
-  open `/admin/*`. `/design-system` is public.
+  `/login`, a temporary password only opens `/change-password`, and staff and managers
+  only open their own workspace (`/staff/*`, `/manager/*`; another one redirects to
+  `getWorkspaceHomeUrl`). Admins open any workspace. `/design-system` is public.
 - The guards are navigation only; the API enforces access itself. Every request function in
   `api.ts` takes the session `token` as its first argument and sends it as
   `Authorization: Bearer <token>` (`authFetch`, or `signedFetch` for calls that keep their own

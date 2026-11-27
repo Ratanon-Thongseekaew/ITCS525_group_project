@@ -273,7 +273,9 @@ Sign in with the email and password of an account in your local database (see
 database, so accounts are not shared through git. Managers land on `/manager`,
 staff on `/staff/sorting`, and admins on `/admin/users`.
 
-Workspace pages require sign-in, and only admins can open `/admin/*`. An account
+Workspace pages require sign-in. Staff and managers only open their own
+workspace (`/staff/*`, `/manager/*`); opening another one returns them to their
+home page. Admins can open any workspace. An account
 with a temporary password must set a new one first. The session lasts until the
 tab closes or the token expires (`ACCESS_TOKEN_MINUTES`, default 60). Every
 page sends the token with its API requests, and an expired token returns to the

@@ -113,6 +113,32 @@ test('lets an admin open other workspaces', () => {
   expect(screen.getByRole('heading', { name: 'Your work, clearly organized.' })).toBeInTheDocument()
 })
 
+test('lets an admin open manager pages too', () => {
+  signInAs('admin')
+  mockApi()
+  renderRoute('/manager/sorting')
+
+  expect(screen.getByRole('heading', { name: 'Sorting Overview' })).toBeInTheDocument()
+})
+
+test('sends staff from a manager page to their own workspace', () => {
+  signInAs('staff')
+  mockApi()
+  renderRoute('/manager/compliance-dashboard')
+
+  expect(screen.getByRole('heading', { name: 'Your work, clearly organized.' })).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'Compliance Dashboard' })).not.toBeInTheDocument()
+})
+
+test('sends a manager from a staff page to their own workspace', () => {
+  signInAs('manager')
+  mockApi()
+  renderRoute('/staff/direct-resale')
+
+  expect(screen.getByRole('heading', { name: 'Compliance Dashboard' })).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'Direct Resale Bins' })).not.toBeInTheDocument()
+})
+
 test('requires a new password before anything else, then opens the workspace', async () => {
   signInAs('staff', { must_change_password: true })
   mockApi({ '/api/auth/change-password': () => json(staff) })
