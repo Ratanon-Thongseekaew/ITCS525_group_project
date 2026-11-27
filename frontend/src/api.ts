@@ -713,9 +713,8 @@ export interface ContractorReportFileParseResponse {
   rows: ContractorReportParsedRow[]
 }
 
+// The server records the signed-in manager or admin as the uploader.
 export interface ContractorReportImportRequest {
-  /** The signed-in manager or admin, recorded as the uploader. */
-  actor_id: number
   contractor_id: number
   report_month: string
   source_filename: string
@@ -763,14 +762,14 @@ async function parseImportApiResponse<T>(response: Response): Promise<T> {
   return (await response.json()) as T
 }
 
-export async function fetchContractorReportOptions(): Promise<ContractorReportOptionsResponse> {
-  const response = await fetch(`${IMPORT_API_BASE}/api/contractor-reports/options`)
+export async function fetchContractorReportOptions(
+  token: string,
+): Promise<ContractorReportOptionsResponse> {
+  const response = await signedFetch(token, `${IMPORT_API_BASE}/api/contractor-reports/options`)
   return parseImportApiResponse<ContractorReportOptionsResponse>(response)
 }
 
 export interface ContractorReportFileParseInput {
-  /** The signed-in manager or admin. */
-  actorId: number
   filename: string
   contentBase64: string
   /** Rows not picked up in this month (YYYY-MM) are rejected. */
@@ -780,13 +779,14 @@ export interface ContractorReportFileParseInput {
 }
 
 export async function parseAndValidateContractorFile(
+  token: string,
   input: ContractorReportFileParseInput,
 ): Promise<ContractorReportFileParseResponse> {
-  const response = await fetch(`${IMPORT_API_BASE}/api/contractor-reports/parse-and-validate`, {
+  const url = `${IMPORT_API_BASE}/api/contractor-reports/parse-and-validate`
+  const response = await signedFetch(token, url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      actor_id: input.actorId,
       filename: input.filename,
       content_base64: input.contentBase64,
       report_month: input.reportMonth,
@@ -797,9 +797,10 @@ export async function parseAndValidateContractorFile(
 }
 
 export async function importContractorReport(
+  token: string,
   payload: ContractorReportImportRequest,
 ): Promise<ContractorReportImportResponse> {
-  const response = await fetch(`${IMPORT_API_BASE}/api/contractor-reports/import`, {
+  const response = await signedFetch(token, `${IMPORT_API_BASE}/api/contractor-reports/import`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

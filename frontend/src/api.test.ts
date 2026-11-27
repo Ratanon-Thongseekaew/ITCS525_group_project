@@ -72,7 +72,7 @@ test('ends the session when a signed-in dashboard request is rejected', async ()
   setUnauthorizedHandler(() => {})
 })
 
-test('sends the actor, month and contractor with a contractor report file', async () => {
+test('sends the token, month and contractor with a contractor report file', async () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
     new Response(JSON.stringify({ filename: 'report.csv', rows: [] }), {
       status: 200,
@@ -80,8 +80,7 @@ test('sends the actor, month and contractor with a contractor report file', asyn
     }),
   )
 
-  await parseAndValidateContractorFile({
-    actorId: 4,
+  await parseAndValidateContractorFile('test-token', {
     filename: 'report.csv',
     contentBase64: 'YmluX2lk',
     reportMonth: '2026-10',
@@ -90,9 +89,8 @@ test('sends the actor, month and contractor with a contractor report file', asyn
 
   expect(fetchMock).toHaveBeenCalledWith('/api/contractor-reports/parse-and-validate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
     body: JSON.stringify({
-      actor_id: 4,
       filename: 'report.csv',
       content_base64: 'YmluX2lk',
       report_month: '2026-10',

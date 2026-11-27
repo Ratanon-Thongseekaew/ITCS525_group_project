@@ -537,7 +537,6 @@ ReportMonth = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}(-\d{2})?$"
 
 
 class ContractorReportFileParseRequest(BaseModel):
-    actor_id: int = Field(gt=0)  # A manager or admin, until the API reads the login token
     filename: str = Field(min_length=1, max_length=255)
     content_base64: str = Field(min_length=1)
     # When given, rows not picked up in this month, or by this contractor, are rejected.
@@ -572,7 +571,6 @@ class ContractorReportImportRowRequest(BaseModel):
 
 
 class ContractorReportImportRequest(BaseModel):
-    actor_id: int = Field(gt=0)  # A manager or admin, recorded as the uploader
     contractor_id: int = Field(gt=0)
     report_month: ReportMonth
     source_filename: str = Field(min_length=1, max_length=255)

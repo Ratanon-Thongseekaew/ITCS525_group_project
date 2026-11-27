@@ -70,8 +70,10 @@ function toReportRow(row: ContractorReportParsedRow): ReportRow {
 
 export default function ContractorReportImport() {
   const navigate = useNavigate()
-  const user = useSession()?.user
-  const actorId = user && user.role !== 'staff' ? user.id : null
+  const session = useSession()
+  const token = session?.token ?? ''
+  // The API records the signed-in manager or admin as the uploader.
+  const canImport = Boolean(session && session.user.role !== 'staff')
 
   const [step, setStep] = useState<number>(1)
   const [isProcessing, setIsProcessing] = useState<boolean>(false)
@@ -90,7 +92,7 @@ export default function ContractorReportImport() {
 
   useEffect(() => {
     let active = true
-    fetchContractorReportOptions()
+    fetchContractorReportOptions(token)
       .then((data) => {
         if (!active) return
         setContractors(data.contractors)
@@ -102,7 +104,7 @@ export default function ContractorReportImport() {
     return () => {
       active = false
     }
-  }, [])
+  }, [token])
 
   const contractorName = contractors.find((item) => item.id === contractorId)?.name ?? ''
 
@@ -111,7 +113,7 @@ export default function ContractorReportImport() {
       setValidationError(`The file is larger than ${MAX_FILE_MB} MB.`)
       return
     }
-    if (actorId === null) {
+    if (!canImport) {
       setValidationError('Sign in as a manager or admin to import reports.')
       return
     }
@@ -124,8 +126,7 @@ export default function ContractorReportImport() {
     setSaveError(null)
     try {
       // The month and contractor are checked against each bin's handoff.
-      const parsed = await parseAndValidateContractorFile({
-        actorId,
+      const parsed = await parseAndValidateContractorFile(token, {
         filename: file.name,
         contentBase64: await fileToBase64(file),
         reportMonth,
@@ -146,7 +147,7 @@ export default function ContractorReportImport() {
   const savableRows = validatedRows.filter((row) => row.status !== 'Error')
 
   const handleSaveRecords = async () => {
-    if (actorId === null || contractorId === null) return
+    if (!canImport || contractorId === null) return
     if (savableRows.length === 0) {
       setSaveError('No valid rows available to import. Please fix the rejected rows first.')
       return
@@ -154,8 +155,7 @@ export default function ContractorReportImport() {
     setIsSaving(true)
     setSaveError(null)
     try {
-      const response = await importContractorReport({
-        actor_id: actorId,
+      const response = await importContractorReport(token, {
         contractor_id: contractorId,
         report_month: reportMonth,
         source_filename: uploadedFileName ?? `report_${reportMonth}.csv`,
