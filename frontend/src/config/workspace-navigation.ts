@@ -6,6 +6,7 @@ import {
   Shirt,
   UserPlus,
   FileSpreadsheet,
+  Truck,
   type LucideIcon,
 } from 'lucide-react'
 import type { WorkspaceRole } from '@/types/workspace'
@@ -58,6 +59,12 @@ export const workspaceNavigation: readonly WorkspaceNavigationItem[] = [
     label: 'User Management',
     segment: 'users',
     icon: UserPlus,
+    roles: ['admin'],
+  },
+  {
+    label: 'Contractor Management',
+    segment: 'contractors',
+    icon: Truck,
     roles: ['admin'],
   },
   {

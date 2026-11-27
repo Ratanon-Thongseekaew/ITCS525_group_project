@@ -105,6 +105,73 @@ class UserWithTemporaryPassword(UserRead):
     temporary_password: str | None = None
 
 
+def _clean_contact_text(value: object) -> object:
+    """Trim text and treat blank text as "not set". Other types are left for Pydantic to reject."""
+    if isinstance(value, str):
+        return value.strip() or None
+    return value
+
+
+def _clean_contact_email(value: object) -> object:
+    cleaned = _clean_contact_text(value)
+    return cleaned.lower() if isinstance(cleaned, str) else cleaned
+
+
+ContractorName = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)
+]
+
+
+class ContractorRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    contact_name: str | None = None
+    # Not EmailStr: saved contractors, such as seeded ones, must always be readable.
+    contact_email: str | None = None
+    is_active: bool
+
+
+class ContractorCreate(BaseModel):
+    name: ContractorName
+    contact_name: str | None = Field(default=None, max_length=120)
+    contact_email: EmailStr | None = Field(default=None, max_length=255)
+
+    @field_validator("contact_name", mode="before")
+    @classmethod
+    def normalize_contact_name(cls, value: object) -> object:
+        return _clean_contact_text(value)
+
+    @field_validator("contact_email", mode="before")
+    @classmethod
+    def normalize_contact_email(cls, value: object) -> object:
+        return _clean_contact_email(value)
+
+
+class ContractorUpdate(BaseModel):
+    """Partial update; omitted fields are left unchanged.
+
+    Sending ``contact_name: null`` or ``contact_email: null`` clears that field. ``name: null``
+    and ``is_active: null`` are ignored.
+    """
+
+    name: ContractorName | None = None
+    contact_name: str | None = Field(default=None, max_length=120)
+    contact_email: EmailStr | None = Field(default=None, max_length=255)
+    is_active: bool | None = None
+
+    @field_validator("contact_name", mode="before")
+    @classmethod
+    def normalize_contact_name(cls, value: object) -> object:
+        return _clean_contact_text(value)
+
+    @field_validator("contact_email", mode="before")
+    @classmethod
+    def normalize_contact_email(cls, value: object) -> object:
+        return _clean_contact_email(value)
+
+
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=254)
     password: str = Field(min_length=1, max_length=128, repr=False)
@@ -397,6 +464,8 @@ class DashboardSiteOption(BaseModel):
 class DashboardContractorOption(BaseModel):
     id: int
     name: str
+    # Inactive contractors stay in the filter so their past data can still be viewed.
+    is_active: bool
 
 
 class DashboardFilterOptions(BaseModel):

@@ -133,6 +133,8 @@ export interface DashboardSiteOption {
 export interface DashboardContractorOption {
   id: number
   name: string
+  /** Inactive contractors stay in the filter so their past data can still be viewed. */
+  is_active: boolean
 }
 
 export interface DashboardSummary {
@@ -583,6 +585,50 @@ export function updateUser(token: string, userId: number, payload: UserUpdateReq
 
 export async function deleteUser(token: string, userId: number): Promise<void> {
   await authFetch(token, `/users/${userId}`, 'DELETE')
+}
+
+export interface Contractor {
+  id: number
+  name: string
+  contact_name: string | null
+  contact_email: string | null
+  is_active: boolean
+}
+
+// Names are unique regardless of letter case. Blank contact details are saved as null.
+export interface ContractorCreateRequest {
+  name: string
+  contact_name?: string | null
+  contact_email?: string | null
+}
+
+// Omitted fields are unchanged. `contact_name: null` and `contact_email: null` clear them.
+export interface ContractorUpdateRequest {
+  name?: string
+  contact_name?: string | null
+  contact_email?: string | null
+  is_active?: boolean
+}
+
+export function listContractors(token: string) {
+  return authRequest<Contractor[]>(token, '/contractors')
+}
+
+export function createContractor(token: string, payload: ContractorCreateRequest) {
+  return authRequest<Contractor>(token, '/contractors', 'POST', payload)
+}
+
+export function updateContractor(
+  token: string,
+  contractorId: number,
+  payload: ContractorUpdateRequest,
+) {
+  return authRequest<Contractor>(token, `/contractors/${contractorId}`, 'PATCH', payload)
+}
+
+// Fails with a `409` when the contractor has handoffs or reports; deactivate it instead.
+export async function deleteContractor(token: string, contractorId: number): Promise<void> {
+  await authFetch(token, `/contractors/${contractorId}`, 'DELETE')
 }
 
 export interface ContractorReportOptionItem {

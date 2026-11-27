@@ -1,48 +1,17 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Plus } from 'lucide-react'
 import { ApiError, type Store, type UserCreateRequest, type UserRole } from '@/api'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { FormField } from './FormField'
+import { emailPattern, errorProps } from './form-errors'
 import { OptionSelect } from './OptionSelect'
 import { roleOptions, storeOptions } from './user-options'
 
 type FieldName = 'name' | 'email' | 'role' | 'store'
 type Errors = Partial<Record<FieldName, string>>
-
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-interface FormFieldProps {
-  id: string
-  label: string
-  error?: string
-  children: ReactNode
-}
-
-function FormField({ id, label, error, children }: FormFieldProps) {
-  return (
-    <Field data-invalid={Boolean(error) || undefined} className="gap-2">
-      <FieldLabel htmlFor={id} className="text-xs font-normal text-muted-foreground">
-        {label}
-      </FieldLabel>
-      {children}
-      {error ? (
-        <FieldError id={`${id}-error`} className="text-xs">
-          {error}
-        </FieldError>
-      ) : null}
-    </Field>
-  )
-}
-
-function errorProps(id: string, error?: string) {
-  return {
-    'aria-invalid': Boolean(error) || undefined,
-    'aria-describedby': error ? `${id}-error` : undefined,
-  }
-}
 
 interface AddUserFormProps {
   sites: Store[]
