@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, func, select
 
+from app import sorting
 from app.database import get_session
 from app.main import app
 from app.models import (
@@ -125,7 +126,16 @@ class SortingTestContext:
 
 
 @pytest.fixture
-def ctx(demo_engine) -> Iterator[SortingTestContext]:
+def ctx(demo_engine, monkeypatch) -> Iterator[SortingTestContext]:
+    # The demo seed is dated up to 17:00 Bangkok time on its pinned day, so on that very day the
+    # real clock can still be earlier than the newest seeded garment, and "newest first" checks
+    # would depend on the time of day. Garments are stamped no earlier than the seed's newest one.
+    with Session(demo_engine) as session:
+        seed_end = session.exec(select(func.max(GarmentRecord.received_at))).one()
+    floor = seed_end.replace(tzinfo=UTC) + timedelta(minutes=1)
+    clock = sorting.utc_now
+    monkeypatch.setattr(sorting, "utc_now", lambda: max(clock(), floor))
+
     def override_session():
         with Session(demo_engine) as session:
             yield session
