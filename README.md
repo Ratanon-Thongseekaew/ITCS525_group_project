@@ -425,6 +425,29 @@ Inside `compose.prod.yaml`, three containers share a private Docker network:
 `uploads_data`), and `mysql` (MySQL 8.4 with persistent `mysql_data`, not
 exposed on the host).
 
+```mermaid
+flowchart LR
+  User["Browser (HTTPS 443 / HTTP 80)"] -->|"sslip.io DNS -> EC2 Elastic IP"| SG["EC2 Security Group (Ports 80 & 443 only)"]
+
+  subgraph EC2["AWS EC2 (t3.micro, ap-southeast-2, SSM-managed)"]
+    SG --> Caddy["frontend container (Caddy 2 + Vite dist)"]
+    Caddy -->|"Let's Encrypt TLS + ALLOWED_CLIENT_CIDRS"| Static["Static SPA (/srv)"]
+    Caddy -->|"/api/*, /docs*, /openapi.json"| Backend["backend container (FastAPI + Uvicorn :8000)"]
+    Backend -->|"SQLModel / PyMySQL"| DB["mysql container (MySQL 8.4 :3306)"]
+    DB --- VolDB["mysql_data volume (EBS)"]
+    Backend --- VolUp["uploads_data volume (EBS)"]
+    Caddy --- VolTLS["caddy_data volume (EBS)"]
+    Env[".env on host (/opt/textile-track/.env)"] -.-> Caddy
+    Env -.-> Backend
+    Env -.-> DB
+  end
+
+  Dev["Push or Merge to main"] --> GHA["GitHub Actions (.github/workflows/deploy.yaml)"]
+  GHA -->|"Push linux/amd64 images"| ECR["Amazon ECR (frontend & backend repos)"]
+  GHA -->|"scripts/deploy-ec2.mjs via AWS SSM"| EC2
+  ECR -.->|"docker compose pull (EC2 IAM Role)"| EC2
+```
+
 The backend CI job uses a disposable MySQL service with non-production
 credentials and applies all migrations before running checks. Database tests
 also exercise a clean migration and adoption of the previously merged `users`
