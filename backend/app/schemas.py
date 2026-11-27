@@ -235,6 +235,12 @@ class BinCreateRequest(BaseModel):
     notes: ShortText | None = None
 
 
+class SortingSite(BaseModel):
+    id: int
+    code: str
+    name: str
+
+
 class BinCloseRequest(BaseModel):
     actor_id: int = Field(gt=0)
     notes: ShortText | None = None

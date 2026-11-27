@@ -293,9 +293,9 @@ and their combined total.
 Staff sort each garment as **Good / Reusable** (resale bin), **Worn / Recyclable** (recycle
 bin) or **Repair / Upcycle** (repair bin) from `/staff/sorting`, with one tap or the keys
 R/1, C/2 and U/3. Garments and bins are stored in MySQL and belong to the staff member's site.
-Choose a **Staff member** on the page (this stands in for login, like the handoff pages).
-Staff only see and change their own site. Managers use `/manager/sorting`, a read-only
-overview where they switch between their sites or view all of them combined.
+Sorting uses the signed-in staff account and its store (a staff account needs a store assigned).
+Staff only see and change their own site. Managers and administrators use `/manager/sorting`, a
+read-only overview where they switch between their sites or view all of them combined.
 
 Garments go to the oldest open bin of their type that still has room; a new bin is created
 when none has room. Sealing a recycling bin makes it **ready**, so it appears under
@@ -327,8 +327,8 @@ details in one step. The pickup date and time default to now and can't be in
 the future. The form warns before saving when the weights differ by more than
 3%, and the page's **Awaiting Approval** card counts disputed handoffs.
 **Handoff Records** lists the site's handoffs with their evidence, status, and
-outcomes. These pages are a staff workplace: a **Staff member** picker stands
-in for login, lists only staff accounts, and shows that person's site. Managers
+outcomes. These pages are a staff workplace: they use the signed-in staff account
+and its store, and show that account. Managers
 approve disputed handoffs and close handoffs through the API endpoints below. A
 handoff (and its bin) can only be closed after the contractor's outcome report
 for it has been saved;
