@@ -137,6 +137,16 @@ describe('SortingOverviewPage', () => {
     expect(api.getSortingStats).toHaveBeenCalledWith(20, 2)
   })
 
+  test('shows the site, without a choice, for a manager of one site', async () => {
+    vi.mocked(api.getSortingSites).mockResolvedValue([sites[0]])
+    render(<SortingOverviewPage />)
+    await screen.findAllByText('BIN-RC-007')
+
+    const account = screen.getByRole('group', { name: 'Signed-in account and site' })
+    expect(account).toHaveTextContent('SiteBangkok Flagship')
+    expect(screen.queryByRole('combobox', { name: /Site/i })).not.toBeInTheDocument()
+  })
+
   test('is for managers and administrators: staff see a message and nothing loads', async () => {
     window.sessionStorage.clear()
     signInAs('staff')

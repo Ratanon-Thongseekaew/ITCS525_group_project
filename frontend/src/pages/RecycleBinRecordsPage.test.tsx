@@ -199,10 +199,23 @@ test('filters by review stage', async () => {
   expect(screen.getByText('No handoff records match this filter.')).toBeInTheDocument()
 })
 
-test('loads one site when a site is chosen', async () => {
+test('shows the site, without a choice, for a manager of one site', async () => {
   renderPage()
   await waitForRecords()
 
+  expect(screen.queryByLabelText('Site:')).not.toBeInTheDocument()
+  expect(screen.getByText('Site:').parentElement).toHaveTextContent('Site:Bangkok Sorting Center')
+})
+
+test('loads one site when a manager of several sites chooses it', async () => {
+  vi.mocked(getSortingSites).mockResolvedValue([
+    { id: 1, code: 'DASH-BKK', name: 'Bangkok Sorting Center' },
+    { id: 9, code: 'DASH-CNX', name: 'Chiang Mai Sorting Center' },
+  ])
+  renderPage()
+  await waitForRecords()
+
+  expect(screen.getByLabelText('Site:')).toHaveTextContent('All sites')
   chooseOption('Site:', 'Bangkok Sorting Center')
   await waitForRecords()
   expect(getHandoffs).toHaveBeenLastCalledWith({ site_id: 1 }, expect.any(AbortSignal))

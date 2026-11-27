@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { UserRound } from 'lucide-react'
+import { MapPin, UserRound } from 'lucide-react'
 import { getHandoffs, getSortingSites, type HandoffListResponse } from '@/api'
 import { EmptyState } from '@/components/EmptyState'
 import { FilterSelect, type FilterOption } from '@/components/FilterSelect'
@@ -102,15 +102,23 @@ export function RecycleBinRecordsPage() {
           bordered
           actions={
             <div className="flex flex-wrap gap-x-4 gap-y-2">
-              <FilterSelect
-                label="Site:"
-                labelMode="inline"
-                value={siteChoice}
-                items={siteOptions}
-                onValueChange={setSiteChoice}
-                disabled={sites === null}
-                className="min-w-[120px]"
-              />
+              {/* A manager of a single site only sees that site, so it is shown rather than picked. */}
+              {sites && sites.length > 1 ? (
+                <FilterSelect
+                  label="Site:"
+                  labelMode="inline"
+                  value={siteChoice}
+                  items={siteOptions}
+                  onValueChange={setSiteChoice}
+                  className="min-w-[120px]"
+                />
+              ) : sites?.length === 1 ? (
+                <p className="flex h-9 min-w-0 items-center gap-1.5 text-sm">
+                  <MapPin className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <span className="text-muted-foreground">Site:</span>
+                  <span className="truncate font-medium">{sites[0].name}</span>
+                </p>
+              ) : null}
               <FilterSelect
                 label="Filtered by:"
                 labelMode="inline"
