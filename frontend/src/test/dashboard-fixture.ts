@@ -53,7 +53,7 @@ export const dashboardFixture: DashboardResponse = {
   ],
   filters: {
     sites: [{ id: 1, code: 'DASH-BKK', name: 'Bangkok Sorting Center' }],
-    contractors: [{ id: 1, name: 'Dashboard GreenLoop Recycling' }],
+    contractors: [{ id: 1, name: 'Dashboard GreenLoop Recycling', is_active: true }],
     available_years: [2026],
   },
 }

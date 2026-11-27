@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 
 from app.database import get_session
 from app.main import app
-from app.models import ContractorReport, ContractorReportEntry, Handoff, Site
+from app.models import Contractor, ContractorReport, ContractorReportEntry, Handoff, Site
 
 # The demo seed is pinned to 2026-11-27: October is last month (BKK and KKC reports pending),
 # Q3 is fully reported, and November has one disputed handoff awaiting approval.
@@ -135,3 +135,26 @@ def test_dashboard_rejects_invalid_filters(dashboard_client: TestClient) -> None
     assert dashboard_client.get("/api/dashboard?year=2026&month=13").status_code == 422
     assert dashboard_client.get("/api/dashboard?year=2026&site_id=9999").status_code == 404
     assert dashboard_client.get("/api/dashboard?year=2026&contractor_id=9999").status_code == 404
+
+
+def test_dashboard_keeps_inactive_contractors_in_the_filter(
+    dashboard_client, dashboard_engine
+) -> None:
+    with Session(dashboard_engine) as session:
+        contractor = session.exec(select(Contractor).order_by(Contractor.name)).first()
+        contractor.is_active = False
+        session.add(contractor)
+        session.commit()
+        inactive_id = contractor.id
+
+    options = dashboard_client.get("/api/dashboard", params={"year": 2026}).json()["filters"][
+        "contractors"
+    ]
+    assert len(options) == 3
+    # Active contractors come first; the inactive one is still listed and flagged.
+    assert options[-1] == {"id": inactive_id, "name": contractor.name, "is_active": False}
+    assert all(option["is_active"] for option in options[:-1])
+    filtered = dashboard_client.get(
+        "/api/dashboard", params={"year": 2026, "contractor_id": inactive_id}
+    )
+    assert filtered.status_code == 200

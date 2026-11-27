@@ -169,6 +169,8 @@ React Router owns client-side navigation. The current frontend routes are:
   close through the API until a manager screen exists.
 - `/admin/users` renders user management on `/api/users` and `/api/sites`. It is the admin
   landing page after login; `/admin` has no route.
+- `/admin/contractors` renders contractor management on `/api/contractors`: add, edit,
+  deactivate or reactivate, and delete contractors that have no history.
 - Unknown frontend paths render the local not-found page.
 
 ### Frontend authentication
@@ -198,7 +200,7 @@ local shadcn sidebar primitives. `frontend/src/config/workspace-navigation.ts`
 owns labels, icons, route segments, and the `roles` arrays used to filter menu
 visibility. Managers see Compliance Dashboard, Sorting Overview, Resale Bin Records,
 and Import Data. Staff see Sorting, Direct Resale, and Recycle Bin Handoff. Admins
-see Compliance Dashboard and User Management. `AppLayout` derives the workspace shown from the URL, for presentation only, and shows the signed-in user's name.
+see Compliance Dashboard, User Management, and Contractor Management. `AppLayout` derives the workspace shown from the URL, for presentation only, and shows the signed-in user's name.
 
 The backend root path `/` intentionally has no route and returns `404`. Swagger
 UI is available at `/docs`. On application startup, the FastAPI lifespan handler
@@ -315,6 +317,17 @@ effect immediately. Create the first administrator with
   administrator removes the store; to staff requires exactly one store. Sending
   `full_name: null` clears the name.
 - `GET /api/sites` (admin only) returns active stores `[{id, code, name}]` by name.
+- `GET /api/contractors`, `POST /api/contractors`, `GET /api/contractors/{id}`,
+  `PATCH /api/contractors/{id}` and `DELETE /api/contractors/{id}` require the `admin`
+  role. They return `ContractorRead` (`{id, name, contact_name, contact_email,
+is_active}`); the list includes inactive contractors, ordered by name. `POST` takes
+  `{name, contact_name?, contact_email?}`; `PATCH` takes any of those plus `is_active`.
+  Names are trimmed and unique regardless of letter case (`409`). Blank contact details
+  are saved as `null`, emails are lowercased, and sending `contact_name: null` or
+  `contact_email: null` on `PATCH` clears it. Retire a contractor by setting
+  `is_active: false`: inactive contractors drop out of the handoff and report-import
+  options but keep their history. `DELETE` only works for a contractor with no handoffs
+  or contractor reports; otherwise it returns `409` and leaves it in place.
 
 ### `GET /api/dashboard` (Feature 6 and change requests)
 
@@ -323,6 +336,9 @@ metrics, all six contractor disposition categories, annual monthly trends,
 pending/disputed handoffs, and the available site/contractor/year filter
 options. Query parameters support `frequency` (`monthly`, `quarterly`, or
 `annual`), `year`, `month`, `quarter`, `site_id`, and `contractor_id`.
+The contractor filter options include inactive contractors (listed after the active ones,
+each with `is_active`), so their past data can still be filtered; the page labels them
+"(inactive)".
 
 Authentication is now implemented (see above), but the site selector is still a
 demo filter rather than an authorization boundary. Enforce manager memberships in
@@ -690,7 +706,10 @@ text-resale-foreground`) for the sorting quick-tap buttons, and the soft pair
     and `input-group`.
   - Admin-only: `admin/AddUserForm`, `admin/TemporaryPasswordDialog`, `admin/EditUserDialog`,
     `admin/DeleteUserDialog` (on `ConfirmDialog`), `admin/UserIdentity` (avatar,
-    name, email), and `admin/UserStatusBadge`.
+    name, email), and `admin/UserStatusBadge`. Contractor Management uses
+    `admin/AddContractorForm`, `admin/EditContractorDialog`, and
+    `admin/ContractorStatusBadge`. Both add forms share `admin/FormField` and the
+    `errorProps` and `emailPattern` helpers in `admin/form-errors.ts`.
   - Contractor import: `ContractorReportImport` holds the wizard state and
     renders `contractor-import/ImportUploadStep`, `ImportReviewStep`, and
     `ImportResultStep`.

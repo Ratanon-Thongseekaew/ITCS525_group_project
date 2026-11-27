@@ -19,6 +19,7 @@ import { NewBinsForHandoffPage } from './pages/NewBinsForHandoffPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PotentialRevenueAnalysisPage } from './pages/PotentialRevenueAnalysisPage'
 import { ProcessedBinsRecordPage } from './pages/ProcessedBinsRecordPage'
+import { ContractorManagementPage } from './pages/ContractorManagementPage'
 import { UserManagementPage } from './pages/UserManagementPage'
 import ContractorReportImportPage from './pages/ContractorReportImportPage'
 
@@ -68,6 +69,7 @@ function App() {
             />
             <Route path="admin/compliance-dashboard" element={<ComplianceDashboardPage />} />
             <Route path="admin/users" element={<UserManagementPage />} />
+            <Route path="admin/contractors" element={<ContractorManagementPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Route>

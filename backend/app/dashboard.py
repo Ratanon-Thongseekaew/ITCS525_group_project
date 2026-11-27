@@ -90,8 +90,9 @@ def _to_float(value: Decimal | int | float | None) -> float:
 
 def _filter_options(session: Session, selected_year: int) -> DashboardFilterOptions:
     sites = session.exec(select(Site).where(Site.is_active).order_by(Site.name)).all()
+    # Inactive contractors stay listed (after the active ones) so their history can be filtered.
     contractors = session.exec(
-        select(Contractor).where(Contractor.is_active).order_by(Contractor.name)
+        select(Contractor).order_by(Contractor.is_active.desc(), Contractor.name)
     ).all()
 
     years = {selected_year}
@@ -103,7 +104,9 @@ def _filter_options(session: Session, selected_year: int) -> DashboardFilterOpti
     return DashboardFilterOptions(
         sites=[DashboardSiteOption(id=site.id, code=site.code, name=site.name) for site in sites],
         contractors=[
-            DashboardContractorOption(id=contractor.id, name=contractor.name)
+            DashboardContractorOption(
+                id=contractor.id, name=contractor.name, is_active=contractor.is_active
+            )
             for contractor in contractors
         ],
         available_years=sorted(years, reverse=True),

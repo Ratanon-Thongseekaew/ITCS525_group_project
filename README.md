@@ -198,6 +198,11 @@ creates five stores and their accounts.
 The Add and Edit user forms require a store for staff and managers (the API
 still lets a manager have none).
 
+Administrators manage recycling contractors on `/admin/contractors`, backed by
+`/api/contractors` (administrator only). Deactivate a contractor to stop it being
+chosen for new pickups and report imports while keeping its history. Delete only
+works for a contractor with no handoffs or reports.
+
 Administrators add people without choosing a password: `POST /api/users` with no
 `password` makes the server generate a temporary one and return it **once** in
 `temporary_password`. Give it to the person securely; it cannot be shown again.
@@ -240,6 +245,7 @@ Vite proxies `/api` requests to FastAPI during development. To point the fronten
 | `/staff/recycle-bin-handoff`                                   | Record a handoff when the driver arrives            |
 | `/staff/recycle-bin-handoff/handoff-records`                   | Handoff records and their status                    |
 | `/admin/users`                                                 | User management, the admin landing page             |
+| `/admin/contractors`                                           | Contractor management                               |
 | `/design-system`                                               | Design system reference (unlisted)                  |
 
 Sign in with the email and password of an account in your local database (see

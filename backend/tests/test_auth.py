@@ -151,6 +151,19 @@ def test_user_routes_require_an_administrator(env):
         assert http.delete("/api/users/1", headers=headers).status_code == 403
 
 
+def test_contractor_routes_require_an_administrator(env):
+    http, engine = env
+    add_user(engine, "manager@example.com", UserRole.MANAGER)
+    add_user(engine, "staff@example.com", UserRole.STAFF)
+    assert http.get("/api/contractors").status_code == 401
+    for username in ("manager@example.com", "staff@example.com"):
+        headers = headers_for(http, username)
+        assert http.get("/api/contractors", headers=headers).status_code == 403
+        assert http.post("/api/contractors", headers=headers, json={}).status_code == 403
+        assert http.patch("/api/contractors/1", headers=headers, json={}).status_code == 403
+        assert http.delete("/api/contractors/1", headers=headers).status_code == 403
+
+
 def test_admin_user_lifecycle(env):
     http, engine = env
     add_user(engine, "boss@example.com", UserRole.ADMIN)

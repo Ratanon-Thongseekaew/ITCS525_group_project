@@ -83,6 +83,29 @@ test('loads and renders dashboard data from the API', async () => {
   )
 })
 
+test('labels inactive contractors in the filter and counts only active ones', async () => {
+  // Opening a Radix Select needs these; ResizeObserver is stubbed in beforeEach.
+  Element.prototype.hasPointerCapture = () => false
+  Element.prototype.scrollIntoView = () => {}
+  getDashboardMock.mockResolvedValue({
+    ...dashboardFixture,
+    filters: {
+      ...dashboardFixture.filters,
+      contractors: [
+        ...dashboardFixture.filters.contractors,
+        { id: 2, name: 'Retired Fibre Co.', is_active: false },
+      ],
+    },
+  })
+
+  renderDashboard()
+
+  expect(await screen.findByText('1 active contractors')).toBeInTheDocument()
+  fireEvent.keyDown(screen.getByRole('combobox', { name: 'Contractor' }), { key: 'Enter' })
+  expect(screen.getByRole('option', { name: 'Retired Fibre Co. (inactive)' })).toBeInTheDocument()
+  expect(screen.getByRole('option', { name: 'Dashboard GreenLoop Recycling' })).toBeInTheDocument()
+})
+
 test('exports the same quarterly EPR figures to CSV and the printable page', async () => {
   getDashboardMock.mockResolvedValue(dashboardFixture)
   getEprReportMock.mockImplementation(async (year, quarter) => ({

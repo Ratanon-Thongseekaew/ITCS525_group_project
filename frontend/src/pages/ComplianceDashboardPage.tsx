@@ -99,7 +99,7 @@ function buildSummaryMetrics(data: DashboardResponse): SummaryMetric[] {
     {
       label: 'Recycling Bins Collected',
       value: numberFormatter.format(summary.recycling_bins_collected),
-      detail: `${data.filters.contractors.length} active contractors`,
+      detail: `${data.filters.contractors.filter((contractor) => contractor.is_active).length} active contractors`,
     },
     {
       label: 'Recycling Bins Reported',
@@ -384,7 +384,7 @@ export function ComplianceDashboardPage() {
     { value: 'all', label: 'All Contractors' },
     ...(dashboard?.filters.contractors.map((contractor) => ({
       value: String(contractor.id),
-      label: contractor.name,
+      label: contractor.is_active ? contractor.name : `${contractor.name} (inactive)`,
     })) ?? []),
   ]
 
