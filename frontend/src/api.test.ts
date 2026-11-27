@@ -14,6 +14,8 @@ import {
   parseAndValidateContractorFile,
   recordHandoffAtPickup,
   resetUserPassword,
+  setUnauthorizedHandler,
+  submitEprQuarter,
 } from './api'
 
 afterEach(() => {
@@ -28,7 +30,7 @@ test('sends dashboard filters as query parameters', async () => {
     }),
   )
 
-  await getDashboard({
+  await getDashboard('test-token', {
     frequency: 'quarterly',
     year: 2026,
     quarter: 4,
@@ -38,8 +40,36 @@ test('sends dashboard filters as query parameters', async () => {
 
   expect(fetchMock).toHaveBeenCalledWith(
     '/api/dashboard?frequency=quarterly&year=2026&quarter=4&site_id=2&contractor_id=3',
-    { signal: undefined },
+    { signal: undefined, headers: { Authorization: 'Bearer test-token' } },
   )
+})
+
+test('submits an EPR quarter with the token and no actor in the body', async () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    new Response(JSON.stringify({ status: 'submitted' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  )
+
+  await submitEprQuarter('test-token', 2026, 4)
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/epr/quarterly-report/submit?year=2026&quarter=4', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer test-token' },
+  })
+})
+
+test('ends the session when a signed-in dashboard request is rejected', async () => {
+  const handler = vi.fn()
+  setUnauthorizedHandler(handler)
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 401 }))
+
+  await expect(
+    getDashboard('expired-token', { frequency: 'monthly', year: 2026 }),
+  ).rejects.toThrow()
+  expect(handler).toHaveBeenCalledWith('expired-token')
+  setUnauthorizedHandler(() => {})
 })
 
 test('sends the actor, month and contractor with a contractor report file', async () => {

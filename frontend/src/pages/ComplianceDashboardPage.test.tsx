@@ -12,6 +12,7 @@ import {
   submitEprQuarter,
   type EprManagement,
 } from '@/api'
+import { signInAs } from '@/test/auth'
 import { dashboardFixture } from '@/test/dashboard-fixture'
 
 import { ComplianceDashboardPage } from './ComplianceDashboardPage'
@@ -38,6 +39,7 @@ class ResizeObserverMock {
 }
 
 beforeEach(() => {
+  signInAs('manager')
   Object.defineProperty(globalThis, 'ResizeObserver', {
     writable: true,
     value: ResizeObserverMock,
@@ -46,6 +48,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  window.sessionStorage.clear()
   vi.clearAllMocks()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
@@ -78,6 +81,7 @@ test('loads and renders dashboard data from the API', async () => {
     'All Contractors',
   )
   expect(getDashboardMock).toHaveBeenCalledWith(
+    'test-token',
     expect.objectContaining({ frequency: 'monthly' }),
     expect.any(AbortSignal),
   )
@@ -108,7 +112,7 @@ test('labels inactive contractors in the filter and counts only active ones', as
 
 test('exports the same quarterly EPR figures to CSV and the printable page', async () => {
   getDashboardMock.mockResolvedValue(dashboardFixture)
-  getEprReportMock.mockImplementation(async (year, quarter) => ({
+  getEprReportMock.mockImplementation(async (_token, year, quarter) => ({
     year,
     quarter,
     source: 'live_records',
@@ -200,7 +204,6 @@ test('requires confirmation before submitting and locking the selected EPR quart
     adjusted_report: null,
     adjustments: [],
     sites: [],
-    actors: [{ id: 7, label: 'Manager' }],
     report: {
       year: 2026,
       quarter: 4,
@@ -235,9 +238,9 @@ test('requires confirmation before submitting and locking the selected EPR quart
   fireEvent.click(screen.getByRole('button', { name: 'Manage EPR Report' }))
   const panel = within(screen.getByRole('dialog', { name: 'Manage EPR Report' }))
   const submit = await panel.findByRole('button', { name: 'Submit & Lock' })
-  expect(submit).toBeDisabled()
-  fireEvent.keyDown(panel.getByRole('combobox', { name: 'Recorded by' }), { key: 'ArrowDown' })
-  fireEvent.click(await screen.findByRole('option', { name: 'Manager' }))
+  // The signed-in manager is recorded, so there is no account to choose.
+  expect(panel.queryByRole('combobox', { name: 'Recorded by' })).not.toBeInTheDocument()
+  expect(submit).toBeEnabled()
   fireEvent.click(submit)
   expect(panel.getByText(/The original totals will be locked/)).toBeInTheDocument()
   expect(submitEprQuarter).not.toHaveBeenCalled()
@@ -246,6 +249,7 @@ test('requires confirmation before submitting and locking the selected EPR quart
   expect(await panel.findByText('Original submitted totals')).toBeInTheDocument()
   expect(panel.getByText('No adjustments recorded.')).toBeInTheDocument()
   expect(panel.getByRole('button', { name: 'Add Adjustment' })).toBeEnabled()
-  const [year, quarter] = vi.mocked(getEprManagement).mock.calls[0]
-  expect(submitEprQuarter).toHaveBeenCalledWith(year, quarter, 7)
+  const [token, year, quarter] = vi.mocked(getEprManagement).mock.calls[0]
+  expect(token).toBe('test-token')
+  expect(submitEprQuarter).toHaveBeenCalledWith('test-token', year, quarter)
 })

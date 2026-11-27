@@ -4,6 +4,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+from auth_helpers import bearer
 from fastapi.testclient import TestClient
 from sqlmodel import Session, func, select
 
@@ -262,7 +263,9 @@ def test_pickup_over_three_percent_is_disputed_and_shown_on_dashboard(
     assert record["requires_manager_approval"] is True
     assert record["weight_variance_percent"] == 3.25
     dashboard = ctx.client.get(
-        "/api/dashboard", params={"frequency": "monthly", "year": 2026, "month": 11}
+        "/api/dashboard",
+        params={"frequency": "monthly", "year": 2026, "month": 11},
+        headers=bearer(ctx.user_id("admin@example.com")),
     ).json()
     disputed = [item for item in dashboard["exceptions"] if item["handoff_id"] == record["id"]]
     assert disputed[0]["status"] == "disputed"

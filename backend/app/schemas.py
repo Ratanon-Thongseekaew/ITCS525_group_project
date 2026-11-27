@@ -386,10 +386,6 @@ class EprAdjustmentMetric(StrEnum):
     INCINERATED_ENERGY_RECOVERY = "incinerated_energy_recovery"
 
 
-class EprSubmitRequest(BaseModel):
-    actor_id: int = Field(gt=0)
-
-
 class EprAdjustmentLine(BaseModel):
     metric: EprAdjustmentMetric
     weight_delta_kg: Decimal = Field(max_digits=14, decimal_places=3)
@@ -402,7 +398,7 @@ class EprAdjustmentLine(BaseModel):
         return value
 
 
-class EprAdjustmentRequest(EprSubmitRequest):
+class EprAdjustmentRequest(BaseModel):
     site_id: int = Field(gt=0)
     expected_latest_adjustment_id: int | None = Field(ge=1)
     effective_date: date
@@ -441,7 +437,6 @@ class EprManagementResponse(BaseModel):
     adjusted_report: EprQuarterReportResponse | None
     adjustments: list[EprAdjustmentResponse]
     sites: list[EprManagementOption]
-    actors: list[EprManagementOption]
 
 
 class DashboardFrequency(StrEnum):

@@ -4,7 +4,6 @@ import pytest
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 
-from app.security import create_access_token
 from seed import DEFAULT_DEMO_PASSWORD, seed_demo_data
 
 # The demo seed's dates are relative to "today"; tests pin it so results don't drift.
@@ -48,16 +47,3 @@ def demo_engine(demo_template):
         target.close()
     yield engine
     engine.dispose()
-
-
-def bearer(user_id: int) -> dict[str, str]:
-    """An ``Authorization`` header for this user, the same token a real login returns."""
-
-    return {"Authorization": f"Bearer {create_access_token(user_id)}"}
-
-
-def sign_in(client, user_id: int):
-    """Send every later request from ``client`` as this user."""
-
-    client.headers.update(bearer(user_id))
-    return client

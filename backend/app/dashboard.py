@@ -9,6 +9,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 
+from .auth import require_management
 from .database import get_session
 from .models import (
     Bin,
@@ -34,7 +35,10 @@ from .schemas import (
     DashboardSummary,
 )
 
-router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+# The compliance dashboard is for managers and administrators.
+router = APIRouter(
+    prefix="/api/dashboard", tags=["dashboard"], dependencies=[Depends(require_management)]
+)
 SessionDependency = Annotated[Session, Depends(get_session)]
 
 DISPOSITIONS = tuple(DispositionCategory)

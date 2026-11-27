@@ -233,7 +233,6 @@ export type EprAdjustmentMetric =
   | 'incinerated_energy_recovery'
 
 export interface EprAdjustmentRequest {
-  actor_id: number
   site_id: number
   expected_latest_adjustment_id: number | null
   effective_date: string
@@ -263,7 +262,6 @@ export interface EprManagement {
     recorded_by: string
   }[]
   sites: EprManagementOption[]
-  actors: EprManagementOption[]
 }
 
 const API_URL = import.meta.env.VITE_API_URL ?? ''
@@ -318,6 +316,7 @@ export async function getResaleStoreSummary(
 }
 
 export async function getDashboard(
+  token: string,
   filters: DashboardFilters,
   signal?: AbortSignal,
 ): Promise<DashboardResponse> {
@@ -338,40 +337,61 @@ export async function getDashboard(
     params.set('contractor_id', String(filters.contractor_id))
   }
 
-  const response = await fetch(`${API_URL}/api/dashboard?${params.toString()}`, { signal })
+  const response = await signedFetch(token, `${API_URL}/api/dashboard?${params.toString()}`, {
+    signal,
+  })
   return handleResponse<DashboardResponse>(response)
 }
 
 export async function getEprQuarterReport(
+  token: string,
   year: number,
   quarter: number,
   signal?: AbortSignal,
 ): Promise<EprQuarterReport> {
   const params = new URLSearchParams({ year: String(year), quarter: String(quarter) })
-  const response = await fetch(`${API_URL}/api/epr/quarterly-report?${params}`, { signal })
+  const response = await signedFetch(token, `${API_URL}/api/epr/quarterly-report?${params}`, {
+    signal,
+  })
   return handleResponse<EprQuarterReport>(response)
 }
 
-export async function getEprManagement(year: number, quarter: number, signal?: AbortSignal) {
+export async function getEprManagement(
+  token: string,
+  year: number,
+  quarter: number,
+  signal?: AbortSignal,
+) {
   const params = new URLSearchParams({ year: String(year), quarter: String(quarter) })
-  const response = await fetch(`${API_URL}/api/epr/quarterly-report/management?${params}`, {
-    signal,
-  })
+  const response = await signedFetch(
+    token,
+    `${API_URL}/api/epr/quarterly-report/management?${params}`,
+    { signal },
+  )
   return handleResponse<EprManagement>(response)
 }
 
+// The server records the signed-in user as the submitter or the adjustment's author.
 async function writeEprManagement(
+  token: string,
   action: 'submit' | 'adjustments',
   year: number,
   quarter: number,
-  payload: { actor_id: number } | EprAdjustmentRequest,
+  payload?: EprAdjustmentRequest,
 ) {
   const params = new URLSearchParams({ year: String(year), quarter: String(quarter) })
-  const response = await fetch(`${API_URL}/api/epr/quarterly-report/${action}?${params}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
+  const url = `${API_URL}/api/epr/quarterly-report/${action}?${params}`
+  const response = await signedFetch(
+    token,
+    url,
+    payload === undefined
+      ? { method: 'POST' }
+      : {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+  )
   if (!response.ok) {
     const error = (await response.json().catch(() => null)) as { detail?: unknown } | null
     if (typeof error?.detail === 'string') throw new Error(error.detail)
@@ -380,12 +400,17 @@ async function writeEprManagement(
   return handleResponse<EprManagement>(response)
 }
 
-export function submitEprQuarter(year: number, quarter: number, actorId: number) {
-  return writeEprManagement('submit', year, quarter, { actor_id: actorId })
+export function submitEprQuarter(token: string, year: number, quarter: number) {
+  return writeEprManagement(token, 'submit', year, quarter)
 }
 
-export function saveEprAdjustment(year: number, quarter: number, payload: EprAdjustmentRequest) {
-  return writeEprManagement('adjustments', year, quarter, payload)
+export function saveEprAdjustment(
+  token: string,
+  year: number,
+  quarter: number,
+  payload: EprAdjustmentRequest,
+) {
+  return writeEprManagement(token, 'adjustments', year, quarter, payload)
 }
 
 // Sorting reads are per site and writes name the acting staff member (`actor_id`) until the
@@ -522,6 +547,21 @@ let onUnauthorized: (token: string) => void = () => {}
 /** Called with the rejected token whenever a signed-in request gets a `401`. */
 export function setUnauthorizedHandler(handler: (token: string) => void) {
   onUnauthorized = handler
+}
+
+type SignedRequestInit = Omit<RequestInit, 'headers'> & { headers?: Record<string, string> }
+
+/**
+ * `fetch` with the signed-in user's token. Callers keep their own error handling; a `401` also
+ * ends the session, the same as `authFetch`.
+ */
+async function signedFetch(token: string, url: string, init: SignedRequestInit = {}) {
+  const response = await fetch(url, {
+    ...init,
+    headers: { ...init.headers, Authorization: `Bearer ${token}` },
+  })
+  if (response.status === 401) onUnauthorized(token)
+  return response
 }
 
 async function authFetch(token: string, path: string, method = 'GET', body?: unknown) {

@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 import pytest
+from auth_helpers import bearer, demo_user_id, sign_in
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -26,7 +27,7 @@ def dashboard_engine(demo_engine):
 @pytest.fixture
 def dashboard_client(dashboard_engine):
     with TestClient(app) as client:
-        yield client
+        yield sign_in(client, demo_user_id(dashboard_engine, "admin@example.com"))
 
 
 def october_weights(engine, site_code: str | None = None) -> tuple[float, float]:
@@ -158,3 +159,19 @@ def test_dashboard_keeps_inactive_contractors_in_the_filter(
         "/api/dashboard", params={"year": 2026, "contractor_id": inactive_id}
     )
     assert filtered.status_code == 200
+
+
+def test_dashboard_requires_a_manager_or_admin_token(dashboard_client, dashboard_engine) -> None:
+    params = {"frequency": "monthly", "year": 2026, "month": 10}
+    staff = bearer(demo_user_id(dashboard_engine, "staff.bkk@example.com"))
+    manager = bearer(demo_user_id(dashboard_engine, "manager.bkk@example.com"))
+
+    anonymous = dashboard_client.get("/api/dashboard", params=params, headers={"Authorization": ""})
+    assert anonymous.status_code == 401
+    assert dashboard_client.get("/api/dashboard", params=params, headers=staff).status_code == 403
+
+    # A manager sees the same dashboard, with every store in the filter, as an administrator.
+    as_manager = dashboard_client.get("/api/dashboard", params=params, headers=manager)
+    as_admin = dashboard_client.get("/api/dashboard", params=params)
+    assert as_manager.status_code == 200
+    assert as_manager.json() == as_admin.json()
