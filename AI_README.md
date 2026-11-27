@@ -403,13 +403,42 @@ and `seed_direct_resale_data` (four closed, unprocessed Bangkok resale bins). Th
 seed is idempotent and adds no garment records; `seed_development_data` runs all four and is
 what `main()` and the tests use.
 
-### `POST /api/contractor-reports/validate` (EPR change request)
+### Contractor monthly outcome report import (`/api/contractor-reports`)
 
-Validates monthly contractor rows before import. Each row carries six separate
-disposition weights, including distinct `landfilled_kg` and
-`incinerated_energy_recovery_kg` fields. The endpoint rejects rows whose
-categorized total exceeds received weight and returns the remaining
-`uncategorized_weight_kg` explicitly.
+A report file (CSV or XLSX, up to 5 MB and 2,000 rows) comes from one
+contractor and covers one month. Its columns are `bin_id`, `received_kg`, and
+the six disposition categories (`upcycled_kg`, `fibre_to_fibre_kg`,
+`downcycled_kg`, `exported_kg`, `landfilled_kg`,
+`incinerated_energy_recovery_kg`); a file missing any of them is rejected, and
+other columns (such as the old `contractor` and `store_weight_kg`) are ignored.
+XLSX cells are placed by their cell reference, so blank cells don't shift
+columns.
+
+Rows are checked as follows (row numbers are spreadsheet lines, header = 1):
+
+- Weights must be plain non-negative numbers below one billion kg; a blank
+  category is 0, a blank `received_kg` or an unreadable value rejects the row.
+- The categories may add up to less than `received_kg` (flagged as
+  uncategorized) but not more (rejected).
+- `bin_id` must be an existing bin whose handoff the selected contractor picked
+  up in the report month. Bin codes are unique across sites, so the bin decides
+  the row's sorting center. A November report can be imported later, subject to
+  the EPR quarter lock.
+- Each bin appears once per file: the first row counts, later repeats are
+  rejected.
+- Flagged, still saveable: an uncategorized remainder, received weight more than
+  3% off the handoff's `staff_weight_kg`, and a bin that already has outcomes
+  (saving replaces them; re-imports update and never duplicate).
+
+`GET /options` lists active contractors. `POST /parse-and-validate` takes
+`actor_id` (a manager or admin), the file as base64, `report_month`, and
+`contractor_id`, and returns each row's `site_name`, `staff_weight_kg`, `status`,
+`errors`, and `warnings`. `POST /import` takes `actor_id`, `contractor_id`,
+`report_month`, and the rows, checks them again (`422` and nothing saved if any
+fails), records the actor as uploader, stores `received_kg` on the handoff
+(`contractor_received_kg`), and saves one report per site, returned as `reports`.
+A concurrent save of the same report returns `409`. The import page defaults the
+month to the previous month; its built-in sample can be reviewed but not saved.
 
 Keep response models in `backend/app/schemas.py`. When an API response changes,
 update all of the following together:

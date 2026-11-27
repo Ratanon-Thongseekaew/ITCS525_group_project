@@ -1,4 +1,4 @@
-import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2 } from 'lucide-react'
+import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Download } from 'lucide-react'
 
 import { StatCard } from '@/components/StatCard'
 import { TableCard } from '@/components/TableCard'
@@ -37,49 +37,56 @@ function ValidationStatus({ row }: { row: ReportRow }) {
   }
 
   const isError = row.status === 'Error'
+  const messages = isError ? row.errors : row.warnings
   return (
     <div className="flex flex-col gap-1">
       <Badge variant={isError ? 'destructive' : 'warning'}>
         {isError ? <AlertCircle aria-hidden="true" /> : <AlertTriangle aria-hidden="true" />}
         {isError ? 'Rejected' : 'Flagged'}
       </Badge>
-      <p
-        className={cn(
-          'text-xs font-medium whitespace-normal',
-          isError ? 'text-destructive' : 'text-muted-foreground',
-        )}
-      >
-        {row.errorDetail}
-      </p>
+      {messages.map((message) => (
+        <p
+          key={message}
+          className={cn(
+            'text-xs font-medium whitespace-normal',
+            isError ? 'text-destructive' : 'text-muted-foreground',
+          )}
+        >
+          {message}
+        </p>
+      ))}
     </div>
   )
 }
 
 interface ImportReviewStepProps {
   rows: readonly ReportRow[]
-  siteLabel: string
   reportMonth: string
   fileName: string | null
   contractor: string
+  /** The built-in sample: shown for review only, never saved. */
+  isSample: boolean
   savableCount: number
   isSaving: boolean
   error: string | null
   onBack: () => void
   onSave: () => void
+  onDownloadRejected: () => void
 }
 
 /** Step 2: review each row's weights and validation result before saving. */
 export function ImportReviewStep({
   rows,
-  siteLabel,
   reportMonth,
   fileName,
   contractor,
+  isSample,
   savableCount,
   isSaving,
   error,
   onBack,
   onSave,
+  onDownloadRejected,
 }: ImportReviewStepProps) {
   const verifiedCount = rows.filter((row) => row.status === 'Verified').length
   const warningCount = rows.filter((row) => row.status === 'Warning').length
@@ -91,14 +98,19 @@ export function ImportReviewStep({
         <div>
           <h3 className="text-sm font-semibold text-foreground">Review Report Validation</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Site: <span className="font-semibold text-foreground">{siteLabel}</span> | Month:{' '}
-            <span className="font-semibold text-foreground">{reportMonth}</span> | File:{' '}
+            Month: <span className="font-semibold text-foreground">{reportMonth}</span> | File:{' '}
             <span className="font-semibold text-foreground">{fileName}</span> ({contractor})
           </p>
         </div>
-        <Badge variant="success" className="self-start sm:self-auto">
-          Ready for Review
-        </Badge>
+        {isSample ? (
+          <Badge variant="info" className="self-start sm:self-auto">
+            Sample: review only
+          </Badge>
+        ) : (
+          <Badge variant="success" className="self-start sm:self-auto">
+            Ready for Review
+          </Badge>
+        )}
       </div>
 
       <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -114,8 +126,8 @@ export function ImportReviewStep({
             <TableRow>
               <TableHead className="px-3">Row</TableHead>
               <TableHead className="px-3">Bin ID</TableHead>
-              <TableHead className="px-3">Contractor</TableHead>
-              <TableHead className="px-3">Store Wt</TableHead>
+              <TableHead className="px-3">Site</TableHead>
+              <TableHead className="px-3">Staff Wt</TableHead>
               <TableHead className="px-3">Reported Wt</TableHead>
               {OUTCOME_COLUMNS.map(({ category }) => (
                 <TableHead key={category} className={cn('px-3', OUTCOME_TONES[category].tint)}>
@@ -147,13 +159,15 @@ export function ImportReviewStep({
                 <TableCell
                   className={cn(
                     'px-3 font-mono font-semibold',
-                    row.binId === 'MISSING_ID' && 'text-destructive underline',
+                    !row.binId && 'text-destructive underline',
                   )}
                 >
-                  {row.binId}
+                  {row.binId || 'Missing'}
                 </TableCell>
-                <TableCell className="px-3 font-medium">{row.contractor}</TableCell>
-                <TableCell className="px-3 text-muted-foreground">{row.storeWeight} kg</TableCell>
+                <TableCell className="px-3 text-muted-foreground">{row.siteName ?? '—'}</TableCell>
+                <TableCell className="px-3 text-muted-foreground">
+                  {row.staffWeight === null ? '—' : `${row.staffWeight} kg`}
+                </TableCell>
                 <TableCell className="px-3 font-semibold">{row.reportedWeight} kg</TableCell>
                 {OUTCOME_COLUMNS.map(({ category, value }) => (
                   <TableCell
@@ -183,21 +197,28 @@ export function ImportReviewStep({
       ) : null}
 
       <div className="flex flex-col items-center justify-between gap-3 pt-3 sm:flex-row">
-        <Button
-          type="button"
-          variant="outline"
-          className="self-start sm:self-auto"
-          onClick={onBack}
-        >
-          Back to Upload
-        </Button>
+        <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+          <Button type="button" variant="outline" onClick={onBack}>
+            Back to Upload
+          </Button>
+          {errorCount > 0 ? (
+            <Button type="button" variant="outline" onClick={onDownloadRejected}>
+              <Download aria-hidden="true" />
+              Download Rejected Rows
+            </Button>
+          ) : null}
+        </div>
         <Button
           type="button"
           className="w-full sm:w-auto"
-          disabled={isSaving || savableCount === 0}
+          disabled={isSample || isSaving || savableCount === 0}
           onClick={onSave}
         >
-          {isSaving ? 'Saving to Database...' : `Save Valid Records (${savableCount})`}
+          {isSample
+            ? 'Samples Are Not Saved'
+            : isSaving
+              ? 'Saving...'
+              : `Save Valid Records (${savableCount})`}
           <ArrowRight aria-hidden="true" />
         </Button>
       </div>

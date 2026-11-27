@@ -317,12 +317,15 @@ in `backend/uploads/` (ignored by Git); set `UPLOAD_DIR` in `.env` to change it.
 Demo bins and handoffs for these pages come from the same seed command as the
 dashboard data (`python backend/seed.py`; see Database above).
 
-## Contractor report validation
+## Contractor report import
 
-`POST /api/contractor-reports/validate` checks monthly report rows before they
-are saved. `Landfilled` and `Incinerated with energy recovery` remain separate
+Managers import each contractor's monthly outcome report (CSV or XLSX) on the
+import page. `POST /api/contractor-reports/parse-and-validate` checks every row
+before anything is saved, and `POST /api/contractor-reports/import` saves the
+valid rows. `Landfilled` and `Incinerated with energy recovery` remain separate
 categories, categorized weight cannot exceed received weight, and any remaining
-weight is returned as `uncategorized_weight_kg` for review on the import page.
+weight is shown as uncategorized. Each row's bin must have been picked up in the
+report month by the selected contractor. See `AI_README.md` for the full rules.
 
 ## Frontend UI
 
