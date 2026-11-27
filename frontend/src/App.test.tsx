@@ -379,9 +379,10 @@ const staffNavigation = [
 
 const managerNavigation = [
   'Compliance Dashboard',
+  'Import Data',
   'Sorting Overview',
   'Resale Bin Records',
-  'Import Data',
+  'Recycle Bin Records',
 ]
 
 test('shows the Figma navigation in the staff sidebar', () => {
@@ -391,7 +392,7 @@ test('shows the Figma navigation in the staff sidebar', () => {
   for (const [label, href] of staffNavigation) {
     expect(screen.getByRole('link', { name: label })).toHaveAttribute('href', href)
   }
-  for (const label of [...managerNavigation, 'Recycle Bin Records', 'User Management']) {
+  for (const label of [...managerNavigation, 'User Management']) {
     expect(screen.queryByRole('link', { name: label })).not.toBeInTheDocument()
   }
 })
@@ -408,7 +409,9 @@ test.each([
   for (const [label] of staffNavigation) {
     expect(screen.queryByRole('link', { name: label })).not.toBeInTheDocument()
   }
-  expect(screen.queryByRole('link', { name: 'Recycle Bin Records' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('link', { name: 'Recycle Bin Records' }) !== null).toBe(
+    !hasUserManagement,
+  )
   expect(screen.queryByRole('link', { name: 'User Management' }) !== null).toBe(hasUserManagement)
 })
 

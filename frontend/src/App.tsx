@@ -16,6 +16,7 @@ import { HandoffRecordsPage } from './pages/HandoffRecordsPage'
 import { LoginPage } from './pages/LoginPage'
 import { ManagerPage } from './pages/ManagerPage'
 import { NewBinsForHandoffPage } from './pages/NewBinsForHandoffPage'
+import { RecycleBinRecordsPage } from './pages/RecycleBinRecordsPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PotentialRevenueAnalysisPage } from './pages/PotentialRevenueAnalysisPage'
 import { ProcessedBinsRecordPage } from './pages/ProcessedBinsRecordPage'
@@ -42,16 +43,7 @@ function App() {
             <Route path="manager/import" element={<ContractorReportImportPage />} />
             <Route path="manager/sorting" element={<SortingOverviewPage />} />
             <Route path="manager/resale-bins" element={<ResaleBinRecords />} />
-            {/* <Route
-              path="manager/recycle-bins"
-              element={
-                <WorkspaceFeaturePlaceholderPage
-                  role="manager"
-                  title="Recycle Bin Records"
-                  description="Track recycling bins, contractor pickups, and reported outcomes."
-                />
-              }
-            /> */}
+            <Route path="manager/recycle-bins" element={<RecycleBinRecordsPage />} />
             <Route path="staff/sorting" element={<GarmentSortingWorkspace />} />
             <Route path="staff/direct-resale" element={<DirectResalePage />} />
             <Route

@@ -4,6 +4,8 @@ import type {
   HandoffRecordFilter,
   HandoffRecordSort,
   HandoffRecordStatus,
+  HandoffReviewFilter,
+  HandoffReviewStage,
 } from '@/types/handoff'
 import type { BadgeVariant } from '@/lib/bin-type-tones'
 
@@ -79,5 +81,34 @@ export function getVisibleRecords(
 ) {
   return records
     .filter((record) => filter === 'all' || getDisplayStatus(record) === filter)
+    .sort(recordComparators[sort])
+}
+
+/** A manager approves a handoff only while it is Disputed (pickup weights differ by over 3%). */
+export function canApprove(record: HandoffRecord) {
+  return record.status === 'disputed'
+}
+
+/**
+ * A manager closes a picked-up or approved handoff once its contractor outcome report is in.
+ * Same rules as POST /api/handoffs/{id}/close.
+ */
+export function canClose(record: HandoffRecord) {
+  return (record.status === 'picked_up' || record.status === 'approved') && record.outcomes !== null
+}
+
+export function getReviewStage(record: HandoffRecord): HandoffReviewStage {
+  if (record.status === 'disputed') return 'needs_approval'
+  if (!record.outcomes) return 'awaiting_report'
+  return record.status === 'closed' ? 'closed' : 'ready_to_close'
+}
+
+export function getVisibleReviewRecords(
+  records: readonly HandoffRecord[],
+  filter: HandoffReviewFilter,
+  sort: HandoffRecordSort,
+) {
+  return records
+    .filter((record) => filter === 'all' || getReviewStage(record) === filter)
     .sort(recordComparators[sort])
 }

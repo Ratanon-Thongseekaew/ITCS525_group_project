@@ -165,8 +165,14 @@ React Router owns client-side navigation. The current frontend routes are:
 - `/staff/recycle-bin-handoff/handoff-records` renders Handoff Records from
   `GET /api/handoffs`, read-only. Both handoff pages are staff-only: they use the
   signed-in staff account (`useSession`) as the actor and its store as the site,
-  and load nothing for a non-staff account or a staff account without a store. There is no manager handoff route; managers approve and
-  close through the API until a manager screen exists.
+  and load nothing for a non-staff account or a staff account without a store.
+- `/manager/recycle-bins` renders Recycle Bin Records, the manager's handoff
+  review. It lists handoffs from `GET /api/handoffs` for the signed-in manager's
+  sites (`GET /api/sorting/sites`), filtered by review stage (Needs Approval,
+  Awaiting Report, Ready to Close, Closed). Disputed handoffs get an Approve button
+  (`POST /api/handoffs/{id}/approve`); picked-up or approved handoffs get Close
+  Handoff (`POST /api/handoffs/{id}/close`), enabled once outcomes are reported.
+  Both confirm first and send the signed-in user as `actor_id`.
 - `/admin/users` renders user management on `/api/users` and `/api/sites`. It is the admin
   landing page after login; `/admin` has no route.
 - `/admin/contractors` renders contractor management on `/api/contractors`: add, edit,
@@ -198,8 +204,8 @@ sidebar logo both use: `/manager`, `/staff/sorting`, and `/admin/users`.
 Authenticated workspace screens share `WorkspaceSidebar`, composed from the
 local shadcn sidebar primitives. `frontend/src/config/workspace-navigation.ts`
 owns labels, icons, route segments, and the `roles` arrays used to filter menu
-visibility. Managers see Compliance Dashboard, Sorting Overview, Resale Bin Records,
-and Import Data. Staff see Sorting, Direct Resale, and Recycle Bin Handoff. Admins
+visibility. Managers see Compliance Dashboard, Import Data, Sorting Overview, Resale Bin Records,
+and Recycle Bin Records. Staff see Sorting, Direct Resale, and Recycle Bin Handoff. Admins
 see Compliance Dashboard, User Management, and Contractor Management. `AppLayout` derives the workspace shown from the URL, for presentation only, and shows the signed-in user's name.
 
 The backend root path `/` intentionally has no route and returns `404`. Swagger
