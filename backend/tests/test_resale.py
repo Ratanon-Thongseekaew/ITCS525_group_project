@@ -1,80 +1,81 @@
+from collections import defaultdict
 from datetime import UTC, datetime
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session, SQLModel, create_engine, select
-from sqlmodel.pool import StaticPool
+from sqlmodel import Session, select
 
 from app.database import get_session
 from app.main import app
-from app.models import Bin, BinStatus, BinType
-from seed import seed_dashboard_data, seed_direct_resale_data
+from app.models import Bin, BinStatus, BinType, Site
 
 
 @pytest.fixture
-def resale_client():
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        seed_dashboard_data(session)
-
+def resale_client(demo_engine):
     def override_session():
-        with Session(engine) as session:
+        with Session(demo_engine) as session:
             yield session
 
     app.dependency_overrides[get_session] = override_session
     try:
         with TestClient(app) as client:
-            client.engine = engine
+            client.engine = demo_engine
             yield client
     finally:
         app.dependency_overrides.clear()
-        engine.dispose()
 
 
 def test_resale_summary_returns_top_sites_from_persisted_bins(
     resale_client: TestClient,
 ) -> None:
+    with Session(resale_client.engine) as session:
+        totals: dict[str, Decimal] = defaultdict(Decimal)
+        for bin_record, site in session.exec(
+            select(Bin, Site)
+            .join(Site, Site.id == Bin.site_id)
+            .where(Bin.bin_type == BinType.RESALE, Bin.actual_value.is_not(None))
+        ).all():
+            totals[site.name] += bin_record.actual_value
+    expected = sorted(totals.items(), key=lambda item: (-item[1], item[0]))[:5]
+
     response = resale_client.get("/api/resale-bins/summary")
 
     assert response.status_code == 200
     stores = response.json()["stores"]
-    assert [store["name"] for store in stores] == [
-        "Chiang Mai Sorting Center",
-        "Bangkok Sorting Center",
-    ]
-    assert [store["actual_value"] for store in stores] == [95530.0, 85690.0]
+    assert [store["name"] for store in stores] == [name for name, _total in expected]
+    assert [store["actual_value"] for store in stores] == [float(total) for _n, total in expected]
+    assert stores[0]["name"] == "Bangkok Sorting Center"  # the busiest store
 
 
-def test_direct_resale_demo_seed_is_idempotent(resale_client: TestClient) -> None:
+def test_demo_seed_has_unprocessed_resale_bins_for_direct_resale(
+    resale_client: TestClient,
+) -> None:
     with Session(resale_client.engine) as session:
-        seed_direct_resale_data(session)
-        seed_direct_resale_data(session)
-        bins = session.exec(
-            select(Bin).where(Bin.code.like("DEMO-RS-BKK-%")).order_by(Bin.code)
+        waiting = session.exec(
+            select(Site.code)
+            .join(Bin, Bin.site_id == Site.id)
+            .where(
+                Bin.bin_type == BinType.RESALE,
+                Bin.status == BinStatus.CLOSED,
+                Bin.actual_value.is_(None),
+            )
         ).all()
 
-    assert [bin_record.code for bin_record in bins] == [
-        "DEMO-RS-BKK-01",
-        "DEMO-RS-BKK-02",
-        "DEMO-RS-BKK-03",
-        "DEMO-RS-BKK-04",
-    ]
-    assert all(bin_record.bin_type is BinType.RESALE for bin_record in bins)
-    assert all(bin_record.status is BinStatus.CLOSED for bin_record in bins)
-    assert all(bin_record.actual_value is None for bin_record in bins)
+    assert sorted(waiting) == ["BKK", "BKK", "CNX", "HKT"]
 
 
-def test_resale_bins_can_be_processed_and_are_persisted(resale_client: TestClient) -> None:
-    options = resale_client.get("/api/handoffs/options").json()
+def staff_and_site(client: TestClient) -> tuple[dict, int]:
+    options = client.get("/api/handoffs/options").json()
     staff = next(actor for actor in options["actors"] if actor["role"] == "staff")
-    site_id = staff["site_ids"][0]
-    with Session(resale_client.engine) as session:
+    return staff, staff["site_ids"][0]
+
+
+def waiting_bin(engine, site_id: int, code: str) -> int:
+    with Session(engine) as session:
         bin_record = Bin(
             site_id=site_id,
-            code="WAITING-RS-01",
+            code=code,
             bin_type=BinType.RESALE,
             status=BinStatus.CLOSED,
             item_count=12,
@@ -85,7 +86,12 @@ def test_resale_bins_can_be_processed_and_are_persisted(resale_client: TestClien
         session.add(bin_record)
         session.commit()
         session.refresh(bin_record)
-        bin_id = bin_record.id
+        return bin_record.id
+
+
+def test_resale_bins_can_be_processed_and_are_persisted(resale_client: TestClient) -> None:
+    staff, site_id = staff_and_site(resale_client)
+    bin_id = waiting_bin(resale_client.engine, site_id, "WAITING-RS-01")
 
     response = resale_client.post(
         f"/api/resale-bins/{bin_id}/process",
@@ -112,24 +118,8 @@ def test_resale_bins_can_be_processed_and_are_persisted(resale_client: TestClien
 def test_resale_processing_requires_exact_item_count_and_cannot_repeat(
     resale_client: TestClient,
 ) -> None:
-    options = resale_client.get("/api/handoffs/options").json()
-    staff = next(actor for actor in options["actors"] if actor["role"] == "staff")
-    site_id = staff["site_ids"][0]
-    with Session(resale_client.engine) as session:
-        bin_record = Bin(
-            site_id=site_id,
-            code="WAITING-RS-02",
-            bin_type=BinType.RESALE,
-            status=BinStatus.CLOSED,
-            item_count=12,
-            total_weight_kg=5,
-            max_capacity=50,
-            closed_at=datetime.now(UTC),
-        )
-        session.add(bin_record)
-        session.commit()
-        session.refresh(bin_record)
-        bin_id = bin_record.id
+    staff, site_id = staff_and_site(resale_client)
+    bin_id = waiting_bin(resale_client.engine, site_id, "WAITING-RS-02")
     payload = {
         "actor_id": staff["id"],
         "accepted_item_count": 11,

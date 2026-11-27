@@ -1,22 +1,35 @@
-"""Seed deterministic development data for the compliance dashboard and recycle bin handoff.
+"""Reset the local database and load demo data for presenting Textile Track.
 
 Run from the repository root after applying migrations:
 
-    python backend/seed.py
+    python backend/seed.py            # asks before deleting
+    python backend/seed.py --yes      # no prompt
 
-The seed is additive and idempotent. It never deletes existing records. Dashboard
-records use the ``DASH-`` prefix; recycle bin handoff records use ``HAND-``.
+Every run deletes all application rows first (the schema and Docker volume are kept), then
+loads five stores, three contractors, eleven demo accounts, twelve months of history relative to
+today, the current month in progress, and contractor report CSV files for the import demo in
+``backend/demo_reports/``. Every demo account uses one shared password: ``DEMO_PASSWORD`` from the
+environment, or ``TextileDemo2026!``. It is public, so only seed local databases.
 """
 
 from __future__ import annotations
 
+import argparse
+import os
+import random
+import sys
 from calendar import monthrange
-from datetime import UTC, date, datetime, timedelta
+from dataclasses import dataclass, field
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from pathlib import Path
+from zoneinfo import ZoneInfo
 
-from sqlmodel import Session, select
+from sqlalchemy import URL
+from sqlmodel import Session, SQLModel, select
 
-from app.database import get_engine
+from app.database import REPOSITORY_ROOT, get_database_url, get_engine
+from app.epr import add_epr_adjustment, quarter_bounds, submit_epr_quarter
 from app.models import (
     Bin,
     BinStatus,
@@ -25,35 +38,95 @@ from app.models import (
     ContractorReport,
     ContractorReportEntry,
     DispositionCategory,
-    EprAdjustment,
-    EprAdjustmentMetric,
     EprQuarterReport,
-    EprQuarterSiteSnapshot,
-    EprReportStatus,
     EvidenceStatus,
     GarmentOutcome,
     GarmentRecord,
     Handoff,
     HandoffStatus,
     ReportStatus,
+    ResaleBinProcess,
     Site,
     User,
     UserSite,
 )
-from app.schemas import UserRole
-
-SEED_YEAR = 2026
-SEED_PASSWORD_HASH = "dashboard-seed-not-for-authentication"
-
-SITE_DEFINITIONS = (
-    ("DASH-BKK", "Bangkok Sorting Center"),
-    ("DASH-CNX", "Chiang Mai Sorting Center"),
+from app.schemas import (
+    EprAdjustmentLine,
+    EprAdjustmentMetric,
+    EprAdjustmentRequest,
+    EprSubmitRequest,
+    UserRole,
 )
+from app.security import hash_password
+from app.sorting import add_bin
 
-CONTRACTOR_DEFINITIONS = (
-    ("Dashboard GreenLoop Recycling", "Narin Chai", "narin@example.invalid"),
-    ("Dashboard Circular Fibre Co.", "Mali Arun", "mali@example.invalid"),
+DEFAULT_DEMO_PASSWORD = "TextileDemo2026!"
+DEMO_REPORTS_DIR = REPOSITORY_ROOT / "backend" / "demo_reports"
+LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "mysql"})
+LOCAL_TZ = ZoneInfo("Asia/Bangkok")
+HISTORY_MONTHS = 12
+
+
+@dataclass(frozen=True)
+class StoreDefinition:
+    code: str
+    name: str
+    volume: Decimal  # Scales every bin weight, so stores rank differently
+    contractor: str  # Usual contractor (key into CONTRACTORS)
+    manager: str
+    staff: str
+
+
+CONTRACTORS = {
+    "greenloop": ("GreenLoop Recycling", "Narin Chaiyaporn", "narin@greenloop.example.com"),
+    "circular": ("Circular Fibre Co.", "Mali Arunrat", "mali@circularfibre.example.com"),
+    "reweave": ("ReWeave Textiles", "Anan Srisuk", "anan@reweave.example.com"),
+}
+
+# GreenLoop serves two stores whose last-month reports are left for the import demo.
+STORES = (
+    StoreDefinition(
+        "BKK",
+        "Bangkok Sorting Center",
+        Decimal("1.6"),
+        "greenloop",
+        "Pimchanok Sae-Tang",
+        "Somchai Prasert",
+    ),
+    StoreDefinition(
+        "CNX",
+        "Chiang Mai Sorting Center",
+        Decimal("1.0"),
+        "circular",
+        "Kittipong Wongsa",
+        "Ploy Chaiwong",
+    ),
+    StoreDefinition(
+        "HKT",
+        "Phuket Sorting Center",
+        Decimal("0.9"),
+        "reweave",
+        "Arunee Thongdee",
+        "Niran Kaewmanee",
+    ),
+    StoreDefinition(
+        "KKC",
+        "Khon Kaen Sorting Center",
+        Decimal("0.7"),
+        "greenloop",
+        "Wichai Boonmee",
+        "Siriporn Saengsri",
+    ),
+    StoreDefinition(
+        "HDY",
+        "Hat Yai Sorting Center",
+        Decimal("0.8"),
+        "circular",
+        "Rattana Hassan",
+        "Ahmad Yusoh",
+    ),
 )
+UNREPORTED_LAST_MONTH = frozenset({"BKK", "KKC"})
 
 DISPOSITION_SHARES = (
     (DispositionCategory.UPCYCLED, Decimal("0.15")),
@@ -63,628 +136,623 @@ DISPOSITION_SHARES = (
     (DispositionCategory.LANDFILLED, Decimal("0.05")),
     (DispositionCategory.INCINERATED_ENERGY_RECOVERY, Decimal("0.12")),
 )
+REPORT_COLUMNS = (
+    "bin_id",
+    "received_kg",
+    "upcycled_kg",
+    "fibre_to_fibre_kg",
+    "downcycled_kg",
+    "exported_kg",
+    "landfilled_kg",
+    "incinerated_energy_recovery_kg",
+)
+GARMENT_CATEGORIES = (
+    "Tops",
+    "Bottoms",
+    "Dresses",
+    "Outerwear",
+    "Denim",
+    "Knitwear",
+    "Children's wear",
+    "Home linens",
+)
+OUTCOME_BY_TYPE = {
+    BinType.RESALE: GarmentOutcome.RESALE,
+    BinType.RECYCLE: GarmentOutcome.RECYCLE,
+    BinType.REPAIR: GarmentOutcome.REPAIR_UPCYCLE,
+}
+DRIVERS = ("Somsak K.", "Prasit W.", "Chaiwat N.", "Boonsong T.")
+KG = Decimal("0.001")
 
 
-def _disposition_weights(recycling_weight: Decimal) -> list[tuple[DispositionCategory, Decimal]]:
+@dataclass
+class DemoData:
+    """What the seed created, for printing and for tests."""
+
+    today: date
+    password: str
+    accounts: list[tuple[str, str, str]] = field(default_factory=list)  # username, role, stores
+    report_files: list[Path] = field(default_factory=list)
+
+
+# --- Dates ----------------------------------------------------------------------------------
+
+
+def month_start(today: date, offset: int) -> date:
+    """First day of the month ``offset`` months from today's month."""
+
+    index = today.year * 12 + today.month - 1 + offset
+    return date(index // 12, index % 12 + 1, 1)
+
+
+def _local(day: date, hour: int, minute: int = 0) -> datetime:
+    return datetime.combine(day, time(hour, minute), tzinfo=LOCAL_TZ).astimezone(UTC)
+
+
+def _day(month: date, day: int) -> date:
+    return month.replace(day=min(day, monthrange(month.year, month.month)[1]))
+
+
+# --- Reset and safety -----------------------------------------------------------------------
+
+
+def reset_database(session: Session) -> None:
+    """Delete every application row, children first. The schema and alembic_version stay."""
+
+    for table in reversed(SQLModel.metadata.sorted_tables):
+        session.execute(table.delete())
+    session.commit()
+
+
+def check_database_target(url: URL, *, allow_remote: bool) -> None:
+    """Refuse to wipe a database that isn't local unless explicitly allowed."""
+
+    if url.get_backend_name() == "sqlite" or allow_remote:
+        return
+    if (url.host or "") not in LOCAL_HOSTS:
+        raise SystemExit(
+            f"Refusing to reset the database on '{url.host}'. The demo seed deletes all data "
+            "and uses a public password; pass --allow-remote only for a disposable database."
+        )
+
+
+# --- Seeding --------------------------------------------------------------------------------
+
+
+class _Seeder:
+    def __init__(self, session: Session, today: date, password: str) -> None:
+        self.session = session
+        self.today = today
+        self.now = _local(today, 17)
+        self.password = password
+        self.rng = random.Random(2026)
+        self.data = DemoData(today=today, password=password)
+        self.sites: dict[str, Site] = {}
+        self.contractors: dict[str, Contractor] = {}
+        self.managers: dict[str, User] = {}
+        self.staff: dict[str, User] = {}
+        self.admin: User | None = None
+
+    # People and places
+
+    def _user(self, username: str, role: UserRole, full_name: str, stores: list[Site]) -> User:
+        user = User(
+            username=username,
+            password_hash=hash_password(self.password),
+            role=role,
+            full_name=full_name,
+            must_change_password=False,
+        )
+        self.session.add(user)
+        self.session.flush()
+        for index, site in enumerate(stores):
+            self.session.add(UserSite(user_id=user.id, site_id=site.id, is_default=index == 0))
+        store_label = ", ".join(site.code for site in stores) or "all stores"
+        self.data.accounts.append((username, role.value, store_label))
+        return user
+
+    def people_and_places(self) -> None:
+        for key, (name, contact, email) in CONTRACTORS.items():
+            contractor = Contractor(name=name, contact_name=contact, contact_email=email)
+            self.session.add(contractor)
+            self.contractors[key] = contractor
+        for store in STORES:
+            site = Site(code=store.code, name=store.name, timezone_name="Asia/Bangkok")
+            self.session.add(site)
+            self.sites[store.code] = site
+        self.session.flush()
+
+        self.admin = self._user("admin@example.com", UserRole.ADMIN, "Demo Administrator", [])
+        for store in STORES:
+            site = self.sites[store.code]
+            code = store.code.lower()
+            self.managers[store.code] = self._user(
+                f"manager.{code}@example.com", UserRole.MANAGER, store.manager, [site]
+            )
+        for store in STORES:
+            site = self.sites[store.code]
+            self.staff[store.code] = self._user(
+                f"staff.{store.code.lower()}@example.com", UserRole.STAFF, store.staff, [site]
+            )
+
+    # Bins and garments
+
+    def _bin(self, store: StoreDefinition, bin_type: BinType, *, max_capacity: int = 50) -> Bin:
+        # add_bin gives the next per-store code, e.g. BKK-RC-007.
+        return add_bin(
+            self.session,
+            self.sites[store.code].id,
+            bin_type,
+            max_capacity=max_capacity,
+            notes="Demo seed data",
+        )
+
+    def _split(self, total: Decimal, parts: int) -> list[Decimal]:
+        weights = [Decimal(str(self.rng.uniform(0.7, 1.3))) for _ in range(parts)]
+        scale = total / sum(weights)
+        values = [(weight * scale).quantize(KG) for weight in weights[:-1]]
+        return [*values, total - sum(values)]
+
+    def _fill(
+        self,
+        store: StoreDefinition,
+        bin_record: Bin,
+        *,
+        weight: Decimal,
+        item_count: int,
+        first_day: date,
+        last_day: date,
+        records: int,
+    ) -> None:
+        """Add ``records`` garment records totalling ``weight`` between the two days."""
+
+        span = max(0, (last_day - first_day).days)
+        for index, part in enumerate(self._split(weight, records)):
+            day = first_day + timedelta(days=round(span * (index + 1) / records))
+            self.session.add(
+                GarmentRecord(
+                    site_id=bin_record.site_id,
+                    recorded_by_user_id=self.staff[store.code].id,
+                    bin_id=bin_record.id,
+                    category=self.rng.choice(GARMENT_CATEGORIES),
+                    outcome=OUTCOME_BY_TYPE[bin_record.bin_type],
+                    weight_kg=part,
+                    received_at=min(_local(day, 9 + index % 8, 5 * index % 60), self.now),
+                )
+            )
+        bin_record.item_count = item_count
+        bin_record.total_weight_kg = weight
+        bin_record.max_capacity = max(bin_record.max_capacity, item_count)
+
+    def _weight(self, store: StoreDefinition, low: float, high: float) -> Decimal:
+        return (Decimal(str(self.rng.uniform(low, high))) * store.volume).quantize(KG)
+
+    def _closed_bin(
+        self,
+        store: StoreDefinition,
+        bin_type: BinType,
+        month: date,
+        close_day: int,
+        weight: Decimal,
+        *,
+        status: BinStatus = BinStatus.CLOSED,
+    ) -> Bin:
+        avg_item = {BinType.RESALE: 0.55, BinType.REPAIR: 0.7, BinType.RECYCLE: 0.8}[bin_type]
+        bin_record = self._bin(store, bin_type)
+        closed_on = _day(month, close_day)
+        if month == month_start(self.today, 0):
+            closed_on = min(closed_on, self.today)
+        self._fill(
+            store,
+            bin_record,
+            weight=weight,
+            item_count=max(1, int(weight / Decimal(str(avg_item)))),
+            first_day=max(month, closed_on - timedelta(days=12)),
+            last_day=closed_on,
+            records=4,
+        )
+        bin_record.status = status
+        if bin_type is BinType.RECYCLE:
+            bin_record.ready_at = min(_local(closed_on, 16), self.now)
+        else:
+            bin_record.closed_at = min(_local(closed_on, 16), self.now)
+        return bin_record
+
+    def _process_resale(self, store: StoreDefinition, bin_record: Bin) -> None:
+        rejected = round(bin_record.item_count * self.rng.uniform(0.05, 0.15))
+        accepted = bin_record.item_count - rejected
+        revenue = (Decimal(accepted) * Decimal(str(self.rng.uniform(55, 95)))).quantize(
+            Decimal("0.01")
+        )
+        processed_on = min((bin_record.closed_at + timedelta(days=2)).date(), self.today)
+        self.session.add(
+            ResaleBinProcess(
+                bin_id=bin_record.id,
+                processed_by_user_id=self.staff[store.code].id,
+                accepted_item_count=accepted,
+                rejected_item_count=rejected,
+                revenue=revenue,
+                processed_at=processed_on,
+                notes="Demo seed: sold through the store",
+            )
+        )
+        bin_record.estimated_value = (Decimal(bin_record.item_count) * 80).quantize(Decimal("0.01"))
+        bin_record.actual_value = revenue
+
+    # Handoffs and reports
+
+    def _handoff(
+        self,
+        store: StoreDefinition,
+        bin_record: Bin,
+        picked_up_at: datetime,
+        *,
+        driver_factor: Decimal | None = None,
+    ) -> Handoff:
+        factor = driver_factor or Decimal(str(1 + self.rng.uniform(-0.02, 0.015)))
+        handoff = Handoff(
+            site_id=bin_record.site_id,
+            bin_id=bin_record.id,
+            contractor_id=self.contractors[store.contractor].id,
+            created_by_user_id=self.staff[store.code].id,
+            scheduled_pickup_at=picked_up_at,
+            picked_up_at=picked_up_at,
+            scale_photo_url=f"https://example.invalid/scales/{bin_record.code}.jpg",
+            driver_name=self.rng.choice(DRIVERS),
+            vehicle_plate_number=f"{store.code}-{self.rng.randint(1000, 9999)}",
+        )
+        handoff.record_pickup_weights(
+            bin_record.total_weight_kg, (bin_record.total_weight_kg * factor).quantize(KG)
+        )
+        bin_record.status = BinStatus.HANDED_OFF
+        self.session.add(handoff)
+        return handoff
+
+    def _approve(self, store: StoreDefinition, handoff: Handoff, at: datetime) -> None:
+        handoff.status = HandoffStatus.APPROVED
+        handoff.approved_by_user_id = self.managers[store.code].id
+        handoff.approved_at = min(at, self.now)
+
+    def _report(
+        self,
+        store: StoreDefinition,
+        month: date,
+        handoffs: list[tuple[Handoff, Bin]],
+    ) -> None:
+        contractor = self.contractors[store.contractor]
+        validated_at = min(_local(_day(month_start(month, 1), 5), 10), self.now)
+        report = ContractorReport(
+            site_id=self.sites[store.code].id,
+            contractor_id=contractor.id,
+            uploaded_by_user_id=self.managers[store.code].id,
+            report_month=month,
+            source_filename=f"{_slug(contractor.name)}-{month:%Y-%m}.csv",
+            status=ReportStatus.IMPORTED,
+            validated_at=validated_at,
+        )
+        self.session.add(report)
+        self.session.flush()
+        for handoff, bin_record in handoffs:
+            received = handoff.driver_weight_kg
+            # EPR checks categorized weight against what the store weighed, so stay within both.
+            ceiling = min(received, handoff.staff_weight_kg)
+            categorized = (ceiling * Decimal(str(1 - self.rng.uniform(0, 0.01)))).quantize(KG)
+            for category, weight in _disposition_weights(categorized):
+                evidence = EvidenceStatus.VERIFIED
+                if category is DispositionCategory.EXPORTED and month.month % 3 == 0:
+                    evidence = EvidenceStatus.CONTRACTOR_DECLARED
+                elif category is DispositionCategory.DOWNCYCLED and month.month % 4 == 0:
+                    evidence = EvidenceStatus.ESTIMATED
+                self.session.add(
+                    ContractorReportEntry(
+                        contractor_report_id=report.id,
+                        handoff_id=handoff.id,
+                        disposition=category,
+                        weight_kg=weight,
+                        evidence_status=evidence,
+                        destination=f"{contractor.name}: {category.value.replace('_', ' ')}",
+                    )
+                )
+            handoff.contractor_received_kg = received
+            handoff.status = HandoffStatus.CLOSED
+            handoff.closed_at = validated_at
+            bin_record.status = BinStatus.CLOSED
+            bin_record.closed_at = validated_at
+
+    # Timeline
+
+    def history(self) -> None:
+        last_month = month_start(self.today, -1)
+        for offset in range(-HISTORY_MONTHS, 0):
+            month = month_start(self.today, offset)
+            for store in STORES:
+                for close_day in (10, 24):
+                    resale = self._closed_bin(
+                        store, BinType.RESALE, month, close_day, self._weight(store, 18, 26)
+                    )
+                    self.session.flush()
+                    self._process_resale(store, resale)
+                self._closed_bin(store, BinType.REPAIR, month, 18, self._weight(store, 8, 12))
+
+                pickups: list[tuple[Handoff, Bin]] = []
+                for ready_day, pickup_day in ((12, 14), (26, 27)):
+                    recycle = self._closed_bin(
+                        store,
+                        BinType.RECYCLE,
+                        month,
+                        ready_day,
+                        self._weight(store, 32, 42),
+                        status=BinStatus.READY,
+                    )
+                    self.session.flush()
+                    disputed = store.code == "CNX" and offset == -5 and ready_day == 12
+                    handoff = self._handoff(
+                        store,
+                        recycle,
+                        _local(_day(month, pickup_day), 10),
+                        driver_factor=Decimal("1.045") if disputed else None,
+                    )
+                    self.session.flush()
+                    if disputed:
+                        self._approve(store, handoff, handoff.picked_up_at + timedelta(days=1))
+                    pickups.append((handoff, recycle))
+
+                if not (month == last_month and store.code in UNREPORTED_LAST_MONTH):
+                    self._report(store, month, pickups)
+            self.session.flush()
+
+    def current_month(self) -> None:
+        month = month_start(self.today, 0)
+        stores = {store.code: store for store in STORES}
+        last = self.today.day
+
+        def day(target: int) -> date:
+            return _day(month, max(1, min(target, last)))
+
+        # Direct resale: closed resale bins waiting to be processed.
+        for code, count in (("BKK", 2), ("CNX", 1), ("HKT", 1)):
+            for number in range(count):
+                store = stores[code]
+                self._closed_bin(
+                    store, BinType.RESALE, month, last - 2 + number, self._weight(store, 18, 26)
+                )
+
+        # Handoff page: sealed recycle bins waiting for pickup.
+        for code in ("BKK", "CNX", "HKT"):
+            store = stores[code]
+            ready = self._closed_bin(
+                store,
+                BinType.RECYCLE,
+                month,
+                last - 1,
+                self._weight(store, 32, 40),
+                status=BinStatus.READY,
+            )
+            ready.item_count = max(ready.item_count, ready.max_capacity)
+
+        # Handoff records this month: picked up, disputed (awaiting approval), and approved.
+        for code, factor in (("HDY", None), ("BKK", Decimal("1.05")), ("KKC", Decimal("1.04"))):
+            store = stores[code]
+            picked = self._closed_bin(
+                store,
+                BinType.RECYCLE,
+                month,
+                last - 4,
+                self._weight(store, 32, 40),
+                status=BinStatus.READY,
+            )
+            self.session.flush()
+            handoff = self._handoff(
+                store,
+                picked,
+                min(_local(day(last - 3), 10), self.now),
+                driver_factor=factor,
+            )
+            if code == "KKC":
+                self._approve(store, handoff, handoff.picked_up_at + timedelta(hours=5))
+        self.session.flush()
+
+        # Sorting: one active bin of each type per store, partly filled; BKK recycle nearly full.
+        for store in STORES:
+            for bin_type, (low, high) in (
+                (BinType.RESALE, (14, 26)),
+                (BinType.RECYCLE, (20, 34)),
+                (BinType.REPAIR, (4, 9)),
+            ):
+                items = 47 if (store.code, bin_type) == ("BKK", BinType.RECYCLE) else None
+                items = items or self.rng.randint(low, high)
+                active = self._bin(store, bin_type)
+                self._fill(
+                    store,
+                    active,
+                    weight=(Decimal(str(self.rng.uniform(0.45, 0.85))) * items).quantize(KG),
+                    item_count=items,
+                    first_day=month,
+                    last_day=self.today,
+                    records=min(items, 12),
+                )
+        self.session.flush()
+
+    def epr(self) -> None:
+        """Submit every quarter before the one holding last month, plus one adjustment."""
+
+        assert self.admin is not None
+        last_month = month_start(self.today, -1)
+        open_quarter = (last_month.year, (last_month.month - 1) // 3 + 1)
+        first = month_start(self.today, -HISTORY_MONTHS)
+        year, quarter = first.year, (first.month - 1) // 3 + 1
+        submitted: list[tuple[int, int]] = []
+        while (year, quarter) < open_quarter:
+            submit_epr_quarter(
+                EprSubmitRequest(actor_id=self.admin.id), self.session, year, quarter
+            )
+            submitted.append((year, quarter))
+            year, quarter = (year + 1, 1) if quarter == 4 else (year, quarter + 1)
+
+        for year, quarter in submitted:
+            report = self.session.exec(
+                select(EprQuarterReport).where(
+                    EprQuarterReport.report_year == year, EprQuarterReport.quarter == quarter
+                )
+            ).one()
+            submitted_at = min(
+                _local(quarter_bounds(year, quarter)[1] + timedelta(days=14), 10), self.now
+            )
+            report.submitted_at = report.locked_at = submitted_at
+        self.session.commit()
+
+        if submitted:
+            year, quarter = submitted[-1]
+            add_epr_adjustment(
+                EprAdjustmentRequest(
+                    actor_id=self.admin.id,
+                    site_id=self.sites["BKK"].id,
+                    expected_latest_adjustment_id=None,
+                    effective_date=quarter_bounds(year, quarter)[1] + timedelta(days=20),
+                    reason="Late contractor correction: fibre-to-fibre weight confirmed",
+                    lines=[
+                        EprAdjustmentLine(
+                            metric=EprAdjustmentMetric.FIBRE_TO_FIBRE,
+                            weight_delta_kg=Decimal("2.500"),
+                        )
+                    ],
+                ),
+                self.session,
+                year,
+                quarter,
+            )
+
+
+def _slug(name: str) -> str:
+    return "".join(ch if ch.isalnum() else "-" for ch in name.lower()).strip("-").replace("--", "-")
+
+
+def _disposition_weights(total: Decimal) -> list[tuple[DispositionCategory, Decimal]]:
     weights: list[tuple[DispositionCategory, Decimal]] = []
     allocated = Decimal("0")
     for index, (category, share) in enumerate(DISPOSITION_SHARES):
-        if index == len(DISPOSITION_SHARES) - 1:
-            weight = recycling_weight - allocated
-        else:
-            weight = (recycling_weight * share).quantize(Decimal("0.001"))
-            allocated += weight
+        weight = total - allocated if index == len(DISPOSITION_SHARES) - 1 else (total * share)
+        weight = weight.quantize(KG)
+        allocated += weight
         weights.append((category, weight))
     return weights
 
 
-def _month_end(month: int) -> datetime:
-    day = monthrange(SEED_YEAR, month)[1]
-    return datetime(SEED_YEAR, month, day, 10, 0, tzinfo=UTC)
+def seed_demo_data(session: Session, today: date, *, password: str | None = None) -> DemoData:
+    """Delete all application rows, then load the demo data relative to ``today``."""
 
-
-def _weights(month: int, site_index: int) -> tuple[Decimal, Decimal, Decimal]:
-    """Return resale, repair, and recycling weights for one site-month."""
-
-    site_offset = Decimal(site_index * 12)
-    return (
-        Decimal(88 + month * 3) + site_offset,
-        Decimal(24 + month * 2) + site_offset / 3,
-        Decimal(165 + month * 7) + site_offset,
+    reset_database(session)
+    seeder = _Seeder(
+        session, today, password or os.getenv("DEMO_PASSWORD") or DEFAULT_DEMO_PASSWORD
     )
-
-
-def _get_or_create_site(session: Session, code: str, name: str) -> Site:
-    site = session.exec(select(Site).where(Site.code == code)).one_or_none()
-    if site is None:
-        site = Site(code=code, name=name)
-        session.add(site)
-        session.flush()
-    return site
-
-
-def _get_or_create_user(session: Session, username: str, role: UserRole) -> User:
-    user = session.exec(select(User).where(User.username == username)).one_or_none()
-    if user is None:
-        user = User(username=username, password_hash=SEED_PASSWORD_HASH, role=role)
-        session.add(user)
-        session.flush()
-    return user
-
-
-def _ensure_membership(session: Session, user: User, site: Site, *, default: bool) -> None:
-    membership = session.exec(
-        select(UserSite).where(UserSite.user_id == user.id, UserSite.site_id == site.id)
-    ).one_or_none()
-    if membership is None:
-        session.add(UserSite(user_id=user.id, site_id=site.id, is_default=default))
-
-
-def _get_or_create_contractor(
-    session: Session,
-    name: str,
-    contact_name: str,
-    contact_email: str,
-) -> Contractor:
-    contractor = session.exec(select(Contractor).where(Contractor.name == name)).one_or_none()
-    if contractor is None:
-        contractor = Contractor(
-            name=name,
-            contact_name=contact_name,
-            contact_email=contact_email,
-        )
-        session.add(contractor)
-        session.flush()
-    return contractor
-
-
-def _get_or_create_bin(
-    session: Session,
-    *,
-    site: Site,
-    code: str,
-    bin_type: BinType,
-    weight: Decimal,
-    item_count: int,
-    closed_at: datetime,
-) -> Bin:
-    bin_record = session.exec(
-        select(Bin).where(Bin.site_id == site.id, Bin.code == code)
-    ).one_or_none()
-    if bin_record is None:
-        bin_record = Bin(
-            site_id=site.id,
-            code=code,
-            bin_type=bin_type,
-            status=BinStatus.CLOSED,
-            item_count=item_count,
-            total_weight_kg=weight,
-            max_capacity=max(item_count, 50),
-            estimated_value=weight * Decimal("85") if bin_type is BinType.RESALE else None,
-            actual_value=weight * Decimal("82") if bin_type is BinType.RESALE else None,
-            ready_at=closed_at,
-            closed_at=closed_at,
-            notes="Dashboard development seed data",
-        )
-        session.add(bin_record)
-        session.flush()
-    return bin_record
-
-
-def _ensure_garment_record(
-    session: Session,
-    *,
-    site: Site,
-    user: User,
-    bin_record: Bin,
-    outcome: GarmentOutcome,
-    weight: Decimal,
-    received_at: datetime,
-) -> None:
-    external_reference = f"{bin_record.code}-SUMMARY"
-    garment = session.exec(
-        select(GarmentRecord).where(
-            GarmentRecord.site_id == site.id,
-            GarmentRecord.external_reference == external_reference,
-        )
-    ).one_or_none()
-    if garment is None:
-        session.add(
-            GarmentRecord(
-                site_id=site.id,
-                recorded_by_user_id=user.id,
-                bin_id=bin_record.id,
-                external_reference=external_reference,
-                category="Mixed textiles",
-                outcome=outcome,
-                weight_kg=weight,
-                received_at=received_at,
-                notes="Monthly aggregate record for dashboard development",
-            )
-        )
-
-
-def _get_or_create_handoff(
-    session: Session,
-    *,
-    site: Site,
-    bin_record: Bin,
-    contractor: Contractor,
-    staff_user: User,
-    month: int,
-    staff_weight: Decimal,
-    disputed: bool,
-) -> Handoff:
-    handoff = session.exec(select(Handoff).where(Handoff.bin_id == bin_record.id)).one_or_none()
-    if handoff is not None:
-        return handoff
-
-    picked_up_at = _month_end(month)
-    driver_weight = staff_weight * (Decimal("1.04") if disputed else Decimal("0.99"))
-    handoff = Handoff(
-        site_id=site.id,
-        bin_id=bin_record.id,
-        contractor_id=contractor.id,
-        created_by_user_id=staff_user.id,
-        scheduled_pickup_at=picked_up_at,
-        picked_up_at=picked_up_at,
-        scale_photo_url=f"https://example.invalid/dashboard-scales/{bin_record.code}.jpg",
-        driver_name="Seed Driver",
-        vehicle_plate_number=f"DASH-{site.code[-3:]}-{month:02d}",
-    )
-    handoff.record_pickup_weights(staff_weight, driver_weight.quantize(Decimal("0.001")))
-    if not disputed:
-        handoff.status = HandoffStatus.CLOSED
-        handoff.closed_at = picked_up_at
-    session.add(handoff)
-    session.flush()
-    return handoff
-
-
-def _ensure_contractor_report(
-    session: Session,
-    *,
-    site: Site,
-    contractor: Contractor,
-    manager: User,
-    handoff: Handoff,
-    month: int,
-    recycling_weight: Decimal,
-) -> None:
-    report_month = date(SEED_YEAR, month, 1)
-    report = session.exec(
-        select(ContractorReport).where(
-            ContractorReport.site_id == site.id,
-            ContractorReport.contractor_id == contractor.id,
-            ContractorReport.report_month == report_month,
-        )
-    ).one_or_none()
-    if report is None:
-        report = ContractorReport(
-            site_id=site.id,
-            contractor_id=contractor.id,
-            uploaded_by_user_id=manager.id,
-            report_month=report_month,
-            source_filename=f"dashboard-{site.code.lower()}-{SEED_YEAR}-{month:02d}.csv",
-            status=ReportStatus.IMPORTED,
-            validated_at=_month_end(month),
-        )
-        session.add(report)
-        session.flush()
-
-    for index, (disposition, weight) in enumerate(_disposition_weights(recycling_weight)):
-        entry = session.exec(
-            select(ContractorReportEntry).where(
-                ContractorReportEntry.contractor_report_id == report.id,
-                ContractorReportEntry.handoff_id == handoff.id,
-                ContractorReportEntry.disposition == disposition,
-            )
-        ).one_or_none()
-        if entry is not None:
-            continue
-
-        evidence_status = EvidenceStatus.VERIFIED
-        if disposition is DispositionCategory.EXPORTED and month % 3 == 0:
-            evidence_status = EvidenceStatus.CONTRACTOR_DECLARED
-        elif disposition is DispositionCategory.DOWNCYCLED and month % 4 == 0:
-            evidence_status = EvidenceStatus.ESTIMATED
-
-        session.add(
-            ContractorReportEntry(
-                contractor_report_id=report.id,
-                handoff_id=handoff.id,
-                disposition=disposition,
-                weight_kg=weight,
-                evidence_status=evidence_status,
-                destination=f"Dashboard destination: {disposition.value}",
-                evidence_reference=f"DASH-EVIDENCE-{site.code}-{month:02d}-{index + 1}",
-            )
-        )
-
-
-def _quarter_totals(site_index: int, months: range) -> dict[str, Decimal]:
-    totals = {
-        "total": Decimal("0"),
-        "resale": Decimal("0"),
-        "repair": Decimal("0"),
-        **{category.value: Decimal("0") for category, _ in DISPOSITION_SHARES},
-    }
-    for month in months:
-        resale, repair, recycling = _weights(month, site_index)
-        totals["total"] += resale + repair + recycling
-        totals["resale"] += resale
-        totals["repair"] += repair
-
-        for category, disposition_weight in _disposition_weights(recycling):
-            totals[category.value] += disposition_weight
-    return totals
-
-
-def _ensure_epr_data(session: Session, manager: User, sites: list[Site]) -> None:
-    quarter_definitions = (
-        (3, EprReportStatus.SUBMITTED, range(7, 10)),
-        (4, EprReportStatus.DRAFT, range(10, 11)),
-    )
-    for quarter, status, months in quarter_definitions:
-        report = session.exec(
-            select(EprQuarterReport).where(
-                EprQuarterReport.report_year == SEED_YEAR,
-                EprQuarterReport.quarter == quarter,
-            )
-        ).one_or_none()
-        if report is None:
-            submitted_at = datetime(SEED_YEAR, 10, 15, 9, 0, tzinfo=UTC)
-            report = EprQuarterReport(
-                report_year=SEED_YEAR,
-                quarter=quarter,
-                status=status,
-                submitted_by_user_id=manager.id if status is EprReportStatus.SUBMITTED else None,
-                submitted_at=submitted_at if status is EprReportStatus.SUBMITTED else None,
-                locked_at=submitted_at if status is EprReportStatus.SUBMITTED else None,
-            )
-            session.add(report)
-            session.flush()
-
-        for site_index, site in enumerate(sites):
-            snapshot = session.exec(
-                select(EprQuarterSiteSnapshot).where(
-                    EprQuarterSiteSnapshot.epr_quarter_report_id == report.id,
-                    EprQuarterSiteSnapshot.site_id == site.id,
-                )
-            ).one_or_none()
-            if snapshot is not None:
-                continue
-
-            totals = _quarter_totals(site_index, months)
-            snapshot = EprQuarterSiteSnapshot(
-                epr_quarter_report_id=report.id,
-                site_id=site.id,
-                total_weight_received_kg=totals["total"],
-                resold_weight_kg=totals["resale"],
-                repaired_weight_kg=totals["repair"],
-                upcycled_weight_kg=totals[DispositionCategory.UPCYCLED.value],
-                fibre_to_fibre_weight_kg=totals[DispositionCategory.FIBRE_TO_FIBRE.value],
-                downcycled_weight_kg=totals[DispositionCategory.DOWNCYCLED.value],
-                exported_weight_kg=totals[DispositionCategory.EXPORTED.value],
-                landfilled_weight_kg=totals[DispositionCategory.LANDFILLED.value],
-                incinerated_energy_recovery_weight_kg=totals[
-                    DispositionCategory.INCINERATED_ENERGY_RECOVERY.value
-                ],
-            )
-            snapshot.recalculate_recovery_rate()
-            session.add(snapshot)
-
-        if quarter == 3 and report.status == EprReportStatus.SUBMITTED:
-            _ensure_epr_adjustment(session, report, sites[0], manager)
-
-
-def _ensure_epr_adjustment(
-    session: Session,
-    report: EprQuarterReport,
-    site: Site,
-    manager: User,
-) -> None:
-    reason = "Dashboard seed: late contractor fibre-to-fibre correction"
-    adjustment = session.exec(
-        select(EprAdjustment).where(
-            EprAdjustment.epr_quarter_report_id == report.id,
-            EprAdjustment.site_id == site.id,
-            EprAdjustment.metric == EprAdjustmentMetric.FIBRE_TO_FIBRE,
-            EprAdjustment.reason == reason,
-        )
-    ).one_or_none()
-    if adjustment is None:
-        session.add(
-            EprAdjustment(
-                epr_quarter_report_id=report.id,
-                site_id=site.id,
-                metric=EprAdjustmentMetric.FIBRE_TO_FIBRE,
-                weight_delta_kg=Decimal("2.500"),
-                reason=reason,
-                effective_date=date(SEED_YEAR, 10, 20),
-                created_by_user_id=manager.id,
-            )
-        )
-
-
-def seed_dashboard_data(session: Session) -> None:
-    """Insert dashboard development records into an existing migrated database."""
-
-    sites = [_get_or_create_site(session, code, name) for code, name in SITE_DEFINITIONS]
-    manager = _get_or_create_user(session, "dashboard.manager@example.invalid", UserRole.MANAGER)
-    staff_users = [
-        _get_or_create_user(
-            session,
-            f"dashboard.staff.{site.code[-3:].lower()}@example.invalid",
-            UserRole.STAFF,
-        )
-        for site in sites
-    ]
-
-    for index, site in enumerate(sites):
-        _ensure_membership(session, manager, site, default=index == 0)
-        _ensure_membership(session, staff_users[index], site, default=True)
-
-    contractors = [
-        _get_or_create_contractor(session, name, contact_name, contact_email)
-        for name, contact_name, contact_email in CONTRACTOR_DEFINITIONS
-    ]
-
-    outcome_by_bin_type = {
-        BinType.RESALE: GarmentOutcome.RESALE,
-        BinType.REPAIR: GarmentOutcome.REPAIR_UPCYCLE,
-        BinType.RECYCLE: GarmentOutcome.RECYCLE,
-    }
-    for site_index, site in enumerate(sites):
-        for month in range(1, 11):
-            received_at = _month_end(month)
-            resale_weight, repair_weight, recycling_weight = _weights(month, site_index)
-            weights = {
-                BinType.RESALE: resale_weight,
-                BinType.REPAIR: repair_weight,
-                BinType.RECYCLE: recycling_weight,
-            }
-            bins: dict[BinType, Bin] = {}
-            for bin_type, weight in weights.items():
-                code = f"DASH-{site.code[-3:]}-{SEED_YEAR}-{month:02d}-{bin_type.value.upper()}"
-                bin_record = _get_or_create_bin(
-                    session,
-                    site=site,
-                    code=code,
-                    bin_type=bin_type,
-                    weight=weight,
-                    item_count=max(1, int(weight / Decimal("0.8"))),
-                    closed_at=received_at,
-                )
-                bins[bin_type] = bin_record
-                _ensure_garment_record(
-                    session,
-                    site=site,
-                    user=staff_users[site_index],
-                    bin_record=bin_record,
-                    outcome=outcome_by_bin_type[bin_type],
-                    weight=weight,
-                    received_at=received_at,
-                )
-
-            contractor = contractors[(month + site_index) % len(contractors)]
-            disputed = site_index == 0 and month == 10
-            handoff = _get_or_create_handoff(
-                session,
-                site=site,
-                bin_record=bins[BinType.RECYCLE],
-                contractor=contractor,
-                staff_user=staff_users[site_index],
-                month=month,
-                staff_weight=recycling_weight,
-                disputed=disputed,
-            )
-
-            # Leave one October handoff without a report so the dashboard has a pending state.
-            if not (site_index == 1 and month == 10):
-                _ensure_contractor_report(
-                    session,
-                    site=site,
-                    contractor=contractor,
-                    manager=manager,
-                    handoff=handoff,
-                    month=month,
-                    recycling_weight=recycling_weight,
-                )
-
-    _ensure_epr_data(session, manager, sites)
+    seeder.people_and_places()
+    seeder.history()
+    seeder.current_month()
     session.commit()
+    seeder.epr()
+    session.commit()
+    return seeder.data
 
 
-# Recycle bin handoff demo data (HAND- prefix).
-HANDOFF_READY_BINS_PER_SITE = 3
-HANDOFF_READY_AT = datetime(2026, 11, 18, 9, 0, tzinfo=UTC)
-HANDOFF_PICKED_UP_AT = datetime(2026, 11, 20, 4, 0, tzinfo=UTC)
+# --- Demo contractor report files -----------------------------------------------------------
 
 
-def _handoff_prefix(site: Site) -> str:
-    return f"HAND-{site.code[-3:]}"
-
-
-def _get_or_create_ready_recycle_bin(
-    session: Session,
-    *,
-    site: Site,
-    code: str,
-    weight: Decimal,
-    item_count: int,
-    ready_at: datetime,
-) -> tuple[Bin, bool]:
-    bin_record = session.exec(
-        select(Bin).where(Bin.site_id == site.id, Bin.code == code)
-    ).one_or_none()
-    if bin_record is not None:
-        return bin_record, False
-    bin_record = Bin(
-        site_id=site.id,
-        code=code,
-        bin_type=BinType.RECYCLE,
-        status=BinStatus.READY,
-        item_count=item_count,
-        total_weight_kg=weight,
-        max_capacity=max(item_count, 50),
-        ready_at=ready_at,
-        notes="Handoff development seed data",
-    )
-    session.add(bin_record)
-    session.flush()
-    return bin_record, True
-
-
-def seed_handoff_data(session: Session) -> None:
-    """Insert recycle bin handoff records. Run after ``seed_dashboard_data``.
-
-    Adds ready recycling bins (for the New Bins for Handoff page) and one picked-up handoff per
-    site, using the ``HAND-`` prefix. It adds no garment records, so EPR totals are unchanged.
-    """
-
-    site_codes = [code for code, _name in SITE_DEFINITIONS]
-    sites = session.exec(select(Site).where(Site.code.in_(site_codes)).order_by(Site.code)).all()
-    contractors = session.exec(
-        select(Contractor).where(Contractor.name.startswith("Dashboard ")).order_by(Contractor.name)
+def _last_month_handoffs(
+    session: Session, today: date, contractor_name: str
+) -> list[tuple[Bin, Handoff]]:
+    month = month_start(today, -1)
+    start, end = _local(month, 0), _local(month_start(today, 0), 0)
+    rows = session.exec(
+        select(Bin, Handoff)
+        .join(Handoff, Handoff.bin_id == Bin.id)
+        .join(Contractor, Contractor.id == Handoff.contractor_id)
+        .where(Contractor.name == contractor_name)
+        .where(Handoff.picked_up_at >= start, Handoff.picked_up_at < end)
+        .order_by(Bin.code)
     ).all()
-
-    for site_index, site in enumerate(sites):
-        prefix = _handoff_prefix(site)
-        staff = session.exec(
-            select(User).where(
-                User.username == f"dashboard.staff.{site.code[-3:].lower()}@example.invalid"
-            )
-        ).one()
-
-        for number in range(1, HANDOFF_READY_BINS_PER_SITE + 1):
-            weight = Decimal(36 + number * 4 + site_index * 3)
-            _get_or_create_ready_recycle_bin(
-                session,
-                site=site,
-                code=f"{prefix}-READY-{number:02d}",
-                weight=weight,
-                item_count=int(weight * 2),
-                ready_at=HANDOFF_READY_AT + timedelta(hours=number),
-            )
-
-        picked_bin, created = _get_or_create_ready_recycle_bin(
-            session,
-            site=site,
-            code=f"{prefix}-PICKED-01",
-            weight=Decimal("41.000"),
-            item_count=88,
-            ready_at=HANDOFF_READY_AT - timedelta(days=2),
-        )
-        if created:
-            picked_bin.status = BinStatus.HANDED_OFF
-            handoff = Handoff(
-                site_id=site.id,
-                bin_id=picked_bin.id,
-                contractor_id=contractors[(site_index + 1) % len(contractors)].id,
-                created_by_user_id=staff.id,
-                scheduled_pickup_at=HANDOFF_PICKED_UP_AT,
-                picked_up_at=HANDOFF_PICKED_UP_AT,
-                scale_photo_url=f"https://example.invalid/handoff-scales/{picked_bin.code}.jpg",
-                driver_name="Seed Driver",
-                vehicle_plate_number=f"{prefix}-01",
-            )
-            # The first site's driver weight differs by more than 3%, so it starts Disputed.
-            driver_weight = Decimal("42.800") if site_index == 0 else Decimal("40.600")
-            handoff.record_pickup_weights(Decimal("41.000"), driver_weight)
-            session.add_all([picked_bin, handoff])
-
-    session.commit()
+    return list(rows)
 
 
-SORTING_ACTIVE_BIN_TYPES = (
-    (BinType.RESALE, "RS"),
-    (BinType.RECYCLE, "RC"),
-    (BinType.REPAIR, "RP"),
-)
+def _row(bin_code: str, received: Decimal | str, categorized: Decimal | None = None) -> list[str]:
+    if categorized is None:
+        categorized = received if isinstance(received, Decimal) else Decimal("10")
+    return [bin_code, str(received), *(str(w) for _c, w in _disposition_weights(categorized))]
 
 
-def seed_sorting_data(session: Session) -> None:
-    """Insert one empty open bin of each type per site for the garment sorting screen.
+def write_demo_reports(
+    session: Session, today: date, directory: Path = DEMO_REPORTS_DIR
+) -> list[Path]:
+    """Write contractor report CSVs for last month that show every import outcome."""
 
-    Run after ``seed_dashboard_data``. Uses the ``SORT-`` prefix and adds no garment records,
-    so EPR totals are unchanged.
-    """
+    directory.mkdir(parents=True, exist_ok=True)
+    for old in directory.glob("*.csv"):
+        old.unlink()
+    month = month_start(today, -1)
+    files: list[Path] = []
 
-    site_codes = [code for code, _name in SITE_DEFINITIONS]
-    sites = session.exec(select(Site).where(Site.code.in_(site_codes)).order_by(Site.code)).all()
-    for site in sites:
-        for bin_type, suffix in SORTING_ACTIVE_BIN_TYPES:
-            code = f"SORT-{site.code[-3:]}-{suffix}-01"
-            exists = session.exec(
-                select(Bin.id).where(Bin.site_id == site.id, Bin.code == code)
-            ).first()
-            if exists is None:
-                session.add(
-                    Bin(
-                        site_id=site.id,
-                        code=code,
-                        bin_type=bin_type,
-                        status=BinStatus.ACTIVE,
-                        notes="Sorting development seed data",
-                    )
-                )
-    session.commit()
+    # GreenLoop's last-month bins (BKK, KKC) aren't reported yet: verified, flagged, rejected.
+    greenloop = CONTRACTORS["greenloop"][0]
+    unreported = _last_month_handoffs(session, today, greenloop)
+    circular = _last_month_handoffs(session, today, CONTRACTORS["circular"][0])
+    (bkk_1, h_bkk_1), (bkk_2, h_bkk_2), (kkc_1, h_kkc_1), (kkc_2, h_kkc_2) = sorted(
+        unreported, key=lambda pair: pair[0].code
+    )[:4]
+    off_by_five = (h_kkc_1.staff_weight_kg * Decimal("0.95")).quantize(KG)
+    rows = [
+        _row(bkk_1.code, h_bkk_1.driver_weight_kg),  # Verified
+        _row(bkk_2.code, h_bkk_2.driver_weight_kg, h_bkk_2.driver_weight_kg - Decimal("1.5")),
+        _row(kkc_1.code, off_by_five),  # More than 3% off the staff weight
+        _row(kkc_2.code, h_kkc_2.driver_weight_kg),  # Verified
+        _row(bkk_1.code, h_bkk_1.driver_weight_kg),  # Repeated bin
+        _row(f"{bkk_1.code.rsplit('-', 1)[0]}-999", Decimal("20.000")),  # Unknown bin
+        _row(circular[0][0].code, circular[0][1].driver_weight_kg),  # Another contractor's bin
+        _row(kkc_2.code.replace("KKC", "HKT", 1), "abc"),  # Not a number
+    ]
+    files.append(_write_csv(directory / f"{_slug(greenloop)}-{month:%Y-%m}.csv", rows))
+
+    # Circular Fibre's last-month bins are already reported: re-importing flags and replaces.
+    circular_name = CONTRACTORS["circular"][0]
+    rows = [_row(bin_record.code, handoff.driver_weight_kg) for bin_record, handoff in circular]
+    files.append(_write_csv(directory / f"{_slug(circular_name)}-{month:%Y-%m}.csv", rows))
+    return files
 
 
-def seed_direct_resale_data(session: Session) -> None:
-    """Insert closed resale bins for the Direct Resale processing demo."""
+def _write_csv(path: Path, rows: list[list[str]]) -> Path:
+    path.write_text("\n".join([",".join(REPORT_COLUMNS), *(",".join(row) for row in rows)]) + "\n")
+    return path
 
-    site = session.exec(select(Site).where(Site.code == "DASH-BKK")).one_or_none()
-    if site is None:
-        return
 
-    demo_bins = (
-        ("DEMO-RS-BKK-01", 100, Decimal("40.000")),
-        ("DEMO-RS-BKK-02", 80, Decimal("32.000")),
-        ("DEMO-RS-BKK-03", 120, Decimal("44.500")),
-        ("DEMO-RS-BKK-04", 65, Decimal("25.500")),
+# --- Command line ---------------------------------------------------------------------------
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Reset the local database and load demo data.")
+    parser.add_argument("--yes", action="store_true", help="don't ask before deleting data")
+    parser.add_argument(
+        "--allow-remote", action="store_true", help="allow a database that isn't local"
     )
-    for code, item_count, weight in demo_bins:
-        exists = session.exec(
-            select(Bin.id).where(Bin.site_id == site.id, Bin.code == code)
-        ).first()
-        if exists is not None:
-            continue
-        session.add(
-            Bin(
-                site_id=site.id,
-                code=code,
-                bin_type=BinType.RESALE,
-                status=BinStatus.CLOSED,
-                item_count=item_count,
-                total_weight_kg=weight,
-                max_capacity=item_count,
-                actual_value=None,
-                closed_at=datetime(2026, 11, 26, 9, 0, tzinfo=UTC),
-                notes="Direct Resale development demo data",
-            )
-        )
-    session.commit()
+    args = parser.parse_args(argv)
 
+    url = get_database_url()
+    check_database_target(url, allow_remote=args.allow_remote)
+    target = f"{url.host or 'local file'}/{url.database}"
+    if not args.yes:
+        answer = input(f"This deletes ALL data in {target} and loads demo data. Type 'yes': ")
+        if answer.strip().lower() != "yes":
+            sys.exit("Cancelled; nothing was changed.")
 
-def seed_development_data(session: Session) -> None:
-    """Insert all development records: dashboard, handoff, sorting, and resale data."""
-
-    seed_dashboard_data(session)
-    seed_handoff_data(session)
-    seed_sorting_data(session)
-    seed_direct_resale_data(session)
-
-
-def main() -> None:
+    today = date.today()
     with Session(get_engine()) as session:
-        seed_development_data(session)
-    print(
-        "Seed data is ready: dashboard (2 sites, Jan-Oct 2026, EPR Q3-Q4) and recycle bin "
-        f"handoff ({HANDOFF_READY_BINS_PER_SITE} ready bins and 1 picked-up handoff per site), "
-        "sorting (one open bin of each type per site), and Direct Resale (four closed resale bins)."
-    )
+        data = seed_demo_data(session, today)
+        files = write_demo_reports(session, today)
+
+    print(f"Demo data loaded into {target} (12 months to {month_start(today, -1):%B %Y}).")
+    print(f"\nDemo accounts (password: {data.password}):")
+    for username, role, stores in data.accounts:
+        print(f"  {username:<28} {role:<8} {stores}")
+    print("\nContractor report files for the import demo:")
+    for path in files:
+        print(f"  {path.relative_to(REPOSITORY_ROOT)}")
 
 
 if __name__ == "__main__":

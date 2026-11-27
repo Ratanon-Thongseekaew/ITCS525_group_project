@@ -5,14 +5,14 @@ from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session, SQLModel, create_engine, func, select
-from sqlmodel.pool import StaticPool
+from sqlmodel import Session, func, select
 
 from app.database import get_session
 from app.main import app
 from app.models import (
     Bin,
     BinStatus,
+    BinType,
     Contractor,
     ContractorReport,
     ContractorReportEntry,
@@ -23,7 +23,6 @@ from app.models import (
     User,
 )
 from app.schemas import HandoffRecordStatus, UserRole
-from seed import seed_development_data
 
 PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
 PICKED_UP_AT = "2026-11-21T10:15:00+07:00"
@@ -54,6 +53,48 @@ class HandoffTestContext:
         with self.session() as session:
             return session.exec(select(Bin.status).where(Bin.code == code)).one()
 
+    def ready_bin(self, site_code: str = "BKK") -> str:
+        """The store's seeded recycle bin that is sealed and waiting for pickup."""
+        with self.session() as session:
+            return session.exec(
+                select(Bin.code)
+                .join(Site, Site.id == Bin.site_id)
+                .where(Site.code == site_code, Bin.status == BinStatus.READY)
+                .order_by(Bin.id)
+            ).first()
+
+    def new_ready_bin(self, site_code: str = "BKK") -> str:
+        """Another sealed recycle bin, for tests that need more than the seeded one."""
+        with self.session() as session:
+            count = session.exec(select(func.count()).select_from(Bin)).one()
+            bin_record = Bin(
+                site_id=self.site_id(site_code),
+                code=f"{site_code}-RC-T{count}",
+                bin_type=BinType.RECYCLE,
+                status=BinStatus.READY,
+                item_count=50,
+                total_weight_kg=Decimal("40.000"),
+            )
+            session.add(bin_record)
+            session.commit()
+            return bin_record.code
+
+    def handed_off_bin(self, site_code: str = "BKK") -> str:
+        with self.session() as session:
+            return session.exec(
+                select(Bin.code)
+                .join(Site, Site.id == Bin.site_id)
+                .where(Site.code == site_code, Bin.status == BinStatus.HANDED_OFF)
+            ).first()
+
+    def bin_of_type(self, bin_type: BinType, site_code: str = "BKK") -> str:
+        with self.session() as session:
+            return session.exec(
+                select(Bin.code)
+                .join(Site, Site.id == Bin.site_id)
+                .where(Site.code == site_code, Bin.bin_type == bin_type)
+            ).first()
+
     def contractor_id(self) -> int:
         with self.session() as session:
             return session.exec(select(Contractor.id).order_by(Contractor.id)).first()
@@ -64,19 +105,19 @@ class HandoffTestContext:
 
     @property
     def manager_id(self) -> int:
-        return self.user_id("dashboard.manager@example.invalid")
+        return self.user_id("manager.bkk@example.com")
 
     @property
     def bkk_staff_id(self) -> int:
-        return self.user_id("dashboard.staff.bkk@example.invalid")
+        return self.user_id("staff.bkk@example.com")
 
     @property
     def cnx_staff_id(self) -> int:
-        return self.user_id("dashboard.staff.cnx@example.invalid")
+        return self.user_id("staff.cnx@example.com")
 
-    def record(self, bin_code: str = "HAND-BKK-READY-01", *, photo=DEFAULT_PHOTO, **fields):
+    def record(self, bin_code: str | None = None, *, photo=DEFAULT_PHOTO, **fields):
         data = {
-            "bin_id": str(self.bin_id(bin_code)),
+            "bin_id": str(self.bin_id(bin_code or self.ready_bin())),
             "contractor_id": str(self.contractor_id()),
             "actor_id": str(self.bkk_staff_id),
             "picked_up_at": PICKED_UP_AT,
@@ -119,26 +160,19 @@ class HandoffTestContext:
 
 
 @pytest.fixture
-def ctx(tmp_path, monkeypatch) -> Iterator[HandoffTestContext]:
+def ctx(tmp_path, monkeypatch, demo_engine) -> Iterator[HandoffTestContext]:
     monkeypatch.setenv("UPLOAD_DIR", str(tmp_path))
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        seed_development_data(session)
 
     def override_session():
-        with Session(engine) as session:
+        with Session(demo_engine) as session:
             yield session
 
     app.dependency_overrides[get_session] = override_session
     try:
         with TestClient(app) as client:
-            yield HandoffTestContext(client=client, engine=engine)
+            yield HandoffTestContext(client=client, engine=demo_engine)
     finally:
         app.dependency_overrides.clear()
-        engine.dispose()
 
 
 def test_schema_status_mirrors_model_status() -> None:
@@ -147,34 +181,18 @@ def test_schema_status_mirrors_model_status() -> None:
     ]
 
 
-def test_seed_is_idempotent_and_has_no_scheduled_handoffs(ctx: HandoffTestContext) -> None:
-    def counts() -> tuple[int, int]:
-        with ctx.session() as session:
-            return session.exec(select(func.count()).select_from(Bin)).one(), ctx.handoff_count()
-
-    before = counts()
+def test_seeded_handoffs_follow_the_three_percent_rule(ctx: HandoffTestContext) -> None:
     with ctx.session() as session:
-        seed_development_data(session)
-        scheduled = session.exec(
-            select(Handoff).where(Handoff.status == HandoffStatus.SCHEDULED)
-        ).all()
-    assert counts() == before
-    assert scheduled == []
+        handoffs = session.exec(select(Handoff)).all()
 
-
-def test_seeded_picked_up_handoffs_follow_the_three_percent_rule(ctx: HandoffTestContext) -> None:
-    with ctx.session() as session:
-        statuses = dict(
-            session.exec(
-                select(Bin.code, Handoff.status)
-                .join(Handoff, Handoff.bin_id == Bin.id)
-                .where(Bin.code.like("HAND-%"))
-            ).all()
-        )
-    assert statuses == {
-        "HAND-BKK-PICKED-01": HandoffStatus.DISPUTED,
-        "HAND-CNX-PICKED-01": HandoffStatus.PICKED_UP,
-    }
+    assert not any(handoff.status is HandoffStatus.SCHEDULED for handoff in handoffs)
+    for handoff in handoffs:
+        assert handoff.requires_manager_approval == (handoff.weight_variance_percent > 3)
+        if handoff.status is HandoffStatus.DISPUTED:
+            assert handoff.approved_by_user_id is None
+        if handoff.requires_manager_approval and handoff.status is not HandoffStatus.DISPUTED:
+            assert handoff.approved_by_user_id is not None
+    assert sum(handoff.status is HandoffStatus.DISPUTED for handoff in handoffs) == 1
 
 
 def test_scheduling_endpoints_are_gone(ctx: HandoffTestContext) -> None:
@@ -185,29 +203,33 @@ def test_scheduling_endpoints_are_gone(ctx: HandoffTestContext) -> None:
 def test_options_list_sites_contractors_and_actor_memberships(ctx: HandoffTestContext) -> None:
     body = ctx.client.get("/api/handoffs/options").json()
 
-    assert [site["name"] for site in body["sites"]] == [
+    assert sorted(site["name"] for site in body["sites"]) == [
         "Bangkok Sorting Center",
         "Chiang Mai Sorting Center",
+        "Hat Yai Sorting Center",
+        "Khon Kaen Sorting Center",
+        "Phuket Sorting Center",
     ]
-    assert len(body["contractors"]) == 2
+    assert len(body["contractors"]) == 3
     staff = next(actor for actor in body["actors"] if actor["id"] == ctx.bkk_staff_id)
     assert staff["role"] == "staff"
-    assert staff["site_ids"] == [ctx.site_id("DASH-BKK")]
+    assert staff["site_ids"] == [ctx.site_id("BKK")]
 
 
 def test_ready_bins_are_ready_recycle_bins_without_a_handoff(ctx: HandoffTestContext) -> None:
     bins = ctx.client.get("/api/handoffs/bins").json()["bins"]
 
-    assert sorted(item["code"] for item in bins) == [
-        f"HAND-{site}-READY-0{number}" for site in ("BKK", "CNX") for number in (1, 2, 3)
+    assert sorted(item["code"] for item in bins) == sorted(
+        ctx.ready_bin(code) for code in ("BKK", "CNX", "HKT")
+    )
+    site_bins = ctx.client.get("/api/handoffs/bins", params={"site_id": ctx.site_id("CNX")}).json()[
+        "bins"
     ]
-    site_bins = ctx.client.get(
-        "/api/handoffs/bins", params={"site_id": ctx.site_id("DASH-CNX")}
-    ).json()["bins"]
     assert {item["site_name"] for item in site_bins} == {"Chiang Mai Sorting Center"}
 
 
 def test_pickup_within_three_percent_records_all_evidence(ctx: HandoffTestContext) -> None:
+    bin_code = ctx.ready_bin()
     response = ctx.record(driver_weight_kg="41.200")  # exactly 3%
 
     assert response.status_code == 201
@@ -220,11 +242,11 @@ def test_pickup_within_three_percent_records_all_evidence(ctx: HandoffTestContex
     assert record["driver_name"] == "Somchai P."
     assert record["vehicle_plate_number"] == "1KB-2345"
     assert record["picked_up_at"].startswith("2026-11-21T03:15:00")
-    assert record["created_by"] == "dashboard.staff.bkk@example.invalid"
+    assert record["created_by"] == "staff.bkk@example.com"
     assert record["scale_photo_url"] == f"/api/handoffs/{record['id']}/scale-photo"
-    assert ctx.bin_status("HAND-BKK-READY-01") is BinStatus.HANDED_OFF
+    assert ctx.bin_status(bin_code) is BinStatus.HANDED_OFF
     codes = [item["code"] for item in ctx.client.get("/api/handoffs/bins").json()["bins"]]
-    assert "HAND-BKK-READY-01" not in codes
+    assert bin_code not in codes
 
     photo = ctx.client.get(record["scale_photo_url"])
     assert photo.status_code == 200
@@ -267,13 +289,14 @@ def test_rejected_pickups_leave_nothing_behind(
     ctx: HandoffTestContext, tmp_path, fields, status_code
 ) -> None:
     before = ctx.handoff_count()
+    bin_code = ctx.ready_bin()
 
     response = ctx.record(**fields)
 
     assert response.status_code == status_code
     assert ctx.handoff_count() == before
     assert not any(tmp_path.rglob("*.*"))
-    assert ctx.bin_status("HAND-BKK-READY-01") is BinStatus.READY
+    assert ctx.bin_status(bin_code) is BinStatus.READY
 
 
 def test_pickup_time_cannot_be_in_the_future(ctx: HandoffTestContext) -> None:
@@ -285,34 +308,33 @@ def test_pickup_time_cannot_be_in_the_future(ctx: HandoffTestContext) -> None:
 
 
 def test_pickup_checks_the_bin_and_the_actor_site(ctx: HandoffTestContext) -> None:
-    assert ctx.record().status_code == 201
-    assert ctx.record().status_code == 409  # the bin already has a handoff
-    assert ctx.record("HAND-BKK-PICKED-01").status_code == 409  # already handed off
-    assert ctx.record("DASH-BKK-2026-01-RESALE").status_code == 409  # not a recycle bin
-    assert ctx.record("HAND-BKK-READY-02", bin_id=999_999).status_code == 404
-    assert ctx.record("HAND-BKK-READY-02", actor_id=ctx.cnx_staff_id).status_code == 403
-    assert ctx.record("HAND-CNX-READY-01", actor_id=ctx.cnx_staff_id).status_code == 201
+    first = ctx.ready_bin()
+    assert ctx.record(first).status_code == 201
+    assert ctx.record(first).status_code == 409  # the bin already has a handoff
+    assert ctx.record(ctx.handed_off_bin()).status_code == 409  # already handed off
+    assert ctx.record(ctx.bin_of_type(BinType.RESALE)).status_code == 409  # not a recycle bin
+    second = ctx.new_ready_bin()
+    assert ctx.record(second, bin_id=999_999).status_code == 404
+    assert ctx.record(second, actor_id=ctx.cnx_staff_id).status_code == 403
+    assert ctx.record(ctx.ready_bin("CNX"), actor_id=ctx.cnx_staff_id).status_code == 201
 
     with ctx.session() as session:
         contractor = session.get(Contractor, ctx.contractor_id())
         contractor.is_active = False
         session.add(contractor)
         session.commit()
-    assert ctx.record("HAND-BKK-READY-03").status_code == 422
+    assert ctx.record(ctx.new_ready_bin()).status_code == 422
 
 
 def test_only_staff_can_record_handoffs(ctx: HandoffTestContext) -> None:
     with ctx.session() as session:
-        admin = User(username="admin@example.invalid", password_hash="x", role=UserRole.ADMIN)
-        session.add(admin)
-        session.commit()
-        admin_id = admin.id
+        admin_id = session.exec(select(User.id).where(User.role == UserRole.ADMIN)).first()
 
     for actor_id in (ctx.manager_id, admin_id):
         response = ctx.record(actor_id=actor_id)
         assert response.status_code == 403
         assert response.json()["detail"] == "Only store staff can record handoffs."
-    assert ctx.bin_status("HAND-BKK-READY-01") is BinStatus.READY
+    assert ctx.bin_status(ctx.ready_bin()) is BinStatus.READY
 
 
 def test_failed_database_write_removes_the_saved_photo(
@@ -331,6 +353,7 @@ def test_failed_database_write_removes_the_saved_photo(
 def test_disputed_handoff_needs_manager_approval_before_closing(
     ctx: HandoffTestContext,
 ) -> None:
+    bin_code = ctx.ready_bin()
     handoff_id = ctx.record(driver_weight_kg="45.000").json()["id"]
 
     assert ctx.act(handoff_id, "close").status_code == 409
@@ -338,7 +361,7 @@ def test_disputed_handoff_needs_manager_approval_before_closing(
 
     approved = ctx.act(handoff_id, "approve").json()
     assert approved["status"] == "approved"
-    assert approved["approved_by"] == "dashboard.manager@example.invalid"
+    assert approved["approved_by"] == "manager.bkk@example.com"
     assert approved["approved_at"] is not None
     assert ctx.act(handoff_id, "approve").status_code == 409
 
@@ -346,7 +369,7 @@ def test_disputed_handoff_needs_manager_approval_before_closing(
     closed = ctx.act(handoff_id, "close").json()
     assert closed["status"] == "closed"
     assert closed["closed_at"] is not None
-    assert ctx.bin_status("HAND-BKK-READY-01") is BinStatus.CLOSED
+    assert ctx.bin_status(bin_code) is BinStatus.CLOSED
 
 
 def test_close_rules_for_undisputed_handoffs(ctx: HandoffTestContext) -> None:
@@ -363,6 +386,7 @@ def test_close_rules_for_undisputed_handoffs(ctx: HandoffTestContext) -> None:
 def test_handoff_stays_open_while_the_outcome_report_is_pending(
     ctx: HandoffTestContext,
 ) -> None:
+    bin_code = ctx.ready_bin()
     handoff_id = ctx.record().json()["id"]
 
     pending = ctx.act(handoff_id, "close")
@@ -371,22 +395,34 @@ def test_handoff_stays_open_while_the_outcome_report_is_pending(
     assert pending.json()["detail"] == (
         "The contractor's outcome report for this handoff is still pending."
     )
-    assert ctx.bin_status("HAND-BKK-READY-01") is BinStatus.HANDED_OFF
+    assert ctx.bin_status(bin_code) is BinStatus.HANDED_OFF
 
     ctx.add_outcome_report(handoff_id)
     closed = ctx.act(handoff_id, "close").json()
     assert closed["status"] == "closed"
     assert closed["outcomes"]["fibre_to_fibre_weight_kg"] == 40.0
-    assert ctx.bin_status("HAND-BKK-READY-01") is BinStatus.CLOSED
+    assert ctx.bin_status(bin_code) is BinStatus.CLOSED
 
 
 def test_list_returns_outcomes_and_filters_by_status_and_site(ctx: HandoffTestContext) -> None:
+    with ctx.session() as session:
+        closed_count = session.exec(
+            select(func.count()).select_from(Handoff).where(Handoff.status == HandoffStatus.CLOSED)
+        ).one()
+        disputed_codes = set(
+            session.exec(
+                select(Bin.code)
+                .join(Handoff, Handoff.bin_id == Bin.id)
+                .where(Handoff.status == HandoffStatus.DISPUTED)
+            ).all()
+        )
     handoffs = ctx.client.get("/api/handoffs").json()["handoffs"]
 
     closed = [item for item in handoffs if item["status"] == "closed"]
-    assert len(closed) == 19
+    assert len(closed) == closed_count
     reported = next(item for item in closed if item["outcomes"] is not None)
-    assert sum(reported["outcomes"].values()) == pytest.approx(reported["bin_weight_kg"], abs=0.01)
+    # Contractors categorize at most what was weighed, leaving up to 1% uncategorized.
+    assert sum(reported["outcomes"].values()) <= reported["bin_weight_kg"] + 0.01
     assert set(reported["outcomes"]) == {
         "upcycled_weight_kg",
         "fibre_to_fibre_weight_kg",
@@ -395,16 +431,11 @@ def test_list_returns_outcomes_and_filters_by_status_and_site(ctx: HandoffTestCo
         "landfilled_weight_kg",
         "incinerated_energy_recovery_weight_kg",
     }
-    seeded = next(item for item in handoffs if item["bin_code"] == "HAND-BKK-PICKED-01")
+    seeded = closed[0]
     assert seeded["scale_photo_url"].startswith("https://example.invalid/")
     assert ctx.client.get(f"/api/handoffs/{seeded['id']}/scale-photo").status_code == 404
 
     disputed = ctx.client.get("/api/handoffs", params={"status": "disputed"}).json()["handoffs"]
-    assert {item["bin_code"] for item in disputed} == {
-        "DASH-BKK-2026-10-RECYCLE",
-        "HAND-BKK-PICKED-01",
-    }
-    cnx = ctx.client.get("/api/handoffs", params={"site_id": ctx.site_id("DASH-CNX")}).json()[
-        "handoffs"
-    ]
+    assert {item["bin_code"] for item in disputed} == disputed_codes
+    cnx = ctx.client.get("/api/handoffs", params={"site_id": ctx.site_id("CNX")}).json()["handoffs"]
     assert {item["site_name"] for item in cnx} == {"Chiang Mai Sorting Center"}

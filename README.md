@@ -104,18 +104,43 @@ Apply the committed schema after MySQL is healthy:
 npm run db:migrate
 ```
 
-To populate deterministic local data for the compliance dashboard and the
-recycle bin handoff pages, run:
+To load demo data for presenting the app, run:
 
 ```bash
-uv run --project backend --locked python backend/seed.py
+uv run --project backend --locked python backend/seed.py   # asks before deleting
+uv run --project backend --locked python backend/seed.py --yes
 ```
 
-The seed is additive and idempotent. It creates two sites and
-January–October 2026 handoff, contractor-report, disposition, and EPR examples
-for the dashboard (`DASH-` codes). It also adds recycle bin handoff data
-(`HAND-` codes): three ready recycling bins per site and one picked-up handoff
-per site, the Bangkok one disputed. It also adds one empty open bin of each type per site for the sorting page (`SORT-` codes) and four closed resale bins awaiting processing for Direct Resale (`DEMO-RS-BKK-` codes). It never deletes existing records.
+**The seed deletes all application data first** (the schema and Docker volume
+are kept), then loads a fresh demo dataset with dates relative to today. It
+refuses databases that aren't local unless you pass `--allow-remote`. The data:
+
+- Five stores: Bangkok `BKK`, Chiang Mai `CNX`, Phuket `HKT`, Khon Kaen `KKC`,
+  and Hat Yai `HDY`. There are three contractors: GreenLoop Recycling, Circular
+  Fibre Co., and ReWeave Textiles.
+- Twelve months of history up to last month: sorted garments, closed resale,
+  repair, and recycle bins, handoffs, contractor reports, and submitted EPR
+  quarters with one adjustment.
+- Last month's GreenLoop reports (Bangkok and Khon Kaen) are left for the import
+  demo, and that month's EPR quarter stays open.
+- The current month in progress: partly filled bins to sort into, sealed bins
+  waiting for pickup, picked-up, disputed, and approved handoffs, and resale bins
+  waiting for Direct Resale.
+- Contractor report files for the import demo, written to
+  `backend/demo_reports/` (ignored by Git). The GreenLoop file has verified,
+  flagged, and rejected rows; the Circular Fibre file re-imports reported bins.
+
+Every demo account uses one shared password, `TextileDemo2026!`, or
+`DEMO_PASSWORD` if set. The password is public, so these accounts are for local
+demos only. Each account is ready to use without a password change:
+
+| Account                       | Role    | Store      |
+| ----------------------------- | ------- | ---------- |
+| `admin@example.com`           | Admin   | All stores |
+| `manager.<store>@example.com` | Manager | That store |
+| `staff.<store>@example.com`   | Staff   | That store |
+
+`<store>` is `bkk`, `cnx`, `hkt`, `kkc`, or `hdy`.
 
 Create a migration after changing `backend/app/models.py`, verify that the
 metadata matches the migrated database, or roll back one revision during local
@@ -167,7 +192,8 @@ management under `/api/users` (see Swagger at `http://127.0.0.1:8000/docs`; use
 Each user has an optional `full_name` and a store (their `user_sites` link):
 staff need exactly one store, managers may have one, and administrators have none.
 `GET /api/sites` (administrator only) lists the active stores for the store
-dropdown. Seed sample stores with `uv run --project backend --locked python backend/seed.py`.
+dropdown. The demo seed (`uv run --project backend --locked python backend/seed.py`)
+creates five stores and their accounts.
 
 The Add and Edit user forms require a store for staff and managers (the API
 still lets a manager have none).
@@ -314,8 +340,8 @@ managers and admins can approve or close them. Timestamps must include
 a UTC offset. Scale photos must be JPEG, PNG, or WebP up to 5 MB and are stored
 in `backend/uploads/` (ignored by Git); set `UPLOAD_DIR` in `.env` to change it.
 
-Demo bins and handoffs for these pages come from the same seed command as the
-dashboard data (`python backend/seed.py`; see Database above).
+Demo bins and handoffs for these pages come from the demo seed
+(`python backend/seed.py`; see Database above).
 
 ## Contractor report import
 

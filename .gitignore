@@ -25,3 +25,6 @@ backend/uploads/
 .idea/
 .vscode/
 
+
+# Contractor report CSVs written by the demo seed
+backend/demo_reports/
