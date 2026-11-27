@@ -27,7 +27,6 @@ export interface DirectResaleBinRecord {
 }
 
 export interface ProcessDirectResaleBinRequest {
-  actor_id: number
   accepted_item_count: number
   rejected_item_count: number
   revenue: number
@@ -309,9 +308,10 @@ export async function getGreeting(): Promise<Greeting> {
 }
 
 export async function getResaleStoreSummary(
+  token: string,
   signal?: AbortSignal,
 ): Promise<ResaleStoreSummaryResponse> {
-  const response = await fetch(`${API_URL}/api/resale-bins/summary`, { signal })
+  const response = await signedFetch(token, `${API_URL}/api/resale-bins/summary`, { signal })
   return handleResponse<ResaleStoreSummaryResponse>(response)
 }
 
@@ -415,8 +415,13 @@ export function saveEprAdjustment(
 
 // Sorting reads are per site and writes name the acting staff member (`actor_id`) until the
 // frontend uses real login, the same stopgap the handoff pages use.
-async function sortingRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}/api${path}`, init)
+async function sortingRequest<T>(
+  path: string,
+  init: SignedRequestInit = {},
+  token?: string,
+): Promise<T> {
+  const url = `${API_URL}/api${path}`
+  const response = await (token === undefined ? fetch(url, init) : signedFetch(token, url, init))
   if (!response.ok) {
     const error = (await response.json().catch(() => null)) as { detail?: unknown } | null
     if (typeof error?.detail === 'string') throw new Error(error.detail)
@@ -425,12 +430,16 @@ async function sortingRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
-function postJson<T>(path: string, body: unknown) {
-  return sortingRequest<T>(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+function postJson<T>(path: string, body: unknown, token?: string) {
+  return sortingRequest<T>(
+    path,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+    token,
+  )
 }
 
 // Reads name the acting user (`actor_id`). Staff only reach their own site; managers pick one of
@@ -462,14 +471,21 @@ export function getBins(
   )
 }
 
-export function getDirectResaleBins(siteId: number, signal?: AbortSignal) {
-  return sortingRequest<DirectResaleBinRecord[]>(`/resale-bins${buildQuery({ site_id: siteId })}`, {
-    signal,
-  })
+export function getDirectResaleBins(token: string, siteId: number, signal?: AbortSignal) {
+  return sortingRequest<DirectResaleBinRecord[]>(
+    `/resale-bins${buildQuery({ site_id: siteId })}`,
+    { signal },
+    token,
+  )
 }
 
-export function processDirectResaleBin(binId: number, payload: ProcessDirectResaleBinRequest) {
-  return postJson<DirectResaleBinRecord>(`/resale-bins/${binId}/process`, payload)
+// The server records the signed-in staff member as the processor.
+export function processDirectResaleBin(
+  token: string,
+  binId: number,
+  payload: ProcessDirectResaleBinRequest,
+) {
+  return postJson<DirectResaleBinRecord>(`/resale-bins/${binId}/process`, payload, token)
 }
 
 export function createBin(payload: BinCreateRequest): Promise<BinRecord> {

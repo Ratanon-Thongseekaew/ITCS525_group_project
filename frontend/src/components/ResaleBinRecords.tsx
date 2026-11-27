@@ -5,6 +5,7 @@ import { getResaleStoreSummary, type ResaleStoreSummary } from '@/api'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/LoadState'
 import { PageHeader } from '@/components/PageHeader'
+import { useSession } from '@/lib/auth-session'
 import Converge, { type DataSourceItem } from '@/lib/react-vibe/Converage'
 
 const STORE_COLORS = [
@@ -32,11 +33,12 @@ function ResaleBinRecords() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
+  const token = useSession()?.token ?? ''
 
   useEffect(() => {
     const controller = new AbortController()
 
-    getResaleStoreSummary(controller.signal)
+    getResaleStoreSummary(token, controller.signal)
       .then((response) => setStores(toDataSources(response.stores)))
       .catch((requestError: unknown) => {
         if (requestError instanceof DOMException && requestError.name === 'AbortError') return
@@ -51,7 +53,7 @@ function ResaleBinRecords() {
       })
 
     return () => controller.abort()
-  }, [retryCount])
+  }, [retryCount, token])
 
   function retryRequest() {
     setIsLoading(true)

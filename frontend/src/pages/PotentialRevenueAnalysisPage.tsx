@@ -10,11 +10,13 @@ import { useSession } from '@/lib/auth-session'
 import { useApiResource } from '@/lib/use-api-resource'
 
 export function PotentialRevenueAnalysisPage() {
-  const user = useSession()?.user ?? null
+  const session = useSession()
+  const user = session?.user ?? null
+  const token = session?.token ?? ''
   const siteId = user?.role === 'staff' ? (user.store?.id ?? null) : null
   const loadBins = useCallback(
-    (signal: AbortSignal) => getDirectResaleBins(siteId!, signal),
-    [siteId],
+    (signal: AbortSignal) => getDirectResaleBins(token, siteId!, signal),
+    [siteId, token],
   )
   const resource = useApiResource(
     siteId === null ? null : `direct-resale:${siteId}`,

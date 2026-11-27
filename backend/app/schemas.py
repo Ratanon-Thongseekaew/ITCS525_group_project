@@ -270,7 +270,6 @@ class BinRecord(BaseModel):
 
 
 class ResaleProcessRequest(BaseModel):
-    actor_id: int = Field(gt=0)
     accepted_item_count: int = Field(ge=0)
     rejected_item_count: int = Field(ge=0)
     revenue: Decimal = Field(ge=0, max_digits=12, decimal_places=2)

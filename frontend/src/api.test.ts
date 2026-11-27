@@ -107,9 +107,12 @@ test('requests the persisted resale summary', async () => {
     }),
   )
 
-  await getResaleStoreSummary()
+  await getResaleStoreSummary('test-token')
 
-  expect(fetchMock).toHaveBeenCalledWith('/api/resale-bins/summary', { signal: undefined })
+  expect(fetchMock).toHaveBeenCalledWith('/api/resale-bins/summary', {
+    signal: undefined,
+    headers: { Authorization: 'Bearer test-token' },
+  })
 })
 
 function mockJsonResponse(body: unknown, status = 200) {

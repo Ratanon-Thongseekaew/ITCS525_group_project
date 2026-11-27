@@ -14,12 +14,14 @@ import { useSession } from '@/lib/auth-session'
 import { useApiResource } from '@/lib/use-api-resource'
 
 export function DirectResalePage() {
-  const user = useSession()?.user ?? null
+  const session = useSession()
+  const user = session?.user ?? null
+  const token = session?.token ?? ''
   const actor = user?.role === 'staff' ? user : null
   const siteId = actor?.store?.id ?? null
   const loadBins = useCallback(
-    (signal: AbortSignal) => getDirectResaleBins(siteId!, signal),
-    [siteId],
+    (signal: AbortSignal) => getDirectResaleBins(token, siteId!, signal),
+    [siteId, token],
   )
   const resource = useApiResource(
     siteId === null ? null : `direct-resale:${siteId}`,
@@ -106,7 +108,6 @@ export function DirectResalePage() {
         <DirectResaleProcessDialog
           key={activeBin.id}
           bin={activeBin}
-          actorId={actor.id}
           onClose={() => setActiveBin(null)}
           onProcessed={() => {
             setActiveBin(null)
