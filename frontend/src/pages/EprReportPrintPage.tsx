@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { useSession } from '@/lib/auth-session'
 import { getEprReportRows, getEprSourceNote } from '@/lib/epr-report'
 
 const numberFormatter = new Intl.NumberFormat('en', { maximumFractionDigits: 4 })
@@ -27,11 +28,12 @@ function PrintableReport({
 }) {
   const [report, setReport] = useState(initialReport)
   const [failed, setFailed] = useState(false)
+  const token = useSession()?.token ?? ''
 
   useEffect(() => {
     if (initialReport) return
     const controller = new AbortController()
-    void getEprQuarterReport(year, quarter, controller.signal)
+    void getEprQuarterReport(token, year, quarter, controller.signal)
       .then((result) => {
         if (!controller.signal.aborted) setReport(result)
       })
@@ -39,7 +41,7 @@ function PrintableReport({
         if (!controller.signal.aborted) setFailed(true)
       })
     return () => controller.abort()
-  }, [initialReport, quarter, year])
+  }, [initialReport, quarter, token, year])
 
   if (failed) return <p role="alert">The EPR report could not be loaded.</p>
   if (!report) return <p role="status">Loading EPR report…</p>

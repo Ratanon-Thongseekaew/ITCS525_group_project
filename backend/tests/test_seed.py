@@ -2,6 +2,7 @@ import re
 from datetime import UTC, date, datetime
 
 import pytest
+from auth_helpers import bearer
 from fastapi.testclient import TestClient
 from sqlalchemy import make_url
 from sqlmodel import Session, SQLModel, func, select
@@ -157,12 +158,12 @@ def test_demo_report_files_show_every_import_outcome(client, demo_engine, tmp_pa
         response = client.post(
             "/api/contractor-reports/parse-and-validate",
             json={
-                "actor_id": admin_id,
                 "filename": name,
                 "content_base64": base64.b64encode((tmp_path / name).read_bytes()).decode(),
                 "report_month": "2026-10",
                 "contractor_id": contractors[contractor],
             },
+            headers=bearer(admin_id),
         )
         assert response.status_code == 200, response.text
         return response.json()["rows"]

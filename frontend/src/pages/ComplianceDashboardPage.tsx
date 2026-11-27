@@ -37,6 +37,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { useSession } from '@/lib/auth-session'
 import { OUTCOME_CATEGORIES, OUTCOME_TONES } from '@/lib/outcome-tones'
 import { cn } from '@/lib/utils'
 
@@ -328,11 +329,13 @@ export function ComplianceDashboardPage() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [retryCount, setRetryCount] = useState(0)
+  const token = useSession()?.token ?? ''
 
   useEffect(() => {
     const controller = new AbortController()
 
     void getDashboard(
+      token,
       {
         frequency,
         year,
@@ -356,7 +359,7 @@ export function ComplianceDashboardPage() {
       })
 
     return () => controller.abort()
-  }, [contractorId, frequency, month, quarter, retryCount, siteId, year])
+  }, [contractorId, frequency, month, quarter, retryCount, siteId, token, year])
 
   function updateFilter(update: () => void) {
     setIsLoading(true)

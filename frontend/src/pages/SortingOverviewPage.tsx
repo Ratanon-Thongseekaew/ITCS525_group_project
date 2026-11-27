@@ -56,7 +56,9 @@ function formatDateTime(value: string) {
 
 /** A manager's read-only view of garment intake and bins, for one site or all of theirs. */
 export function SortingOverviewPage() {
-  const user = useSession()?.user ?? null
+  const session = useSession()
+  const user = session?.user ?? null
+  const token = session?.token ?? ''
   // Staff sort from their own screen; this overview is for managers and administrators.
   const viewer = user && user.role !== 'staff' ? user : null
   const viewerId = viewer?.id ?? null
@@ -64,7 +66,7 @@ export function SortingOverviewPage() {
 
   const sitesResource = useApiResource(
     viewerId === null ? null : `sorting-sites:${viewerId}`,
-    () => getSortingSites(viewerId!),
+    () => getSortingSites(token),
     'Your sites could not be loaded.',
   )
   const sites = sitesResource.data ?? []
@@ -76,9 +78,9 @@ export function SortingOverviewPage() {
     viewerId === null ? null : `sorting-overview:${viewerId}:${siteId ?? ALL_SITES}`,
     async () => {
       const [stats, bins, garments] = await Promise.all([
-        getSortingStats(viewerId!, siteId),
-        getBins(viewerId!, siteId),
-        getRecentGarments(viewerId!, siteId, 20),
+        getSortingStats(token, siteId),
+        getBins(token, siteId),
+        getRecentGarments(token, siteId, 20),
       ])
       return { stats, bins, garments }
     },

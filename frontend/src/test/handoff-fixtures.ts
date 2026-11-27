@@ -14,10 +14,6 @@ export const handoffOptions: HandoffOptions = {
     { id: 1, name: 'GreenLoop Recycling' },
     { id: 2, name: 'Circular Fibre Co.' },
   ],
-  actors: [
-    { id: STAFF_ID, username: 'staff.bkk@example.com', role: 'staff', site_ids: [1] },
-    { id: MANAGER_ID, username: 'manager@example.com', role: 'manager', site_ids: [1, 2] },
-  ],
 }
 
 export function readyBin(overrides: Partial<HandoffReadyBin> = {}): HandoffReadyBin {

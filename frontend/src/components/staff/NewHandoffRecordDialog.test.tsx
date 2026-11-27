@@ -14,6 +14,7 @@ import {
   STAFF_ID,
   stubRadixBrowserApis,
 } from '@/test/handoff-fixtures'
+import { signInAs } from '@/test/auth'
 import { NewHandoffRecordDialog } from './NewHandoffRecordDialog'
 
 vi.mock('@/api', async (importOriginal) => ({
@@ -30,7 +31,6 @@ function renderDialog() {
     <NewHandoffRecordDialog
       bin={readyBin()}
       contractors={handoffOptions.contractors}
-      actorId={STAFF_ID}
       onClose={onClose}
       onRecorded={onRecorded}
     />,
@@ -43,6 +43,7 @@ function submit() {
 }
 
 beforeEach(() => {
+  signInAs('staff', { id: STAFF_ID })
   vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 21, 10, 47) })
   vi.mocked(recordHandoffAtPickup).mockReset()
 })
@@ -50,6 +51,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
   cleanup()
+  window.sessionStorage.clear()
 })
 
 test('prefills the pickup time with now and the staff weight with the bin weight', () => {
@@ -129,10 +131,10 @@ test('records the handoff and its evidence in one request', async () => {
   submit()
 
   await waitFor(() => expect(onRecorded).toHaveBeenCalledWith(saved))
-  expect(recordHandoffAtPickup).toHaveBeenCalledExactlyOnceWith({
+  // The signed-in staff member is sent as the token, not as an actor in the form.
+  expect(recordHandoffAtPickup).toHaveBeenCalledExactlyOnceWith('test-token', {
     bin_id: 1,
     contractor_id: 2,
-    actor_id: STAFF_ID,
     picked_up_at: new Date(2026, 10, 21, 10, 30).toISOString(),
     staff_weight_kg: 40,
     driver_weight_kg: 40.5,

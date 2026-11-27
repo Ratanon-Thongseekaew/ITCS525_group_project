@@ -5,6 +5,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
+from auth_helpers import bearer, sign_in
 from fastapi.testclient import TestClient
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
@@ -70,7 +71,6 @@ class ImportContext:
         return self.client.post(
             "/api/contractor-reports/parse-and-validate",
             json={
-                "actor_id": self.manager_id,
                 "filename": filename,
                 "content_base64": base64.b64encode(content).decode("ascii"),
                 "report_month": "2026-11",
@@ -91,7 +91,6 @@ class ImportContext:
         return self.client.post(
             "/api/contractor-reports/import",
             json={
-                "actor_id": self.manager_id,
                 "contractor_id": self.greenloop_id,
                 "report_month": "2026-11",
                 "source_filename": "report.csv",
@@ -169,7 +168,9 @@ def ctx():
             yield session
 
     app.dependency_overrides[get_session] = override_session
-    yield ImportContext(TestClient(app), engine)
+    context = ImportContext(TestClient(app), engine)
+    sign_in(context.client, context.manager_id)
+    yield context
     app.dependency_overrides.clear()
 
 
@@ -367,10 +368,10 @@ def test_bin_lookups_do_not_grow_with_the_number_of_rows(ctx) -> None:
     def count(_conn, _cursor, statement, *_args) -> None:
         statements.append(statement)
 
-    manager_id, greenloop_id = ctx.manager_id, ctx.greenloop_id
+    greenloop_id = ctx.greenloop_id
     event.listen(ctx.engine, "before_cursor_execute", count)
     try:
-        ctx.parse("BKK-RC-001", actor_id=manager_id, contractor_id=greenloop_id)
+        ctx.parse("BKK-RC-001", contractor_id=greenloop_id)
         one_row = len(statements)
         statements.clear()
         ctx.parse(
@@ -378,7 +379,6 @@ def test_bin_lookups_do_not_grow_with_the_number_of_rows(ctx) -> None:
             "CNX-RC-001",
             "BKK-RC-003",
             "BKK-RC-404",
-            actor_id=manager_id,
             contractor_id=greenloop_id,
         )
         assert len(statements) == one_row
@@ -389,16 +389,31 @@ def test_bin_lookups_do_not_grow_with_the_number_of_rows(ctx) -> None:
 # --- Access ---------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("actor", ["staff", "missing"])
-def test_only_managers_and_admins_can_parse_or_import(ctx, actor) -> None:
-    actor_id = ctx.staff_id if actor == "staff" else 999_999
-    detail = "Select an existing manager or admin account."
+@pytest.mark.parametrize(
+    ("actor", "status"), [("anonymous", 401), ("staff", 403), ("deleted", 401)]
+)
+def test_only_signed_in_managers_and_admins_can_use_the_import(ctx, actor, status) -> None:
+    if actor == "anonymous":
+        ctx.client.headers.pop("Authorization")
+    else:
+        ctx.client.headers.update(bearer(ctx.staff_id if actor == "staff" else 999_999))
 
-    parse = ctx.parse_csv(f"BKK-RC-001,{WEIGHTS}", actor_id=actor_id)
-    imported = ctx.import_rows(import_row(2, "BKK-RC-001"), actor_id=actor_id)
+    options = ctx.client.get("/api/contractor-reports/options")
+    parse = ctx.parse_csv(f"BKK-RC-001,{WEIGHTS}")
+    imported = ctx.import_rows(import_row(2, "BKK-RC-001"))
 
-    assert (parse.status_code, parse.json()["detail"]) == (422, detail)
-    assert (imported.status_code, imported.json()["detail"]) == (422, detail)
+    assert [options.status_code, parse.status_code, imported.status_code] == [status] * 3
+    with Session(ctx.engine) as session:
+        assert session.exec(select(ContractorReport)).all() == []
+
+
+def test_import_records_the_signed_in_manager_and_ignores_a_sent_actor_id(ctx) -> None:
+    response = ctx.import_rows(import_row(2, "BKK-RC-001"), actor_id=ctx.staff_id)
+
+    assert response.status_code == 201, response.text
+    with Session(ctx.engine) as session:
+        (report,) = session.exec(select(ContractorReport)).all()
+        assert report.uploaded_by_user_id == ctx.manager_id
 
 
 # --- Saving ---------------------------------------------------------------------------------

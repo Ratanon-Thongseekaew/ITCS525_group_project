@@ -5,6 +5,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { getResaleStoreSummary } from '@/api'
+import { signInAs } from '@/test/auth'
 
 import ResaleBinRecords from './ResaleBinRecords'
 
@@ -17,6 +18,7 @@ const getResaleStoreSummaryMock = vi.mocked(getResaleStoreSummary)
 
 afterEach(() => {
   cleanup()
+  window.sessionStorage.clear()
   vi.clearAllMocks()
 })
 
@@ -30,6 +32,7 @@ test('renders store actual values and their top-five total from the API', async 
       { id: 5, name: 'Store Five', actual_value: 60000 },
     ],
   })
+  signInAs('manager')
 
   render(<ResaleBinRecords />)
 
@@ -41,5 +44,5 @@ test('renders store actual values and their top-five total from the API', async 
   expect(screen.getByText('999฿')).toBeInTheDocument()
   expect(screen.getByText('317K฿')).toBeInTheDocument()
   expect(screen.queryByText(/THB/)).not.toBeInTheDocument()
-  expect(getResaleStoreSummaryMock).toHaveBeenCalledWith(expect.any(AbortSignal))
+  expect(getResaleStoreSummaryMock).toHaveBeenCalledWith('test-token', expect.any(AbortSignal))
 })

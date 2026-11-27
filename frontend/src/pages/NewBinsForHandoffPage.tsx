@@ -79,13 +79,15 @@ function BinRecordCard({ bin, disabled, onSelect }: BinRecordCardProps) {
 }
 
 export function NewBinsForHandoffPage() {
-  const user = useSession()?.user ?? null
+  const session = useSession()
+  const user = session?.user ?? null
+  const token = session?.token ?? ''
   const actor = user?.role === 'staff' ? user : null
   const siteId = actor?.store?.id ?? null
   // Only the contractors are needed from the options: the actor is the signed-in staff user.
   const optionsResource = useApiResource(
     actor ? 'handoff-options' : null,
-    getHandoffOptions,
+    (signal: AbortSignal) => getHandoffOptions(token, signal),
     'Contractors could not be loaded.',
   )
   const options = optionsResource.data
@@ -93,12 +95,12 @@ export function NewBinsForHandoffPage() {
     async (signal: AbortSignal) => {
       const site = siteId ?? undefined
       const [binsResponse, disputedResponse] = await Promise.all([
-        getHandoffReadyBins(site, signal),
-        getHandoffs({ status: 'disputed', site_id: site }, signal),
+        getHandoffReadyBins(token, site, signal),
+        getHandoffs(token, { status: 'disputed', site_id: site }, signal),
       ])
       return { bins: binsResponse.bins, awaitingApproval: disputedResponse.handoffs.length }
     },
-    [siteId],
+    [siteId, token],
   )
   // Staff only see their own store's site, so nothing loads without one.
   const resource = useApiResource(
@@ -203,7 +205,6 @@ export function NewBinsForHandoffPage() {
         <NewHandoffRecordDialog
           bin={selectedBin}
           contractors={options.contractors}
-          actorId={actor.id}
           onClose={() => setSelectedBin(null)}
           onRecorded={handleRecorded}
           onCloseAutoFocus={(event) => {

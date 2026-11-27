@@ -6,8 +6,8 @@ saved only when its bin exists, was picked up in the report month by that contra
 weights add up. Bin codes are unique across sites, so each bin decides its row's sorting center
 and a file may cover several centers (one saved report per center).
 
-Until the API reads the login token, requests name the acting manager or admin with
-``actor_id``, the same stopgap the handoff and EPR endpoints use.
+Every route is for managers and administrators, and the signed-in user is recorded as the
+uploader.
 """
 
 import base64
@@ -29,6 +29,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from .auth import ManagementUser, require_management
 from .database import get_session
 from .epr import lock_open_epr_quarter, require_management_actor
 from .models import (
@@ -57,7 +58,11 @@ from .schemas import (
     ContractorReportParsedRow,
 )
 
-router = APIRouter(prefix="/api/contractor-reports", tags=["contractor reports"])
+router = APIRouter(
+    prefix="/api/contractor-reports",
+    tags=["contractor reports"],
+    dependencies=[Depends(require_management)],
+)
 SessionDependency = Annotated[Session, Depends(get_session)]
 ZERO = Decimal("0")
 
@@ -455,11 +460,12 @@ def get_import_options(session: SessionDependency) -> ContractorReportOptionsRes
 @router.post("/parse-and-validate", response_model=ContractorReportFileParseResponse)
 def parse_and_validate_file(
     request: ContractorReportFileParseRequest,
+    user: ManagementUser,
     session: SessionDependency,
 ) -> ContractorReportFileParseResponse:
     """Read an uploaded CSV or XLSX report and check every row, without saving anything."""
 
-    require_management_actor(session, request.actor_id)
+    require_management_actor(session, user.id)
     contractor = (
         _require_contractor(session, request.contractor_id) if request.contractor_id else None
     )
@@ -568,6 +574,7 @@ def _build_parsed_row(
 @router.post("/import", response_model=ContractorReportImportResponse, status_code=201)
 def import_contractor_report(
     payload: ContractorReportImportRequest,
+    user: ManagementUser,
     session: SessionDependency,
 ) -> ContractorReportImportResponse:
     """Save a contractor's monthly report against the bins it lists.
@@ -576,7 +583,7 @@ def import_contractor_report(
     site and one report is saved per site. A bin reported again has its outcomes replaced.
     """
 
-    require_management_actor(session, payload.actor_id)
+    require_management_actor(session, user.id)
     contractor = _require_contractor(session, payload.contractor_id)
     month_start = _parse_report_month(payload.report_month)
 
@@ -623,7 +630,7 @@ def import_contractor_report(
                 report = ContractorReport(
                     site_id=site_id,
                     contractor_id=contractor.id,
-                    uploaded_by_user_id=payload.actor_id,
+                    uploaded_by_user_id=user.id,
                     report_month=month_start,
                     source_filename=payload.source_filename,
                     status=ReportStatus.IMPORTED,
@@ -632,7 +639,7 @@ def import_contractor_report(
                 session.add(report)
                 session.flush()
             else:
-                report.uploaded_by_user_id = payload.actor_id
+                report.uploaded_by_user_id = user.id
                 report.source_filename = payload.source_filename
                 report.status = ReportStatus.IMPORTED
                 report.validated_at = now

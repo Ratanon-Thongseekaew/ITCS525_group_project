@@ -80,8 +80,9 @@ test('loads the ready bins and summary for the staff member’s site', async () 
   renderPage()
   await findBinList()
 
-  expect(getHandoffReadyBins).toHaveBeenCalledWith(1, expect.any(AbortSignal))
+  expect(getHandoffReadyBins).toHaveBeenCalledWith('test-token', 1, expect.any(AbortSignal))
   expect(getHandoffs).toHaveBeenCalledWith(
+    'test-token',
     { status: 'disputed', site_id: 1 },
     expect.any(AbortSignal),
   )
@@ -217,8 +218,10 @@ test('records the handoff, removes the bin, and updates the summary', async () =
 
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   expect(recordHandoffAtPickup).toHaveBeenCalledWith(
-    expect.objectContaining({ bin_id: 2, contractor_id: 1, actor_id: STAFF_ID }),
+    'test-token',
+    expect.objectContaining({ bin_id: 2, contractor_id: 1 }),
   )
+  expect(vi.mocked(recordHandoffAtPickup).mock.calls[0][1]).not.toHaveProperty('actor_id')
   expect(screen.queryByRole('heading', { name: '#test-002' })).not.toBeInTheDocument()
   expect(metricValue('Bins Awaiting')).toHaveTextContent('2')
   expect(metricValue('Items Staged')).toHaveTextContent('17')

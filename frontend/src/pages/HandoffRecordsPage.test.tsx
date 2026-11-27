@@ -1,10 +1,16 @@
 /** @vitest-environment jsdom */
 
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
-import { getHandoffOptions, getHandoffs, type HandoffOutcomes, type HandoffRecord } from '@/api'
+import {
+  fetchHandoffPhoto,
+  getHandoffOptions,
+  getHandoffs,
+  type HandoffOutcomes,
+  type HandoffRecord,
+} from '@/api'
 import { signInAs } from '@/test/auth'
 import {
   chooseOption,
@@ -17,6 +23,7 @@ import { HandoffRecordsPage } from './HandoffRecordsPage'
 
 vi.mock('@/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api')>()),
+  fetchHandoffPhoto: vi.fn(),
   getHandoffOptions: vi.fn(),
   getHandoffs: vi.fn(),
 }))
@@ -102,7 +109,7 @@ test('loads the records for the staff member’s site', async () => {
   renderPage()
   await waitForRecords()
 
-  expect(getHandoffs).toHaveBeenCalledWith({ site_id: 1 }, expect.any(AbortSignal))
+  expect(getHandoffs).toHaveBeenCalledWith('test-token', { site_id: 1 }, expect.any(AbortSignal))
   expect(getHandoffOptions).not.toHaveBeenCalled()
   const account = screen.getByRole('group', { name: 'Signed-in staff account' })
   expect(account).toHaveTextContent('Test staff')
@@ -131,6 +138,26 @@ test('shows the pickup evidence and the pending outcome notice', async () => {
     '/api/handoffs/100/scale-photo',
   )
   expect(within(card).getByText('Outcome report is still pending!')).toBeInTheDocument()
+})
+
+test('opens an API-stored scale photo by downloading it with the token', async () => {
+  records = [pickedUp()]
+  const tab = { opener: {}, location: { href: '' }, close: vi.fn() }
+  const open = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window)
+  URL.createObjectURL = vi.fn(() => 'blob:scale-photo')
+  URL.revokeObjectURL = vi.fn()
+  vi.mocked(fetchHandoffPhoto).mockResolvedValue(new Blob(['png'], { type: 'image/png' }))
+  renderPage()
+  await waitForRecords()
+
+  fireEvent.click(screen.getByRole('link', { name: /View scale photo/ }))
+
+  // The tab opens on the click itself, so pop-up blockers allow it, then shows the photo.
+  expect(open).toHaveBeenCalledWith('', '_blank')
+  expect(fetchHandoffPhoto).toHaveBeenCalledWith('test-token', '/api/handoffs/100/scale-photo')
+  await waitFor(() => expect(tab.location.href).toBe('blob:scale-photo'))
+  expect(tab.opener).toBeNull()
+  open.mockRestore()
 })
 
 test('shows the weight difference in kg and as a percentage of the staff weight', async () => {

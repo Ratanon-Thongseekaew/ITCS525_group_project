@@ -27,7 +27,6 @@ export interface DirectResaleBinRecord {
 }
 
 export interface ProcessDirectResaleBinRequest {
-  actor_id: number
   accepted_item_count: number
   rejected_item_count: number
   revenue: number
@@ -41,7 +40,6 @@ export type BinStatus = 'active' | 'ready' | 'handed_off' | 'closed'
 export type GarmentCondition = 'good_reusable' | 'worn_recyclable' | 'repair_upcycle'
 
 export interface GarmentSortRequest {
-  actor_id: number
   condition: GarmentCondition
   category?: string
   weight_kg?: number
@@ -79,7 +77,6 @@ export interface BinRecord {
 }
 
 export interface BinCreateRequest {
-  actor_id: number
   bin_type: BinType
   bin_code?: string
   max_capacity?: number
@@ -233,7 +230,6 @@ export type EprAdjustmentMetric =
   | 'incinerated_energy_recovery'
 
 export interface EprAdjustmentRequest {
-  actor_id: number
   site_id: number
   expected_latest_adjustment_id: number | null
   effective_date: string
@@ -263,7 +259,6 @@ export interface EprManagement {
     recorded_by: string
   }[]
   sites: EprManagementOption[]
-  actors: EprManagementOption[]
 }
 
 const API_URL = import.meta.env.VITE_API_URL ?? ''
@@ -311,13 +306,15 @@ export async function getGreeting(): Promise<Greeting> {
 }
 
 export async function getResaleStoreSummary(
+  token: string,
   signal?: AbortSignal,
 ): Promise<ResaleStoreSummaryResponse> {
-  const response = await fetch(`${API_URL}/api/resale-bins/summary`, { signal })
+  const response = await signedFetch(token, `${API_URL}/api/resale-bins/summary`, { signal })
   return handleResponse<ResaleStoreSummaryResponse>(response)
 }
 
 export async function getDashboard(
+  token: string,
   filters: DashboardFilters,
   signal?: AbortSignal,
 ): Promise<DashboardResponse> {
@@ -338,40 +335,61 @@ export async function getDashboard(
     params.set('contractor_id', String(filters.contractor_id))
   }
 
-  const response = await fetch(`${API_URL}/api/dashboard?${params.toString()}`, { signal })
+  const response = await signedFetch(token, `${API_URL}/api/dashboard?${params.toString()}`, {
+    signal,
+  })
   return handleResponse<DashboardResponse>(response)
 }
 
 export async function getEprQuarterReport(
+  token: string,
   year: number,
   quarter: number,
   signal?: AbortSignal,
 ): Promise<EprQuarterReport> {
   const params = new URLSearchParams({ year: String(year), quarter: String(quarter) })
-  const response = await fetch(`${API_URL}/api/epr/quarterly-report?${params}`, { signal })
+  const response = await signedFetch(token, `${API_URL}/api/epr/quarterly-report?${params}`, {
+    signal,
+  })
   return handleResponse<EprQuarterReport>(response)
 }
 
-export async function getEprManagement(year: number, quarter: number, signal?: AbortSignal) {
+export async function getEprManagement(
+  token: string,
+  year: number,
+  quarter: number,
+  signal?: AbortSignal,
+) {
   const params = new URLSearchParams({ year: String(year), quarter: String(quarter) })
-  const response = await fetch(`${API_URL}/api/epr/quarterly-report/management?${params}`, {
-    signal,
-  })
+  const response = await signedFetch(
+    token,
+    `${API_URL}/api/epr/quarterly-report/management?${params}`,
+    { signal },
+  )
   return handleResponse<EprManagement>(response)
 }
 
+// The server records the signed-in user as the submitter or the adjustment's author.
 async function writeEprManagement(
+  token: string,
   action: 'submit' | 'adjustments',
   year: number,
   quarter: number,
-  payload: { actor_id: number } | EprAdjustmentRequest,
+  payload?: EprAdjustmentRequest,
 ) {
   const params = new URLSearchParams({ year: String(year), quarter: String(quarter) })
-  const response = await fetch(`${API_URL}/api/epr/quarterly-report/${action}?${params}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
+  const url = `${API_URL}/api/epr/quarterly-report/${action}?${params}`
+  const response = await signedFetch(
+    token,
+    url,
+    payload === undefined
+      ? { method: 'POST' }
+      : {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+  )
   if (!response.ok) {
     const error = (await response.json().catch(() => null)) as { detail?: unknown } | null
     if (typeof error?.detail === 'string') throw new Error(error.detail)
@@ -380,18 +398,27 @@ async function writeEprManagement(
   return handleResponse<EprManagement>(response)
 }
 
-export function submitEprQuarter(year: number, quarter: number, actorId: number) {
-  return writeEprManagement('submit', year, quarter, { actor_id: actorId })
+export function submitEprQuarter(token: string, year: number, quarter: number) {
+  return writeEprManagement(token, 'submit', year, quarter)
 }
 
-export function saveEprAdjustment(year: number, quarter: number, payload: EprAdjustmentRequest) {
-  return writeEprManagement('adjustments', year, quarter, payload)
+export function saveEprAdjustment(
+  token: string,
+  year: number,
+  quarter: number,
+  payload: EprAdjustmentRequest,
+) {
+  return writeEprManagement(token, 'adjustments', year, quarter, payload)
 }
 
-// Sorting reads are per site and writes name the acting staff member (`actor_id`) until the
-// frontend uses real login, the same stopgap the handoff pages use.
-async function sortingRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}/api${path}`, init)
+// Sorting and direct resale requests are sent with the signed-in user's token. The server reads
+// who is acting from it: staff only reach their own site.
+async function sortingRequest<T>(
+  token: string,
+  path: string,
+  init: SignedRequestInit = {},
+): Promise<T> {
+  const response = await signedFetch(token, `${API_URL}/api${path}`, init)
   if (!response.ok) {
     const error = (await response.json().catch(() => null)) as { detail?: unknown } | null
     if (typeof error?.detail === 'string') throw new Error(error.detail)
@@ -400,72 +427,80 @@ async function sortingRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
-function postJson<T>(path: string, body: unknown) {
-  return sortingRequest<T>(path, {
+function postJson<T>(token: string, path: string, body: unknown) {
+  return sortingRequest<T>(token, path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
 }
 
-// Reads name the acting user (`actor_id`). Staff only reach their own site; managers pick one of
-// their sites, or leave `siteId` out for all of them combined (the list endpoints only).
-export function getSortingStats(actorId: number, siteId?: number): Promise<SortingStatsResponse> {
+// Staff only reach their own site; managers pick one of their sites, or leave `siteId` out for
+// all of them combined (the list endpoints only).
+export function getSortingStats(token: string, siteId?: number): Promise<SortingStatsResponse> {
   return sortingRequest<SortingStatsResponse>(
-    `/sorting/stats${buildQuery({ actor_id: actorId, site_id: siteId })}`,
+    token,
+    `/sorting/stats${buildQuery({ site_id: siteId })}`,
   )
 }
 
 /** The sites this user may read, for the manager's site switcher. */
-export function getSortingSites(actorId: number): Promise<Store[]> {
-  return sortingRequest<Store[]>(`/sorting/sites${buildQuery({ actor_id: actorId })}`)
+export function getSortingSites(token: string): Promise<Store[]> {
+  return sortingRequest<Store[]>(token, '/sorting/sites')
 }
 
-export function getActiveBins(actorId: number, siteId?: number): Promise<ActiveBinsResponse> {
-  return sortingRequest<ActiveBinsResponse>(
-    `/bins/active${buildQuery({ actor_id: actorId, site_id: siteId })}`,
-  )
+export function getActiveBins(token: string, siteId?: number): Promise<ActiveBinsResponse> {
+  return sortingRequest<ActiveBinsResponse>(token, `/bins/active${buildQuery({ site_id: siteId })}`)
 }
 
 export function getBins(
-  actorId: number,
+  token: string,
   siteId?: number,
   filters?: { bin_type?: BinType; status?: BinStatus },
 ): Promise<BinRecord[]> {
-  return sortingRequest<BinRecord[]>(
-    `/bins${buildQuery({ actor_id: actorId, site_id: siteId, ...filters })}`,
+  return sortingRequest<BinRecord[]>(token, `/bins${buildQuery({ site_id: siteId, ...filters })}`)
+}
+
+export function getDirectResaleBins(token: string, siteId: number, signal?: AbortSignal) {
+  return sortingRequest<DirectResaleBinRecord[]>(
+    token,
+    `/resale-bins${buildQuery({ site_id: siteId })}`,
+    { signal },
   )
 }
 
-export function getDirectResaleBins(siteId: number, signal?: AbortSignal) {
-  return sortingRequest<DirectResaleBinRecord[]>(`/resale-bins${buildQuery({ site_id: siteId })}`, {
-    signal,
-  })
+// The server records the signed-in staff member as the processor.
+export function processDirectResaleBin(
+  token: string,
+  binId: number,
+  payload: ProcessDirectResaleBinRequest,
+) {
+  return postJson<DirectResaleBinRecord>(token, `/resale-bins/${binId}/process`, payload)
 }
 
-export function processDirectResaleBin(binId: number, payload: ProcessDirectResaleBinRequest) {
-  return postJson<DirectResaleBinRecord>(`/resale-bins/${binId}/process`, payload)
+export function createBin(token: string, payload: BinCreateRequest): Promise<BinRecord> {
+  return postJson<BinRecord>(token, '/bins', payload)
 }
 
-export function createBin(payload: BinCreateRequest): Promise<BinRecord> {
-  return postJson<BinRecord>('/bins', payload)
+export function closeBin(token: string, binId: number, notes?: string): Promise<BinRecord> {
+  return postJson<BinRecord>(token, `/bins/${binId}/close`, { notes })
 }
 
-export function closeBin(binId: number, actorId: number, notes?: string): Promise<BinRecord> {
-  return postJson<BinRecord>(`/bins/${binId}/close`, { actor_id: actorId, notes })
-}
-
-export function sortGarment(payload: GarmentSortRequest): Promise<SortGarmentResponse> {
-  return postJson<SortGarmentResponse>('/garments/sort', payload)
+export function sortGarment(
+  token: string,
+  payload: GarmentSortRequest,
+): Promise<SortGarmentResponse> {
+  return postJson<SortGarmentResponse>(token, '/garments/sort', payload)
 }
 
 export function getRecentGarments(
-  actorId: number,
+  token: string,
   siteId?: number,
   limit = 15,
 ): Promise<GarmentItem[]> {
   return sortingRequest<GarmentItem[]>(
-    `/garments/recent${buildQuery({ actor_id: actorId, site_id: siteId, limit })}`,
+    token,
+    `/garments/recent${buildQuery({ site_id: siteId, limit })}`,
   )
 }
 
@@ -522,6 +557,21 @@ let onUnauthorized: (token: string) => void = () => {}
 /** Called with the rejected token whenever a signed-in request gets a `401`. */
 export function setUnauthorizedHandler(handler: (token: string) => void) {
   onUnauthorized = handler
+}
+
+type SignedRequestInit = Omit<RequestInit, 'headers'> & { headers?: Record<string, string> }
+
+/**
+ * `fetch` with the signed-in user's token. Callers keep their own error handling; a `401` also
+ * ends the session, the same as `authFetch`.
+ */
+async function signedFetch(token: string, url: string, init: SignedRequestInit = {}) {
+  const response = await fetch(url, {
+    ...init,
+    headers: { ...init.headers, Authorization: `Bearer ${token}` },
+  })
+  if (response.status === 401) onUnauthorized(token)
+  return response
 }
 
 async function authFetch(token: string, path: string, method = 'GET', body?: unknown) {
@@ -673,9 +723,8 @@ export interface ContractorReportFileParseResponse {
   rows: ContractorReportParsedRow[]
 }
 
+// The server records the signed-in manager or admin as the uploader.
 export interface ContractorReportImportRequest {
-  /** The signed-in manager or admin, recorded as the uploader. */
-  actor_id: number
   contractor_id: number
   report_month: string
   source_filename: string
@@ -723,14 +772,14 @@ async function parseImportApiResponse<T>(response: Response): Promise<T> {
   return (await response.json()) as T
 }
 
-export async function fetchContractorReportOptions(): Promise<ContractorReportOptionsResponse> {
-  const response = await fetch(`${IMPORT_API_BASE}/api/contractor-reports/options`)
+export async function fetchContractorReportOptions(
+  token: string,
+): Promise<ContractorReportOptionsResponse> {
+  const response = await signedFetch(token, `${IMPORT_API_BASE}/api/contractor-reports/options`)
   return parseImportApiResponse<ContractorReportOptionsResponse>(response)
 }
 
 export interface ContractorReportFileParseInput {
-  /** The signed-in manager or admin. */
-  actorId: number
   filename: string
   contentBase64: string
   /** Rows not picked up in this month (YYYY-MM) are rejected. */
@@ -740,13 +789,14 @@ export interface ContractorReportFileParseInput {
 }
 
 export async function parseAndValidateContractorFile(
+  token: string,
   input: ContractorReportFileParseInput,
 ): Promise<ContractorReportFileParseResponse> {
-  const response = await fetch(`${IMPORT_API_BASE}/api/contractor-reports/parse-and-validate`, {
+  const url = `${IMPORT_API_BASE}/api/contractor-reports/parse-and-validate`
+  const response = await signedFetch(token, url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      actor_id: input.actorId,
       filename: input.filename,
       content_base64: input.contentBase64,
       report_month: input.reportMonth,
@@ -757,9 +807,10 @@ export async function parseAndValidateContractorFile(
 }
 
 export async function importContractorReport(
+  token: string,
   payload: ContractorReportImportRequest,
 ): Promise<ContractorReportImportResponse> {
-  const response = await fetch(`${IMPORT_API_BASE}/api/contractor-reports/import`, {
+  const response = await signedFetch(token, `${IMPORT_API_BASE}/api/contractor-reports/import`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -782,17 +833,9 @@ export interface HandoffContractorOption {
   name: string
 }
 
-export interface HandoffActorOption {
-  id: number
-  username: string
-  role: UserRole
-  site_ids: number[]
-}
-
 export interface HandoffOptions {
   sites: HandoffSiteOption[]
   contractors: HandoffContractorOption[]
-  actors: HandoffActorOption[]
 }
 
 export interface HandoffReadyBin {
@@ -850,10 +893,10 @@ export interface HandoffListResponse {
   handoffs: HandoffRecord[]
 }
 
+// The server records the signed-in staff member as the one who handed the bin over.
 export interface HandoffPickupRequest {
   bin_id: number
   contractor_id: number
-  actor_id: number
   // ISO 8601 with a UTC offset, not in the future.
   picked_up_at: string
   staff_weight_kg: number
@@ -864,22 +907,18 @@ export interface HandoffPickupRequest {
   scale_photo: Blob
 }
 
-async function handoffRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}/api/handoffs${path}`, init)
+async function handoffRequest<T>(
+  token: string,
+  path: string,
+  init: SignedRequestInit = {},
+): Promise<T> {
+  const response = await signedFetch(token, `${API_URL}/api/handoffs${path}`, init)
   if (!response.ok) {
     const error = (await response.json().catch(() => null)) as { detail?: unknown } | null
     if (typeof error?.detail === 'string') throw new Error(error.detail)
     throw new Error('The handoff request failed. Check the entered values and try again.')
   }
   return response.json() as Promise<T>
-}
-
-function postHandoffJson<T>(path: string, payload: unknown) {
-  return handoffRequest<T>(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
 }
 
 function buildQuery(params: Record<string, string | number | undefined>) {
@@ -891,29 +930,32 @@ function buildQuery(params: Record<string, string | number | undefined>) {
   return text ? `?${text}` : ''
 }
 
-export function getHandoffOptions(signal?: AbortSignal) {
-  return handoffRequest<HandoffOptions>('/options', { signal })
+export function getHandoffOptions(token: string, signal?: AbortSignal) {
+  return handoffRequest<HandoffOptions>(token, '/options', { signal })
 }
 
-export function getHandoffReadyBins(siteId?: number, signal?: AbortSignal) {
-  return handoffRequest<HandoffReadyBinsResponse>(`/bins${buildQuery({ site_id: siteId })}`, {
-    signal,
-  })
+// Staff only reach their own site; managers their assigned sites, or all of them without one.
+export function getHandoffReadyBins(token: string, siteId?: number, signal?: AbortSignal) {
+  return handoffRequest<HandoffReadyBinsResponse>(
+    token,
+    `/bins${buildQuery({ site_id: siteId })}`,
+    { signal },
+  )
 }
 
 export function getHandoffs(
+  token: string,
   filters: { site_id?: number; status?: HandoffRecordStatus } = {},
   signal?: AbortSignal,
 ) {
-  return handoffRequest<HandoffListResponse>(buildQuery(filters), { signal })
+  return handoffRequest<HandoffListResponse>(token, buildQuery(filters), { signal })
 }
 
 /** Creates a handoff and records its pickup evidence in one step, when the driver arrives. */
-export function recordHandoffAtPickup(payload: HandoffPickupRequest) {
+export function recordHandoffAtPickup(token: string, payload: HandoffPickupRequest) {
   const form = new FormData()
   form.set('bin_id', String(payload.bin_id))
   form.set('contractor_id', String(payload.contractor_id))
-  form.set('actor_id', String(payload.actor_id))
   form.set('picked_up_at', payload.picked_up_at)
   form.set('staff_weight_kg', String(payload.staff_weight_kg))
   form.set('driver_weight_kg', String(payload.driver_weight_kg))
@@ -921,7 +963,7 @@ export function recordHandoffAtPickup(payload: HandoffPickupRequest) {
   form.set('vehicle_plate_number', payload.vehicle_plate_number)
   form.set('scale_photo', payload.scale_photo)
   // No Content-Type header: the browser adds the multipart boundary itself.
-  return handoffRequest<HandoffRecord>('/pickups', { method: 'POST', body: form })
+  return handoffRequest<HandoffRecord>(token, '/pickups', { method: 'POST', body: form })
 }
 
 /** Makes an uploaded scale photo path usable when VITE_API_URL points at another origin. */
@@ -930,10 +972,23 @@ export function handoffPhotoUrl(url: string | null) {
   return url.startsWith('/api/') ? `${API_URL}${url}` : url
 }
 
-export function approveHandoff(handoffId: number, actorId: number) {
-  return postHandoffJson<HandoffRecord>(`/${handoffId}/approve`, { actor_id: actorId })
+/** Whether a scale photo is stored by the API, and so needs the signed-in user's token. */
+export function isApiPhotoUrl(url: string) {
+  return url.startsWith('/api/')
 }
 
-export function closeHandoff(handoffId: number, actorId: number) {
-  return postHandoffJson<HandoffRecord>(`/${handoffId}/close`, { actor_id: actorId })
+/** Downloads an API-stored scale photo with the token; a link can't send the header itself. */
+export async function fetchHandoffPhoto(token: string, url: string): Promise<Blob> {
+  const response = await signedFetch(token, `${API_URL}${url}`)
+  if (!response.ok) throw await toApiError(response)
+  return response.blob()
+}
+
+// The server records the signed-in manager or administrator.
+export function approveHandoff(token: string, handoffId: number) {
+  return handoffRequest<HandoffRecord>(token, `/${handoffId}/approve`, { method: 'POST' })
+}
+
+export function closeHandoff(token: string, handoffId: number) {
+  return handoffRequest<HandoffRecord>(token, `/${handoffId}/close`, { method: 'POST' })
 }

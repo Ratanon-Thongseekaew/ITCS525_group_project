@@ -212,6 +212,25 @@ call `GET /api/auth/me` and `POST /api/auth/change-password` until they choose
 their own password. Run `npm run db:migrate` after pulling: the `full_name` and
 `must_change_password` columns come from migration `20261124_0002`.
 
+### Who can use each API
+
+Every endpoint except `GET /api/health`, `GET /api/greeting`, and
+`POST /api/auth/login` needs `Authorization: Bearer <token>`. The API reads who
+is acting from the token, so requests don't name a user. Without a valid token
+it answers `401`; with the wrong role or store, `403`. An account that still has
+a temporary password can only change it (`403` "Password change required").
+
+| Area                                                                                   | Who                                                                          |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Users, sites, contractors (`/api/users`, `/api/sites`, `/api/contractors`)             | Administrators                                                               |
+| Dashboard, EPR, contractor report import, resale summary                               | Managers and administrators                                                  |
+| Sorting, bins, resale bins, and handoff records (reads)                                | Staff: their store. Managers: their stores, or all without one. Admins: all. |
+| Sorting garments, creating and sealing bins, recording pickups, processing resale bins | Staff, at their own store                                                    |
+| Approving and closing handoffs                                                         | Managers and administrators of the handoff's store                           |
+
+`backend/tests/test_route_auth.py` checks that every route outside that public
+list refuses requests without a login, so a new endpoint can't skip it.
+
 ## Develop
 
 With the virtual environment active, start both applications:
@@ -254,10 +273,13 @@ Sign in with the email and password of an account in your local database (see
 database, so accounts are not shared through git. Managers land on `/manager`,
 staff on `/staff/sorting`, and admins on `/admin/users`.
 
-Workspace pages require sign-in, and only admins can open `/admin/*`. An account
+Workspace pages require sign-in. Staff and managers only open their own
+workspace (`/staff/*`, `/manager/*`); opening another one returns them to their
+home page. Admins can open any workspace. An account
 with a temporary password must set a new one first. The session lasts until the
-tab closes or the token expires (`ACCESS_TOKEN_MINUTES`, default 60). The other
-features' APIs are not authenticated yet.
+tab closes or the token expires (`ACCESS_TOKEN_MINUTES`, default 60). Every
+page sends the token with its API requests, and an expired token returns to the
+login page.
 
 ## Quarterly EPR report
 
@@ -278,16 +300,16 @@ Use **Manage EPR Report** to review the all-site draft and confirm **Submit &
 Lock**. For a submitted quarter, use **Add Adjustment** to enter a site, date,
 reason, and one or more signed weight changes. Management shows the original
 and adjusted totals, and CSV and print use the original submitted snapshot.
-Until authentication is connected, select an existing manager or admin account
-to record demo changes.
+The signed-in manager or administrator is recorded as the submitter or as the
+adjustment's author.
 
 ## Dashboard API
 
 `GET /api/dashboard` returns summary metrics, six contractor disposition
 categories, monthly trends, pending/disputed handoffs, and filter options from
 MySQL. It accepts `frequency`, `year`, `month`, `quarter`, `site_id`, and
-`contractor_id` query parameters. Until real authentication is implemented,
-site selection filters data but does not enforce manager membership.
+`contractor_id` query parameters. It is for managers and administrators, and
+every manager can filter by any site.
 
 ## Resale summary API
 
@@ -320,7 +342,7 @@ compliance dashboard, and needs manager approval before it can be closed.
 
 | Endpoint                             | Purpose                                                      |
 | ------------------------------------ | ------------------------------------------------------------ |
-| `GET /api/handoffs/options`          | Sites, active contractors, and demo actor accounts           |
+| `GET /api/handoffs/options`          | Sites and active contractors                                 |
 | `GET /api/handoffs/bins`             | Ready recycling bins without a handoff (optional `site_id`)  |
 | `GET /api/handoffs`                  | Handoff records (optional `site_id` and `status`)            |
 | `POST /api/handoffs/pickups`         | Record a handoff and its pickup evidence in one step         |
@@ -340,9 +362,11 @@ Records** (`/manager/recycle-bins`): they approve disputed handoffs and close
 handoffs after reviewing the reported outcomes. A handoff (and its bin) can only
 be closed after the contractor's outcome report for it has been saved.
 
-Until the frontend uses real login, write requests name the acting user with
-`actor_id`. Only staff can record handoffs, and only for their own site; only
-managers and admins can approve or close them. Timestamps must include
+The signed-in user is recorded with each handoff. Only staff can record
+handoffs, and only for their own site; only managers and admins of the
+handoff's store can approve or close them. Lists and scale photos follow the
+sorting site rules. **View scale photo** downloads the photo with the token and
+opens it in a new tab. Timestamps must include
 a UTC offset. Scale photos must be JPEG, PNG, or WebP up to 5 MB and are stored
 in `backend/uploads/` (ignored by Git); set `UPLOAD_DIR` in `.env` to change it.
 

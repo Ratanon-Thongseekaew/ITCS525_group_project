@@ -21,13 +21,13 @@ import {
   InputGroupText,
 } from '@/components/ui/input-group'
 import { Textarea } from '@/components/ui/textarea'
+import { useSession } from '@/lib/auth-session'
 import { formatPackedAt } from '@/lib/handoff-format'
 
 const KEYPAD_KEYS = ['7', '8', '9', '4', '5', '6', '1', '2', '3', 'C', '0', '00']
 
 interface DirectResaleProcessDialogProps {
   bin: DirectResaleBinRecord
-  actorId: number
   onClose: () => void
   onProcessed: () => void
 }
@@ -40,10 +40,11 @@ function today() {
 /** Records item counts and revenue, then persists the processing through the API. */
 export function DirectResaleProcessDialog({
   bin,
-  actorId,
   onClose,
   onProcessed,
 }: DirectResaleProcessDialogProps) {
+  // The API records the signed-in staff member as the processor.
+  const token = useSession()?.token ?? ''
   const [accepted, setAccepted] = useState(String(bin.item_count))
   const [rejected, setRejected] = useState('0')
   const [revenue, setRevenue] = useState('')
@@ -78,8 +79,7 @@ export function DirectResaleProcessDialog({
     if (!validCounts || !countsMatch || !validRevenue || !processDate || isSaving) return
     setIsSaving(true)
     try {
-      await processDirectResaleBin(bin.id, {
-        actor_id: actorId,
+      await processDirectResaleBin(token, bin.id, {
         accepted_item_count: Number(accepted),
         rejected_item_count: Number(rejected),
         revenue: Number(revenue),

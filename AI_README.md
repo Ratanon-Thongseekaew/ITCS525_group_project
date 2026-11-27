@@ -19,7 +19,7 @@ This is a minimal full-stack monorepo:
 - The backend uses SQLModel as its ORM, PyMySQL as the MySQL driver, and Alembic
   for versioned schema migrations. Database settings are loaded from the root
   `.env`, with an optional `DATABASE_URL` override.
-- The backend has JWT authentication and admin user management, and the frontend signs in against it. Deployment configuration remains
+- The backend has JWT authentication and admin user management, and the frontend signs in against it. Every API route except health, greeting and login checks the token. Deployment configuration remains
   unimplemented.
 
 ## Repository map
@@ -66,11 +66,13 @@ This is a minimal full-stack monorepo:
 │   ├── seed.py              Demo seed: resets the database and loads demo data
 │   ├── uploads/             Uploaded scale photos (gitignored, `UPLOAD_DIR`)
 │   ├── tests/
+│   │   ├── auth_helpers.py  `bearer`, `sign_in` and `demo_user_id`: sign test clients in with a token
 │   │   ├── test_auth.py     Login, token, role-guard and user-management tests
 │   │   ├── test_create_admin.py Administrator CLI tests
 │   │   ├── test_database.py SQLModel and migration tests
 │   │   ├── test_handoffs.py Recycle bin handoff API tests
 │   │   ├── test_main.py     Health and greeting tests
+│   │   ├── test_route_auth.py Every non-public route refuses requests without a login
 │   │   ├── test_sorting.py  Garment sorting and bin record tests
 │   │   ├── test_user_stores.py Full name, stores, temporary passwords, password change
 │   │   └── test_users.py    User API and database tests
@@ -164,7 +166,7 @@ React Router owns client-side navigation. The current frontend routes are:
   There is no separate scheduling page; handoffs are recorded at pickup.
 - `/staff/recycle-bin-handoff/handoff-records` renders Handoff Records from
   `GET /api/handoffs`, read-only. Both handoff pages are staff-only: they use the
-  signed-in staff account (`useSession`) as the actor and its store as the site,
+  signed-in staff account (`useSession`) and its store as the site,
   and load nothing for a non-staff account or a staff account without a store.
 - `/manager/recycle-bins` renders Recycle Bin Records, the manager's handoff
   review. It lists handoffs from `GET /api/handoffs` for the signed-in manager's
@@ -172,7 +174,7 @@ React Router owns client-side navigation. The current frontend routes are:
   Awaiting Report, Ready to Close, Closed). Disputed handoffs get an Approve button
   (`POST /api/handoffs/{id}/approve`); picked-up or approved handoffs get Close
   Handoff (`POST /api/handoffs/{id}/close`), enabled once outcomes are reported.
-  Both confirm first and send the signed-in user as `actor_id`.
+  Both confirm first; the API records the signed-in user from the token.
 - `/admin/users` renders user management on `/api/users` and `/api/sites`. It is the admin
   landing page after login; `/admin` has no route.
 - `/admin/contractors` renders contractor management on `/api/contractors`: add, edit,
@@ -187,11 +189,16 @@ React Router owns client-side navigation. The current frontend routes are:
   `/api/auth/me` on page load. A `401` on any signed-in request in `api.ts` ends
   the session, which returns the user to `/login`.
 - `RequireAuth` guards every workspace and print route: signed-out visitors go to
-  `/login`, a temporary password only opens `/change-password`, and only admins
-  open `/admin/*`. `/design-system` is public.
-- The guards are navigation only. The dashboard, sorting, handoff, EPR, and
-  import APIs are still unauthenticated: they take an `actor_id` that the frontend fills in from
-  the signed-in user, so the server does not yet check who is calling.
+  `/login`, a temporary password only opens `/change-password`, and staff and managers
+  only open their own workspace (`/staff/*`, `/manager/*`; another one redirects to
+  `getWorkspaceHomeUrl`). Admins open any workspace. `/design-system` is public.
+- The guards are navigation only; the API enforces access itself. Every request function in
+  `api.ts` takes the session `token` as its first argument and sends it as
+  `Authorization: Bearer <token>` (`authFetch`, or `signedFetch` for calls that keep their own
+  error handling). No request names the acting user: there is no `actor_id`.
+- A link can't send the header, so **View scale photo** (`HandoffRecordCard`) opens a tab on
+  click, downloads an API-stored photo with `fetchHandoffPhoto`, and shows it from an object URL.
+  External photo URLs open directly.
 - Tests that render a guarded route through `App` call `signInAs(role)` from
   `src/test/auth.ts` first and clear `sessionStorage` afterwards.
 
@@ -237,44 +244,44 @@ Used by the starter React page to demonstrate frontend/backend communication.
 ### Garment sorting and bin records (Feature 2)
 
 `backend/app/sorting.py` stores sorting in MySQL (`bins` and `garment_records`). Every request
-names the acting user with `actor_id` until login is connected (`422` unknown user).
+needs a signed-in user (`ActiveUser`); the acting user comes from the token (`401` without one).
 
 - **Writes** (sort, create bin, seal bin) need a staff user, who always works at their own site
   (`403` not staff, no site, or another site's bin).
-- **Reads** take `actor_id` and an optional `site_id` (change request #16). Staff only reach
+- **Reads** take an optional `site_id` (change request #16). Staff only reach
   their own site (`403` for another). A manager reaches the sites they belong to, or every site
   when none is assigned; an administrator reaches every site. A `site_id` outside that is `403`
-  (`404` if the site doesn't exist). Leaving `site_id` out returns all of the actor's sites
+  (`404` if the site doesn't exist). Leaving `site_id` out returns all of the user's sites
   combined, and `BinRecord` and `GarmentItem` carry `site_id` and `site_name` for that view.
 
-- `POST /api/garments/sort` takes `{actor_id, condition, category?, weight_kg?, notes?, bin_id?}`.
+- `POST /api/garments/sort` takes `{condition, category?, weight_kg?, notes?, bin_id?}`.
   `condition` is `good_reusable` (resale bin), `worn_recyclable` (recycle bin) or
   `repair_upcycle` (repair bin, change request #13). The garment goes to the oldest open bin
-  of that type with room at the actor's site. A full bin is skipped; a new bin
+  of that type with room at the user's site. A full bin is skipped; a new bin
   (`{site code}-RS|RC|RP-###`, counted per site, e.g. `BKK-RC-001`) is created when none has
   room. Bin codes, including custom ones, are unique across all sites. A `bin_id` of the wrong type, status or
   capacity is ignored; another site's bin returns `403`. `weight_kg` must be 0-50.
-- `GET /api/bins/active?actor_id=&site_id=` returns `resale_bin`, `recycle_bin` and `repair_bin`
+- `GET /api/bins/active?site_id=` returns `resale_bin`, `recycle_bin` and `repair_bin`
   for one site, so a manager must pass `site_id` (`422` otherwise).
-- `GET /api/bins?actor_id=&site_id=` lists bins, with optional `bin_type` (`resale` / `recycle` /
+- `GET /api/bins?site_id=` lists bins, with optional `bin_type` (`resale` / `recycle` /
   `repair`) and `status` (`active` / `ready` / `handed_off` / `closed`) filters.
-- `POST /api/bins` takes `{actor_id, bin_type, bin_code?, max_capacity?, notes?}`. A duplicate
+- `POST /api/bins` takes `{bin_type, bin_code?, max_capacity?, notes?}`. A duplicate
   code at the site returns `409`; capacity is 1-500.
-- `POST /api/bins/{id}/close` takes `{actor_id, notes?}`. Sealing a **recycle** bin sets it
+- `POST /api/bins/{id}/close` takes `{notes?}`. Sealing a **recycle** bin sets it
   `ready` with `ready_at`, which is what `GET /api/handoffs/bins` lists. Resale and repair bins
   become `closed` with `closed_at`. Empty or already sealed bins return `409`.
-- `GET /api/sorting/stats?actor_id=&site_id=` returns today's counts (each site's own day), the
+- `GET /api/sorting/stats?site_id=` returns today's counts (each site's own day), the
   resale capture percentage, and the active bin code and item count per type. Open bins belong
   to one site, so they are only reported when the request covers a single site.
-- `GET /api/garments/recent?actor_id=&site_id=&limit=` returns the latest garments.
-- `GET /api/sorting/sites?actor_id=` returns `[{id, code, name}]` for the sites the actor may read
+- `GET /api/garments/recent?site_id=&limit=` returns the latest garments.
+- `GET /api/sorting/sites` returns `[{id, code, name}]` for the sites the user may read
   (staff: their own; manager: their sites, or all when none is assigned; admin: all).
 
-The staff screen uses the signed-in staff account (`useSession`): its id is the `actor_id` and
+The staff screen uses the signed-in staff account (`useSession`): its token identifies them and
 its store is the site, shown with `StaffAccountBar`. It loads nothing for a non-staff account or a
 staff account without a store. `/manager/sorting` (`SortingOverviewPage`) is a read-only overview
 for the signed-in manager or administrator (staff see a message): a site switcher fed by
-`GET /api/sorting/sites?actor_id=` with an "All sites" option, today's counts, the bins and the
+`GET /api/sorting/sites` with an "All sites" option, today's counts, the bins and the
 recent garments, with the site on every row. It offers no sorting, sealing or bin creation.
 Sealed Repair bins have no next step yet. Handoff only covers recycle bins.
 
@@ -285,7 +292,20 @@ never returned. Tokens are HS256 JWTs signed with `JWT_SECRET` (at least 32
 characters, from the root `.env`) and expire after `ACCESS_TOKEN_MINUTES`
 (default 60). Clients send `Authorization: Bearer <token>`. The user's role is
 read from the database on every request, so role changes and deletions take
-effect immediately. Create the first administrator with
+effect immediately. Every route except `GET /api/health`, `GET /api/greeting` and
+`POST /api/auth/login` requires a token; `backend/tests/test_route_auth.py` fails for any new
+route that doesn't. `app/auth.py` provides the dependencies:
+
+- `CurrentUser`: a valid token for an existing account (`401` otherwise).
+- `ActiveUser`: also refuses an account with a temporary password (`403` "Password change
+  required"). Sorting, resale and handoff routes use it, with the site rules of
+  `resolve_read_sites`, `require_staff_site` and `require_site_staff`.
+- `ManagementUser` / `require_management`: managers and administrators (`403` otherwise). Used
+  by the dashboard, EPR, contractor report import, the resale summary, and handoff approve and
+  close.
+- `AdminUser` / `require_admin`: administrators only (users, sites, contractors).
+
+Create the first administrator with
 `python -m app.create_admin <email>` after `npm run db:migrate`.
 
 - `POST /api/auth/login` takes `{username, password}` and returns
@@ -346,21 +366,21 @@ The contractor filter options include inactive contractors (listed after the act
 each with `is_active`), so their past data can still be filtered; the page labels them
 "(inactive)".
 
-Authentication is now implemented (see above), but the site selector is still a
-demo filter rather than an authorization boundary. Enforce manager memberships in
-the backend before relying on it for access control.
+It requires a manager or administrator (`403` for staff). The site selector is a
+filter, not an access rule: every manager can view every site here.
 
 ### `GET /api/resale-bins/summary` (Feature 3)
 
 Returns the five sites with the highest summed `actual_value` across resale
-bins. The manager resale page displays each site and calculates the combined
+bins, for managers and administrators. The manager resale page displays each site and calculates the combined
 actual value of the returned sites.
 
 ### Direct Resale processing
 
 - `GET /api/resale-bins?site_id=` lists closed resale bins at a site and joins
-  any saved processing record.
-- `POST /api/resale-bins/{bin_id}/process` records the staff actor, accepted and
+  any saved processing record. The site must be one the user may read (the sorting rules).
+- `POST /api/resale-bins/{bin_id}/process` is for staff of the bin's site (`403` "Only store
+  staff can process resale bins." for other roles). It records the signed-in staff member, accepted and
   rejected item counts (which must total the bin count), sale revenue, process
   date, and optional notes. A bin can be processed once. The revenue is also
   saved to `bins.actual_value` for EPR and manager resale reporting.
@@ -369,7 +389,7 @@ actual value of the returned sites.
 
 ### `GET /api/epr/quarterly-report` (EPR change request)
 
-Requires `year` and `quarter` (1–4). Returns one all-site aggregate for both CSV
+Every EPR route requires a manager or administrator. Requires `year` and `quarter` (1–4). Returns one all-site aggregate for both CSV
 download and the printable view. Open quarters group garment weights by
 `received_at` and imported contractor dispositions by `report_month`. A
 recorded resale-bin sale value is the available evidence for resale, and the
@@ -381,11 +401,11 @@ dispositions, divided by total weight received. Uncategorized weight and any
 excess categorized weight are shown separately.
 
 Use `GET /api/epr/quarterly-report/management` for draft or submitted totals,
-the adjustment history, and the available demo recording accounts.
+and the adjustment history.
 `POST /api/epr/quarterly-report/submit` saves all site snapshots and locks the
 quarter in one transaction. `POST /api/epr/quarterly-report/adjustments` appends
 the selected site's dated changes in one transaction. Both write endpoints take
-the same period query parameters and a demo `actor_id`. The adjustment request
+the same period query parameters and record the signed-in user; submit has no body. The adjustment request
 includes the latest adjustment ID seen by the caller, or null for empty history.
 The export endpoint continues to return the original snapshot after submission.
 
@@ -396,31 +416,32 @@ and returns HTTP 409 for locked periods. The current import validates only.
 
 ### Recycle bin handoff endpoints (Feature 4)
 
-`backend/app/handoffs.py` serves `/api/handoffs`. `GET /options` lists sites,
-active contractors, and demo actors with their site memberships. `GET /bins`
+`backend/app/handoffs.py` serves `/api/handoffs`. Every route needs a signed-in user, and reads
+follow the sorting site rules (`resolve_read_sites`). `GET /options` lists sites and
+active contractors. `GET /bins`
 lists `ready` recycle bins that have no handoff. `GET /api/handoffs` lists
 records with bin, contractor, weights, variance, approval fields, and six
 `outcomes` weights summed from contractor report entries (null when none).
 
 `POST /api/handoffs/pickups` is the only way to create a handoff. It is
-`multipart/form-data` with `bin_id`, `contractor_id`, `actor_id`,
+`multipart/form-data` with `bin_id`, `contractor_id`,
 `picked_up_at` (with a UTC offset, at most 5 minutes in the future), both
 weights, `driver_name`, `vehicle_plate_number`, and the `scale_photo` file, and
 creates the handoff with its evidence in one transaction. It calls `Handoff.record_pickup_weights()`, which sets
 `picked_up`, or `disputed` with manager approval required when the variance is
 above 3%, and the bin becomes `handed_off`. `POST /{id}/approve` (disputed only)
-and `POST /{id}/close` (picked-up or approved only) require a manager or admin
-`actor_id`. Closing also requires at least one `contractor_report_entries` row
+and `POST /{id}/close` (picked-up or approved only) take no body and require a manager or
+admin of the handoff's site (`403` otherwise). Closing also requires at least one `contractor_report_entries` row
 for the handoff (the same "reported" rule the dashboard uses), so a handoff and
 its bin stay open while the outcome report is pending; closing also closes the
-bin. Recording requires a Staff actor who
-belongs to the bin's site. Wrong states return 409, unknown actors 422, and a
-non-Staff actor or Staff from another site 403.
+bin. Recording requires a signed-in Staff user who
+belongs to the bin's site, who is saved as `created_by`. Wrong states return 409, and a
+non-Staff user or Staff from another site 403.
 
 Photos are validated by content type and file signature (JPEG, PNG, WebP, up to
 5 MB), saved under `UPLOAD_DIR` (default `backend/uploads/`), and referenced by
 a relative path in `handoffs.scale_photo_url`. Responses expose that as
-`/api/handoffs/{id}/scale-photo`. Timestamps in requests must include a UTC
+`/api/handoffs/{id}/scale-photo`, which needs the token and a reader of the handoff's site. Timestamps in requests must include a UTC
 offset. The `scheduled` status remains in the database enum, but no endpoint
 creates it.
 
@@ -472,12 +493,12 @@ Rows are checked as follows (row numbers are spreadsheet lines, header = 1):
   3% off the handoff's `staff_weight_kg`, and a bin that already has outcomes
   (saving replaces them; re-imports update and never duplicate).
 
-`GET /options` lists active contractors. `POST /parse-and-validate` takes
-`actor_id` (a manager or admin), the file as base64, `report_month`, and
+Every route requires a manager or administrator. `GET /options` lists active contractors.
+`POST /parse-and-validate` takes the file as base64, `report_month`, and
 `contractor_id`, and returns each row's `site_name`, `staff_weight_kg`, `status`,
-`errors`, and `warnings`. `POST /import` takes `actor_id`, `contractor_id`,
+`errors`, and `warnings`. `POST /import` takes `contractor_id`,
 `report_month`, and the rows, checks them again (`422` and nothing saved if any
-fails), records the actor as uploader, stores `received_kg` on the handoff
+fails), records the signed-in user as uploader, stores `received_kg` on the handoff
 (`contractor_received_kg`), and saves one report per site, returned as `reports`.
 A concurrent save of the same report returns `409`. The import page defaults the
 month to the previous month. For demos, use the report files the seed writes to

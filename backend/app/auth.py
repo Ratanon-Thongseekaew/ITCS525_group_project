@@ -55,6 +55,27 @@ def require_admin(user: CurrentUser) -> User:
 
 AdminUser = Annotated[User, Depends(require_admin)]
 
+MANAGEMENT_ROLES = (UserRole.ADMIN, UserRole.MANAGER)
+
+
+def require_active_user(user: CurrentUser) -> User:
+    """Any signed-in account that has finished changing a temporary password."""
+    if user.must_change_password:
+        raise HTTPException(status_code=403, detail="Password change required")
+    return user
+
+
+ActiveUser = Annotated[User, Depends(require_active_user)]
+
+
+def require_management(user: ActiveUser) -> User:
+    if user.role not in MANAGEMENT_ROLES:
+        raise HTTPException(status_code=403, detail="Manager or administrator access required")
+    return user
+
+
+ManagementUser = Annotated[User, Depends(require_management)]
+
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, session: SessionDependency) -> TokenResponse:

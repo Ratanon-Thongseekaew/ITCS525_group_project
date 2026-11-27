@@ -96,9 +96,9 @@ describe('SortingOverviewPage', () => {
     render(<SortingOverviewPage />)
 
     expect(await screen.findAllByText('BIN-RC-007')).toHaveLength(2)
-    expect(api.getSortingSites).toHaveBeenCalledWith(20)
-    expect(api.getBins).toHaveBeenCalledWith(20, undefined)
-    expect(api.getSortingStats).toHaveBeenCalledWith(20, undefined)
+    expect(api.getSortingSites).toHaveBeenCalledWith('test-token')
+    expect(api.getBins).toHaveBeenCalledWith('test-token', undefined)
+    expect(api.getSortingStats).toHaveBeenCalledWith('test-token', undefined)
     expect(screen.getAllByText('Bangkok Flagship').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Chiang Mai Outlet').length).toBeGreaterThan(0)
     expect(screen.getByText('Sealed / Ready for handoff')).toBeInTheDocument()
@@ -133,8 +133,8 @@ describe('SortingOverviewPage', () => {
     fireEvent.keyDown(screen.getByRole('combobox', { name: /Site/i }), { key: 'Enter' })
     fireEvent.click(await screen.findByRole('option', { name: 'Chiang Mai Outlet' }))
 
-    await waitFor(() => expect(api.getBins).toHaveBeenCalledWith(20, 2))
-    expect(api.getSortingStats).toHaveBeenCalledWith(20, 2)
+    await waitFor(() => expect(api.getBins).toHaveBeenCalledWith('test-token', 2))
+    expect(api.getSortingStats).toHaveBeenCalledWith('test-token', 2)
   })
 
   test('shows the site, without a choice, for a manager of one site', async () => {
@@ -165,7 +165,7 @@ describe('SortingOverviewPage', () => {
     render(<SortingOverviewPage />)
 
     await screen.findAllByText('BIN-RC-007')
-    expect(api.getBins).toHaveBeenCalledWith(30, undefined)
+    expect(api.getBins).toHaveBeenCalledWith('test-token', undefined)
   })
 
   test('shows an error when the overview cannot be loaded', async () => {
