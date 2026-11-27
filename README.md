@@ -238,6 +238,7 @@ Vite proxies `/api` requests to FastAPI during development. To point the fronten
 | `/manager/import`                                              | Contractor monthly outcome report import            |
 | `/manager/sorting`                                             | Read-only sorting overview, one site or all sites   |
 | `/manager/resale-bins`                                         | Top-five store resale value summary                 |
+| `/manager/recycle-bins`                                        | Review, approve, and close recycle bin handoffs     |
 | `/staff/sorting`                                               | Garment sorting (Resale, Recycle, Repair / Upcycle) |
 | `/staff/direct-resale`                                         | Closed resale bins and processing form              |
 | `/staff/direct-resale/potential-revenue-analysis`              | Revenue summary for processed resale bins           |
@@ -334,11 +335,10 @@ the future. The form warns before saving when the weights differ by more than
 3%, and the page's **Awaiting Approval** card counts disputed handoffs.
 **Handoff Records** lists the site's handoffs with their evidence, status, and
 outcomes. These pages are a staff workplace: they use the signed-in staff account
-and its store, and show that account. Managers
-approve disputed handoffs and close handoffs through the API endpoints below. A
-handoff (and its bin) can only be closed after the contractor's outcome report
-for it has been saved;
-there is no manager screen for this yet.
+and its store, and show that account. Managers review handoffs on **Recycle Bin
+Records** (`/manager/recycle-bins`): they approve disputed handoffs and close
+handoffs after reviewing the reported outcomes. A handoff (and its bin) can only
+be closed after the contractor's outcome report for it has been saved.
 
 Until the frontend uses real login, write requests name the acting user with
 `actor_id`. Only staff can record handoffs, and only for their own site; only

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Clock3, ExternalLink, Recycle, TriangleAlert } from 'lucide-react'
 import { handoffPhotoUrl } from '@/api'
 import { RecordCard, RecordDetail } from '@/components/RecordCard'
@@ -133,7 +134,13 @@ function PickupEvidence({ record }: { record: HandoffRecord }) {
   )
 }
 
-export function HandoffRecordCard({ record }: { record: HandoffRecord }) {
+interface HandoffRecordCardProps {
+  record: HandoffRecord
+  /** Controls under the record, such as the manager's approve and close buttons. */
+  actions?: ReactNode
+}
+
+export function HandoffRecordCard({ record, actions }: HandoffRecordCardProps) {
   const recordedAt = record.picked_up_at ?? record.scheduled_pickup_at
   const isPickedUp = record.picked_up_at !== null
   const status = getDisplayStatus(record)
@@ -205,6 +212,8 @@ export function HandoffRecordCard({ record }: { record: HandoffRecord }) {
       ) : (
         <PendingOutcomeNotice />
       )}
+
+      {actions}
     </RecordCard>
   )
 }

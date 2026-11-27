@@ -32,6 +32,12 @@ export const workspaceNavigation: readonly WorkspaceNavigationItem[] = [
     roles: ['manager', 'admin'],
   },
   {
+    label: 'Import Data',
+    segment: 'import',
+    icon: FileSpreadsheet,
+    roles: ['manager'],
+  },
+  {
     label: 'Sorting Overview',
     segment: 'sorting',
     icon: ClipboardList,
@@ -43,16 +49,10 @@ export const workspaceNavigation: readonly WorkspaceNavigationItem[] = [
     icon: Shirt,
     roles: ['manager'],
   },
-  // {
-  //   label: 'Recycle Bin Records',
-  //   segment: 'recycle-bins',
-  //   icon: Recycle,
-  //   roles: ['manager'],
-  // },
   {
-    label: 'Import Data',
-    segment: 'import',
-    icon: FileSpreadsheet,
+    label: 'Recycle Bin Records',
+    segment: 'recycle-bins',
+    icon: Recycle,
     roles: ['manager'],
   },
   {

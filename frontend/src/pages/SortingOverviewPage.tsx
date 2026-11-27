@@ -110,31 +110,40 @@ export function SortingOverviewPage() {
               </span>
             </div>
           </div>
-          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
-            <Label
-              htmlFor="overview-site"
-              className="flex items-center gap-1.5 font-normal text-muted-foreground"
-            >
-              <MapPin className="size-4" aria-hidden="true" />
-              Site
-            </Label>
-            <Select value={siteChoice} onValueChange={setSiteChoice}>
-              <SelectTrigger
-                id="overview-site"
-                className="bg-background sm:w-auto sm:min-w-[200px]"
+          {/* A manager of a single site only sees that site, so it is shown rather than picked. */}
+          {sites.length === 1 ? (
+            <p className="flex min-w-0 items-center gap-1.5 text-sm">
+              <MapPin className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span className="text-muted-foreground">Site</span>
+              <span className="truncate font-medium">{sites[0].name}</span>
+            </p>
+          ) : (
+            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+              <Label
+                htmlFor="overview-site"
+                className="flex items-center gap-1.5 font-normal text-muted-foreground"
               >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_SITES}>All sites</SelectItem>
-                {sites.map((site) => (
-                  <SelectItem key={site.id} value={String(site.id)}>
-                    {site.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+                <MapPin className="size-4" aria-hidden="true" />
+                Site
+              </Label>
+              <Select value={siteChoice} onValueChange={setSiteChoice}>
+                <SelectTrigger
+                  id="overview-site"
+                  className="bg-background sm:w-auto sm:min-w-[200px]"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_SITES}>All sites</SelectItem>
+                  {sites.map((site) => (
+                    <SelectItem key={site.id} value={String(site.id)}>
+                      {site.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
       ) : (
         <Alert variant="warning">

@@ -31,6 +31,19 @@ export const handoffRecordFilterLabels: Record<HandoffRecordFilter, string> = {
   closed: handoffRecordStatusLabels.closed,
 }
 
+/** Where a handoff stands in the manager's review, used by the Recycle Bin Records filter. */
+export type HandoffReviewStage = 'needs_approval' | 'awaiting_report' | 'ready_to_close' | 'closed'
+
+export type HandoffReviewFilter = 'all' | HandoffReviewStage
+
+export const handoffReviewFilterLabels: Record<HandoffReviewFilter, string> = {
+  all: 'All',
+  needs_approval: 'Needs Approval',
+  ready_to_close: 'Ready to Close',
+  awaiting_report: 'Awaiting Report',
+  closed: 'Closed',
+}
+
 export type HandoffRecordSort = 'date' | 'bin_id' | 'recorded_weight'
 
 export const handoffRecordSortLabels: Record<HandoffRecordSort, string> = {
