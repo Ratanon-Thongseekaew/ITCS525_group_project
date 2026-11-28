@@ -115,6 +115,7 @@ jobs:
       MYSQL_USER: textile_app
       MYSQL_PASSWORD: ci-app-password
       MYSQL_PORT: '3307'
+      JWT_SECRET: ci-only-secret-value-that-is-at-least-32-characters
 
     steps:
       - name: Check out repository
