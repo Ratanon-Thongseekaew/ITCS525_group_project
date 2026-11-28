@@ -21,7 +21,7 @@ This is a minimal full-stack monorepo:
 - The backend uses SQLModel as its ORM, PyMySQL as the MySQL driver, and Alembic
   for versioned schema migrations. Database settings are loaded from the root
   `.env`, with an optional `DATABASE_URL` override.
-- The backend has JWT authentication and admin user management, and the frontend signs in against it. Every API route except health, greeting and login checks the token. Docker Compose runs Alembic before starting the API, serves the built SPA through Nginx, and proxies `/api` to FastAPI.
+- The backend has JWT authentication and admin user management, and the frontend signs in against it. Every API route except health, greeting and login checks the token. Docker Compose runs Alembic and the demo seed before starting the API, serves the built SPA through Nginx, and proxies `/api` to FastAPI.
 
 ## Repository map
 
@@ -120,9 +120,12 @@ With the containerized stack:
    origin and needs no build-time API URL.
 3. FastAPI is also exposed at
    `http://127.0.0.1:${BACKEND_PORT:-8000}` for Swagger and direct API access.
-4. The backend waits for MySQL, applies Alembic migrations, and then starts
-   Uvicorn. It connects to `mysql:3306` on the private Compose network.
-5. `mysql_data` preserves database state and `backend_uploads` preserves handoff
+4. The one-shot `seed` service waits for MySQL, applies Alembic migrations, and
+   runs `backend/seed.py --yes --allow-remote` by default. This resets
+   application rows and loads demo data; `SEED_DEMO_DATA=false` skips it.
+5. The backend starts Uvicorn only after the seed service completes
+   successfully. It connects to `mysql:3306` on the private Compose network.
+6. `mysql_data` preserves database state and `backend_uploads` preserves handoff
    scale photos. `docker compose down` keeps both named volumes.
 
 ## Database schema
@@ -541,8 +544,8 @@ that invoke Python.
 npm run dev             # Start frontend and backend together
 npm run dev:frontend    # Start only Vite
 npm run dev:backend     # Start only FastAPI with reload enabled
-npm run app:build       # Build the production frontend and backend images
-npm run app:up          # Build and start the full Compose stack
+npm run app:build       # Build the production frontend, backend, and seed images
+npm run app:up          # Build, seed, and start the full Compose stack
 npm run app:down        # Stop the full stack without deleting named volumes
 npm run app:logs        # Follow frontend and backend container logs
 npm run app:status      # Show all Compose services and health states

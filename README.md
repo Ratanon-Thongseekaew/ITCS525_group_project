@@ -72,9 +72,14 @@ Build and start the frontend, backend, and MySQL together:
 npm run app:up
 ```
 
-Compose waits for MySQL, applies Alembic migrations from the backend container,
-then starts FastAPI. Nginx serves the built React application and forwards
-same-origin `/api` requests to the backend.
+Compose waits for MySQL, applies Alembic migrations, resets the application
+rows, loads the demo data from `backend/seed.py`, and then starts FastAPI.
+Nginx serves the built React application and forwards same-origin `/api`
+requests to the backend.
+
+> **Warning:** automatic seeding is enabled by default and deletes existing
+> application rows whenever the seed service runs. Set `SEED_DEMO_DATA=false`
+> in `.env` before starting Compose when existing data must be preserved.
 
 - Application: http://localhost:5173
 - Backend API and Swagger: http://localhost:8000/docs
@@ -97,6 +102,10 @@ npm run app:down
 MySQL data is stored in `textile-track_mysql_data`; uploaded evidence is stored
 in `textile-track_backend_uploads`. Do not pass `-v` to Compose unless both
 persistent volumes are intentionally being deleted.
+
+The automatic seed uses `DEMO_PASSWORD` from `.env`, defaulting to
+`TextileDemo2026!`. The backend starts only after the seed service finishes
+successfully. Check its output with `docker compose logs seed`.
 
 ## Database
 

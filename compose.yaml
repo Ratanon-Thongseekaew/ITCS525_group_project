@@ -41,6 +41,8 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      seed:
+        condition: service_completed_successfully
     healthcheck:
       test:
         [
@@ -53,6 +55,35 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    networks:
+      - app_network
+
+  seed:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: 'no'
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: '3306'
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-textile_track}
+      MYSQL_USER: ${MYSQL_USER:-textile_app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-TextileDemo2026!}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+    command:
+      - sh
+      - -c
+      - >-
+        alembic -c backend/alembic.ini upgrade head &&
+        if [ "$${SEED_DEMO_DATA}" = "true" ]; then
+          python backend/seed.py --yes --allow-remote;
+        else
+          echo "Demo data seed skipped (SEED_DEMO_DATA=$${SEED_DEMO_DATA}).";
+        fi
+    depends_on:
+      mysql:
+        condition: service_healthy
     networks:
       - app_network
 

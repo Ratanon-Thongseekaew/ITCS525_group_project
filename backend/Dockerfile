@@ -15,8 +15,8 @@ COPY backend/seed.py ./backend/seed.py
 RUN pip install --no-cache-dir ./backend \
     && addgroup --system app \
     && adduser --system --ingroup app app \
-    && mkdir -p /workspace/backend/uploads \
-    && chown -R app:app /workspace/backend/uploads
+    && mkdir -p /workspace/backend/uploads /workspace/backend/demo_reports \
+    && chown -R app:app /workspace/backend/uploads /workspace/backend/demo_reports
 
 USER app
 
