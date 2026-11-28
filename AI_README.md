@@ -546,8 +546,7 @@ npm run commit          # Guardrails, lint, backend tests, then Commitizen
 ## Continuous integration
 
 `.github/workflows/ci.yaml` runs on pull requests targeting `main`, pushes to
-`main` or `feat/local-docker-compose`, and manual dispatches. It provides these
-independent status checks:
+`main`, and manual dispatches. It provides these independent status checks:
 
 - `Backend checks`: Python 3.12, disposable MySQL 8.4, editable `backend[dev]`
   installation, Alembic migration and metadata check, Ruff lint, Ruff format

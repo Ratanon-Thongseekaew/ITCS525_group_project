@@ -427,8 +427,8 @@ You can run each side independently with `npm run dev:frontend` and `npm run dev
 ## Continuous integration
 
 GitHub Actions runs `.github/workflows/ci.yaml` for pull requests targeting
-`main`, pushes to `main` or `feat/local-docker-compose`, and manual workflow
-dispatches. The workflow runs three independent checks:
+`main`, pushes to `main`, and manual workflow dispatches. The workflow runs
+three independent checks:
 
 - **Backend checks:** start MySQL 8.4, install `backend[dev]` on Python 3.12,
   apply every Alembic migration, verify SQLModel metadata with `alembic check`,
