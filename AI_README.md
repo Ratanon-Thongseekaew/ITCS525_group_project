@@ -13,14 +13,15 @@ This is a minimal full-stack monorepo:
   primitives, Radix UI, and Lucide icons.
 - `backend/` is a Python 3.11+ HTTP API built with FastAPI and served by
   Uvicorn.
-- `compose.yaml` provides the MySQL 8.4 LTS service used for local development.
+- `compose.yaml` builds the production frontend and backend containers and
+  provides the MySQL 8.4 LTS service used by both the containers and local
+  development.
 - The root `package.json` coordinates both applications. The frontend is an npm
   workspace; the Python backend is managed through `backend/pyproject.toml`.
 - The backend uses SQLModel as its ORM, PyMySQL as the MySQL driver, and Alembic
   for versioned schema migrations. Database settings are loaded from the root
   `.env`, with an optional `DATABASE_URL` override.
-- The backend has JWT authentication and admin user management, and the frontend signs in against it. Every API route except health, greeting and login checks the token. Deployment configuration remains
-  unimplemented.
+- The backend has JWT authentication and admin user management, and the frontend signs in against it. Every API route except health, greeting and login checks the token. Docker Compose runs Alembic and the demo seed before starting the API, serves the built SPA through Nginx, and proxies `/api` to FastAPI.
 
 ## Repository map
 
@@ -45,9 +46,12 @@ This is a minimal full-stack monorepo:
 │   │   └── vite-env.d.ts    Vite TypeScript declarations
 │   ├── components.json      shadcn/ui CLI configuration
 │   ├── eslint.config.js
+│   ├── Dockerfile           Multi-stage production frontend image
+│   ├── nginx.conf           SPA fallback and `/api` reverse proxy
 │   ├── vite.config.ts       Dev server and `/api` proxy
 │   └── package.json
 ├── backend/
+│   ├── Dockerfile           Production API image and migration startup
 │   ├── app/
 │   │   ├── auth.py          Login/me routes, current-user and admin dependencies
 │   │   ├── create_admin.py  CLI to create the first administrator
@@ -81,7 +85,8 @@ This is a minimal full-stack monorepo:
 ├── .github/
 │   └── workflows/
 │       └── ci.yaml           Pull request and main-branch CI checks
-├── compose.yaml             Local MySQL service
+├── .dockerignore            Excludes local and generated files from builds
+├── compose.yaml             Frontend, backend, and MySQL services
 ├── .env.example             Safe template for local environment values
 ├── package.json             Root development commands
 └── README.md                Human setup and usage guide
@@ -105,6 +110,23 @@ During local development:
 7. SQLModel connects through `backend/app/database.py`; Alembic is the only
    supported way to create or update persistent schema. Application startup
    does not call `SQLModel.metadata.create_all()`.
+
+With the containerized stack:
+
+1. Nginx serves the production frontend at
+   `http://127.0.0.1:${FRONTEND_PORT:-5173}` and falls back to `index.html` for
+   React Router paths.
+2. Nginx proxies `/api` to the `backend` service, so the browser uses the same
+   origin and needs no build-time API URL.
+3. FastAPI is also exposed at
+   `http://127.0.0.1:${BACKEND_PORT:-8000}` for Swagger and direct API access.
+4. The one-shot `seed` service waits for MySQL, applies Alembic migrations, and
+   runs `backend/seed.py --yes --allow-remote` by default. This resets
+   application rows and loads demo data; `SEED_DEMO_DATA=false` skips it.
+5. The backend starts Uvicorn only after the seed service completes
+   successfully. It connects to `mysql:3306` on the private Compose network.
+6. `mysql_data` preserves database state and `backend_uploads` preserves handoff
+   scale photos. `docker compose down` keeps both named volumes.
 
 ## Database schema
 
@@ -522,6 +544,11 @@ that invoke Python.
 npm run dev             # Start frontend and backend together
 npm run dev:frontend    # Start only Vite
 npm run dev:backend     # Start only FastAPI with reload enabled
+npm run app:build       # Build the production frontend, backend, and seed images
+npm run app:up          # Build, seed, and start the full Compose stack
+npm run app:down        # Stop the full stack without deleting named volumes
+npm run app:logs        # Follow frontend and backend container logs
+npm run app:status      # Show all Compose services and health states
 npm run db:up           # Start the local MySQL service
 npm run db:down         # Stop Compose services without deleting data
 npm run db:status       # Show MySQL container and health status
@@ -552,8 +579,9 @@ npm run commit          # Guardrails, lint, backend tests, then Commitizen
 - `Frontend checks`: Node.js 24, `npm ci`, Prettier, ESLint, Vitest, and the
   production Vite build. It also runs and tests the executable project
   guardrails.
-- `Compose validation`: validates the resolved Compose configuration with
-  disposable CI environment values and does not start containers.
+- `Compose validation`: validates the resolved frontend/backend/MySQL Compose
+  configuration with disposable CI environment values and does not start
+  containers.
 
 CI dependency caches are keyed from `backend/pyproject.toml` and the root
 `package-lock.json`. Superseded runs for the same pull request are cancelled.

@@ -1,6 +1,92 @@
 name: textile-track
 
 services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:${FRONTEND_PORT:-5173}:80'
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget --quiet --spider http://127.0.0.1/ || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - app_network
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: '3306'
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-textile_track}
+      MYSQL_USER: ${MYSQL_USER:-textile_app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-60}
+      UPLOAD_DIR: /workspace/backend/uploads
+    ports:
+      - '127.0.0.1:${BACKEND_PORT:-8000}:8000'
+    volumes:
+      - backend_uploads:/workspace/backend/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app_network
+
+  seed:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: 'no'
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: '3306'
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-textile_track}
+      MYSQL_USER: ${MYSQL_USER:-textile_app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-TextileDemo2026!}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+    command:
+      - sh
+      - -c
+      - >-
+        alembic -c backend/alembic.ini upgrade head &&
+        if [ "$${SEED_DEMO_DATA}" = "true" ]; then
+          python backend/seed.py --yes --allow-remote;
+        else
+          echo "Demo data seed skipped (SEED_DEMO_DATA=$${SEED_DEMO_DATA}).";
+        fi
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - app_network
+
   mysql:
     image: mysql:8.4
     restart: unless-stopped
@@ -27,6 +113,7 @@ services:
 
 volumes:
   mysql_data:
+  backend_uploads:
 
 networks:
   app_network:

@@ -11,8 +11,9 @@ assistants, see [AI_README.md](./AI_README.md).
 
 ```text
 .
-├── frontend/          React, TypeScript, Vite, Tailwind CSS, shadcn/ui
-├── backend/           FastAPI application and pytest tests
+├── frontend/          React app, Nginx config, and production Dockerfile
+├── backend/           FastAPI app, tests, and production Dockerfile
+├── compose.yaml       Frontend, backend, and MySQL services
 ├── AI_README.md       Architecture and conventions for AI assistants
 ├── AGENTS.md          Instructions automatically discovered by AI tools
 ├── package.json       Shared npm development commands
@@ -60,8 +61,51 @@ cp .env.example .env
 ```
 
 On Windows Command Prompt, use `copy .env.example .env`. Change both MySQL
-passwords in `.env` before starting the database. The `.env` file is ignored by
-Git and must not be committed.
+passwords and `JWT_SECRET` in `.env` before starting the application. The
+`.env` file is ignored by Git and must not be committed.
+
+## Run with Docker Compose
+
+Build and start the frontend, backend, and MySQL together:
+
+```bash
+npm run app:up
+```
+
+Compose waits for MySQL, applies Alembic migrations, resets the application
+rows, loads the demo data from `backend/seed.py`, and then starts FastAPI.
+Nginx serves the built React application and forwards same-origin `/api`
+requests to the backend.
+
+> **Warning:** automatic seeding is enabled by default and deletes existing
+> application rows whenever the seed service runs. Set `SEED_DEMO_DATA=false`
+> in `.env` before starting Compose when existing data must be preserved.
+
+- Application: http://localhost:5173
+- Backend API and Swagger: http://localhost:8000/docs
+
+The ports can be changed with `FRONTEND_PORT` and `BACKEND_PORT` in `.env`.
+Both bind to `127.0.0.1` by default. Check health or follow application logs
+with:
+
+```bash
+npm run app:status
+npm run app:logs
+```
+
+Stop the stack without deleting MySQL data or uploaded scale photos:
+
+```bash
+npm run app:down
+```
+
+MySQL data is stored in `textile-track_mysql_data`; uploaded evidence is stored
+in `textile-track_backend_uploads`. Do not pass `-v` to Compose unless both
+persistent volumes are intentionally being deleted.
+
+The automatic seed uses `DEMO_PASSWORD` from `.env`, defaulting to
+`TextileDemo2026!`. The backend starts only after the seed service finishes
+successfully. Check its output with `docker compose logs seed`.
 
 ## Database
 
@@ -426,8 +470,8 @@ three independent checks:
 - **Frontend checks:** install the locked npm dependencies on Node.js 24, check
   and test the executable project guardrails, check Prettier and ESLint, run
   Vitest, then create a production build.
-- **Compose validation:** resolve `compose.yaml` with non-production CI values
-  and validate its syntax without starting MySQL.
+- **Compose validation:** resolve the full frontend/backend/MySQL stack with
+  non-production CI values and validate its syntax without starting services.
 
 The backend CI job uses a disposable MySQL service with non-production
 credentials and applies all migrations before running checks. Database tests
