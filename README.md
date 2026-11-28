@@ -245,16 +245,6 @@ npm run dev
 
 Vite proxies `/api` requests to FastAPI during development. To point the frontend at a different API, copy `frontend/.env.example` to `frontend/.env` and set `VITE_API_URL`.
 
-To run all three containers (`mysql`, `backend`, and `frontend` with Caddy) locally in Docker instead of host Node/Python dev servers (note: code changes require rebuilding):
-
-```bash
-npm run docker:up    # builds & starts mysql, backend (auto-migrated), and frontend
-npm run docker:down  # stops all three containers while preserving mysql_data
-```
-
-- Web App (Caddy): http://localhost:5173
-- Backend API & Swagger: http://127.0.0.1:8000/docs (also proxied at http://localhost:5173/docs)
-
 ## Frontend routes
 
 | Route                                                          | Purpose                                             |
@@ -436,8 +426,51 @@ three independent checks:
 - **Frontend checks:** install the locked npm dependencies on Node.js 24, check
   and test the executable project guardrails, check Prettier and ESLint, run
   Vitest, then create a production build.
-- **Compose validation:** resolve `compose.yaml` and `compose.local.yaml` with
-  non-production CI values and validate their syntax without starting MySQL.
+- **Compose validation:** resolve `compose.yaml` and `compose.prod.yaml`
+  with non-production CI values and validate their syntax without starting MySQL.
+
+## Deployment (AWS EC2 + Docker Compose)
+
+Pushes to `main` (or manual workflow dispatches) trigger
+`.github/workflows/deploy.yaml`, which:
+
+1. Authenticates with `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (the scoped
+   `github-actions-ec2-deploy` IAM user in `ap-southeast-2`).
+2. Builds `linux/amd64` images from `backend/Dockerfile` and
+   `frontend/Dockerfile` and pushes them to Amazon ECR.
+3. Calls `scripts/deploy-ec2.mjs` to update the EC2 instance tagged
+   `Project=textile-track` over AWS SSM (`AWS-RunShellScript`), running
+   `alembic -c backend/alembic.ini upgrade head` and `docker compose -f compose.prod.yaml up -d`.
+
+Inside `compose.prod.yaml`, three containers share a private Docker network:
+`frontend` (Caddy serving the Vite static bundle, managing HTTPS for
+`SITE_DOMAIN`, enforcing `ALLOWED_CLIENT_CIDRS`, and proxying `/api/*`,
+`/docs*`, and `/openapi.json`), `backend` (FastAPI/Uvicorn with persistent
+`uploads_data`), and `mysql` (MySQL 8.4 with persistent `mysql_data`, not
+exposed on the host).
+
+```mermaid
+flowchart LR
+  User["Browser (HTTPS 443 / HTTP 80)"] -->|"sslip.io DNS -> EC2 Elastic IP"| SG["EC2 Security Group (Ports 80 & 443 only)"]
+
+  subgraph EC2["AWS EC2 (t3.micro, ap-southeast-2, SSM-managed)"]
+    SG --> Caddy["frontend container (Caddy 2 + Vite dist)"]
+    Caddy -->|"Let's Encrypt TLS + ALLOWED_CLIENT_CIDRS"| Static["Static SPA (/srv)"]
+    Caddy -->|"/api/*, /docs*, /openapi.json"| Backend["backend container (FastAPI + Uvicorn :8000)"]
+    Backend -->|"SQLModel / PyMySQL"| DB["mysql container (MySQL 8.4 :3306)"]
+    DB --- VolDB["mysql_data volume (EBS)"]
+    Backend --- VolUp["uploads_data volume (EBS)"]
+    Caddy --- VolTLS["caddy_data volume (EBS)"]
+    Env[".env on host (/opt/textile-track/.env)"] -.-> Caddy
+    Env -.-> Backend
+    Env -.-> DB
+  end
+
+  Dev["Push or Merge to main"] --> GHA["GitHub Actions (.github/workflows/deploy.yaml)"]
+  GHA -->|"Push linux/amd64 images"| ECR["Amazon ECR (frontend & backend repos)"]
+  GHA -->|"scripts/deploy-ec2.mjs via AWS SSM"| EC2
+  ECR -.->|"docker compose pull (EC2 IAM Role)"| EC2
+```
 
 The backend CI job uses a disposable MySQL service with non-production
 credentials and applies all migrations before running checks. Database tests

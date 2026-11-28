@@ -9,13 +9,13 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-textile_track}
       MYSQL_USER: ${MYSQL_USER:-textile_app}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
-    ports:
-      - '127.0.0.1:${MYSQL_PORT:-3307}:3306'
     volumes:
       - mysql_data:/var/lib/mysql
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_0900_ai_ci
+      - --performance-schema=OFF
+      - --innodb-buffer-pool-size=128M
     healthcheck:
       test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent']
       interval: 10s
@@ -26,28 +26,21 @@ services:
       - app_network
 
   backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
+    image: ${ECR_REGISTRY:?Set ECR_REGISTRY in .env}/textile-track-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
-      MYSQL_HOST: mysql
-      MYSQL_PORT: '3306'
+      MYSQL_HOST: ${MYSQL_HOST:-mysql}
+      MYSQL_PORT: ${MYSQL_PORT:-3306}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-textile_track}
       MYSQL_USER: ${MYSQL_USER:-textile_app}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-60}
-      UPLOAD_DIR: /app/backend/uploads
-    command:
-      - sh
-      - -c
-      - alembic -c backend/alembic.ini upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips '*'
+      UPLOAD_DIR: ${UPLOAD_DIR:-/app/backend/uploads}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-}
     depends_on:
       mysql:
         condition: service_healthy
-    ports:
-      - '127.0.0.1:${LOCAL_API_PORT:-8000}:8000'
     volumes:
       - uploads_data:/app/backend/uploads
     healthcheck:
@@ -61,23 +54,22 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 20s
+      start_period: 15s
     networks:
       - app_network
 
   frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
+    image: ${ECR_REGISTRY:?Set ECR_REGISTRY in .env}/textile-track-frontend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
-      SITE_DOMAIN: ${LOCAL_SITE_DOMAIN:-:80}
-      ALLOWED_CLIENT_CIDRS: 0.0.0.0/0 ::/0
+      SITE_DOMAIN: ${SITE_DOMAIN:-:80}
+      ALLOWED_CLIENT_CIDRS: ${ALLOWED_CLIENT_CIDRS:-0.0.0.0/0 ::/0}
     depends_on:
       backend:
         condition: service_healthy
     ports:
-      - '127.0.0.1:${LOCAL_WEB_PORT:-5173}:80'
+      - '80:80'
+      - '443:443'
     volumes:
       - caddy_data:/data
       - caddy_config:/config

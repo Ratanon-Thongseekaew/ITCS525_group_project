@@ -115,6 +115,7 @@ jobs:
       MYSQL_USER: textile_app
       MYSQL_PASSWORD: ci-app-password
       MYSQL_PORT: '3307'
+      ECR_REGISTRY: example.dkr.ecr.ap-southeast-2.amazonaws.com
       JWT_SECRET: ci-only-secret-that-is-at-least-32-characters-long
 
     steps:
@@ -124,4 +125,4 @@ jobs:
       - name: Validate Compose configuration
         run: |
           docker compose config --quiet
-          docker compose -f compose.local.yaml config --quiet
+          docker compose -f compose.prod.yaml config --quiet
