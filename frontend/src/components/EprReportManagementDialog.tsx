@@ -21,7 +21,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
+import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { useSession } from '@/lib/auth-session'
 import { getEprReportRows } from '@/lib/epr-report'
 
 const metricLabels: Record<EprAdjustmentMetric, string> = {
@@ -240,12 +241,13 @@ function ManagementPanel({
   const [data, setData] = useState<EprManagement>()
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
-  const [actor, setActor] = useState('')
+  // The API records the signed-in manager or administrator.
+  const token = useSession()?.token ?? ''
   const [action, setAction] = useState<'confirm-submit' | 'adjustment' | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
-    void getEprManagement(year, quarter, controller.signal)
+    void getEprManagement(token, year, quarter, controller.signal)
       .then((result) => {
         if (!controller.signal.aborted) setData(result)
       })
@@ -253,7 +255,7 @@ function ManagementPanel({
         if (!controller.signal.aborted) setError('The EPR report could not be loaded.')
       })
     return () => controller.abort()
-  }, [year, quarter, attempt])
+  }, [token, year, quarter, attempt])
 
   async function save(write: () => Promise<EprManagement>) {
     setPending(true)
@@ -327,18 +329,6 @@ function ManagementPanel({
           ))}
         </section>
       )}
-      <ChoiceField
-        label="Recorded by"
-        value={actor}
-        onChange={setActor}
-        disabled={pending}
-        options={data.actors.map(({ id, label }) => ({ value: String(id), label }))}
-      />
-      <FieldDescription className="-mt-2 text-xs">
-        {data.actors.length
-          ? 'Select the account to record in this demo.'
-          : 'Create a manager or admin account to record changes.'}
-      </FieldDescription>
       {error && <ErrorState message={error} />}
       {action === 'confirm-submit' && (
         <Alert variant="warning" role="group" aria-label="Confirm submit">
@@ -352,8 +342,8 @@ function ManagementPanel({
                 Cancel
               </Button>
               <Button
-                disabled={pending || !actor}
-                onClick={() => void save(() => submitEprQuarter(year, quarter, Number(actor)))}
+                disabled={pending}
+                onClick={() => void save(() => submitEprQuarter(token, year, quarter))}
               >
                 {pending ? 'Submitting…' : 'Confirm submit and lock'}
               </Button>
@@ -364,12 +354,11 @@ function ManagementPanel({
       {action === 'adjustment' && (
         <AdjustmentForm
           sites={data.sites}
-          pending={pending || !actor}
+          pending={pending}
           onCancel={() => setAction(null)}
           onSave={(siteId, effectiveDate, reason, lines) =>
             void save(() =>
-              saveEprAdjustment(year, quarter, {
-                actor_id: Number(actor),
+              saveEprAdjustment(token, year, quarter, {
                 site_id: siteId,
                 expected_latest_adjustment_id: data.adjustments.at(-1)?.id ?? null,
                 effective_date: effectiveDate,
@@ -385,7 +374,7 @@ function ManagementPanel({
       {action === null && (
         <div className="flex justify-end">
           <Button
-            disabled={!actor || (submitted && !data.sites.length)}
+            disabled={submitted && !data.sites.length}
             onClick={() => {
               setError('')
               setAction(submitted ? 'adjustment' : 'confirm-submit')

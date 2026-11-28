@@ -195,8 +195,8 @@ describe('GarmentSortingWorkspace', () => {
     await waitFor(() => {
       expect(api.sortGarment).toHaveBeenCalledTimes(1)
       expect(api.sortGarment).toHaveBeenCalledWith(
+        'test-token',
         expect.objectContaining({
-          actor_id: 7,
           condition: 'repair_upcycle',
           category: 'Tops',
         }),
@@ -211,6 +211,7 @@ describe('GarmentSortingWorkspace', () => {
 
     await waitFor(() => {
       expect(api.sortGarment).toHaveBeenCalledWith(
+        'test-token',
         expect.objectContaining({ condition: 'repair_upcycle' }),
       )
     })
@@ -234,6 +235,7 @@ describe('GarmentSortingWorkspace', () => {
 
     await waitFor(() => {
       expect(api.sortGarment).toHaveBeenCalledWith(
+        'test-token',
         expect.objectContaining({
           condition: 'good_reusable',
           category: 'Tops',
@@ -254,6 +256,7 @@ describe('GarmentSortingWorkspace', () => {
 
     await waitFor(() => {
       expect(api.sortGarment).toHaveBeenCalledWith(
+        'test-token',
         expect.objectContaining({
           condition: 'worn_recyclable',
           category: 'Tops',
@@ -298,6 +301,7 @@ describe('GarmentSortingWorkspace', () => {
 
     await waitFor(() => {
       expect(api.sortGarment).toHaveBeenCalledWith(
+        'test-token',
         expect.objectContaining({
           condition: 'good_reusable',
         }),
@@ -309,30 +313,34 @@ describe('GarmentSortingWorkspace', () => {
     render(<GarmentSortingWorkspace />)
 
     await waitFor(() => {
-      expect(api.getSortingStats).toHaveBeenCalledWith(7, 1)
-      expect(api.getActiveBins).toHaveBeenCalledWith(7, 1)
-      expect(api.getBins).toHaveBeenCalledWith(7, 1)
-      expect(api.getRecentGarments).toHaveBeenCalledWith(7, 1, 10)
+      expect(api.getSortingStats).toHaveBeenCalledWith('test-token', 1)
+      expect(api.getActiveBins).toHaveBeenCalledWith('test-token', 1)
+      expect(api.getBins).toHaveBeenCalledWith('test-token', 1)
+      expect(api.getRecentGarments).toHaveBeenCalledWith('test-token', 1, 10)
     })
   })
 
-  test('sends the acting staff member when sorting, creating and sealing bins', async () => {
+  test('sends the session token, not an actor, when sorting, creating and sealing bins', async () => {
     render(<GarmentSortingWorkspace />)
 
     fireEvent.click(screen.getByRole('button', { name: /Good \/ Reusable/i }))
     await waitFor(() =>
-      expect(api.sortGarment).toHaveBeenCalledWith(expect.objectContaining({ actor_id: 7 })),
+      expect(api.sortGarment).toHaveBeenCalledWith(
+        'test-token',
+        expect.not.objectContaining({ actor_id: expect.anything() }),
+      ),
     )
 
     fireEvent.click(screen.getAllByRole('button', { name: /Seal \/ Close Bin/i })[0])
     fireEvent.click(await screen.findByRole('button', { name: /Confirm & Seal/i }))
-    await waitFor(() => expect(api.closeBin).toHaveBeenCalledWith(1, 7, undefined))
+    await waitFor(() => expect(api.closeBin).toHaveBeenCalledWith('test-token', 1, undefined))
 
     fireEvent.click(screen.getByRole('button', { name: /New Bin Record/i }))
     fireEvent.click(screen.getByRole('button', { name: /Create Bin/i }))
     await waitFor(() =>
       expect(api.createBin).toHaveBeenCalledWith(
-        expect.objectContaining({ actor_id: 7, bin_type: 'resale' }),
+        'test-token',
+        expect.objectContaining({ bin_type: 'resale' }),
       ),
     )
   })

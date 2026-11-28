@@ -229,7 +229,6 @@ ShortText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=5
 
 
 class GarmentSortRequest(BaseModel):
-    actor_id: int = Field(gt=0)
     condition: GarmentCondition
     category: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)
@@ -270,7 +269,6 @@ class BinRecord(BaseModel):
 
 
 class ResaleProcessRequest(BaseModel):
-    actor_id: int = Field(gt=0)
     accepted_item_count: int = Field(ge=0)
     rejected_item_count: int = Field(ge=0)
     revenue: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
@@ -293,7 +291,6 @@ class ResaleBinRecord(BaseModel):
 
 
 class BinCreateRequest(BaseModel):
-    actor_id: int = Field(gt=0)
     bin_type: BinType
     bin_code: (
         Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)] | None
@@ -309,7 +306,6 @@ class SortingSite(BaseModel):
 
 
 class BinCloseRequest(BaseModel):
-    actor_id: int = Field(gt=0)
     notes: ShortText | None = None
 
 
@@ -386,10 +382,6 @@ class EprAdjustmentMetric(StrEnum):
     INCINERATED_ENERGY_RECOVERY = "incinerated_energy_recovery"
 
 
-class EprSubmitRequest(BaseModel):
-    actor_id: int = Field(gt=0)
-
-
 class EprAdjustmentLine(BaseModel):
     metric: EprAdjustmentMetric
     weight_delta_kg: Decimal = Field(max_digits=14, decimal_places=3)
@@ -402,7 +394,7 @@ class EprAdjustmentLine(BaseModel):
         return value
 
 
-class EprAdjustmentRequest(EprSubmitRequest):
+class EprAdjustmentRequest(BaseModel):
     site_id: int = Field(gt=0)
     expected_latest_adjustment_id: int | None = Field(ge=1)
     effective_date: date
@@ -441,7 +433,6 @@ class EprManagementResponse(BaseModel):
     adjusted_report: EprQuarterReportResponse | None
     adjustments: list[EprAdjustmentResponse]
     sites: list[EprManagementOption]
-    actors: list[EprManagementOption]
 
 
 class DashboardFrequency(StrEnum):
@@ -542,7 +533,6 @@ ReportMonth = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}(-\d{2})?$"
 
 
 class ContractorReportFileParseRequest(BaseModel):
-    actor_id: int = Field(gt=0)  # A manager or admin, until the API reads the login token
     filename: str = Field(min_length=1, max_length=255)
     content_base64: str = Field(min_length=1)
     # When given, rows not picked up in this month, or by this contractor, are rejected.
@@ -577,7 +567,6 @@ class ContractorReportImportRowRequest(BaseModel):
 
 
 class ContractorReportImportRequest(BaseModel):
-    actor_id: int = Field(gt=0)  # A manager or admin, recorded as the uploader
     contractor_id: int = Field(gt=0)
     report_month: ReportMonth
     source_filename: str = Field(min_length=1, max_length=255)
@@ -627,17 +616,9 @@ class HandoffContractorOption(BaseModel):
     name: str
 
 
-class HandoffActorOption(BaseModel):
-    id: int
-    username: str
-    role: UserRole
-    site_ids: list[int]
-
-
 class HandoffOptionsResponse(BaseModel):
     sites: list[HandoffSiteOption]
     contractors: list[HandoffContractorOption]
-    actors: list[HandoffActorOption]
 
 
 class HandoffReadyBin(BaseModel):
@@ -652,10 +633,6 @@ class HandoffReadyBin(BaseModel):
 
 class HandoffReadyBinsResponse(BaseModel):
     bins: list[HandoffReadyBin]
-
-
-class HandoffActorRequest(BaseModel):
-    actor_id: int = Field(gt=0)
 
 
 class HandoffOutcomes(BaseModel):

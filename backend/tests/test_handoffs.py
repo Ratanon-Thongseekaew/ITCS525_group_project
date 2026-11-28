@@ -4,6 +4,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+from auth_helpers import bearer, sign_in
 from fastapi.testclient import TestClient
 from sqlmodel import Session, func, select
 
@@ -115,11 +116,18 @@ class HandoffTestContext:
     def cnx_staff_id(self) -> int:
         return self.user_id("staff.cnx@example.com")
 
-    def record(self, bin_code: str | None = None, *, photo=DEFAULT_PHOTO, **fields):
+    def record(
+        self,
+        bin_code: str | None = None,
+        *,
+        photo=DEFAULT_PHOTO,
+        as_user: int | None = None,
+        **fields,
+    ):
+        """Record a pickup signed in as ``as_user`` (Bangkok staff by default)."""
         data = {
             "bin_id": str(self.bin_id(bin_code or self.ready_bin())),
             "contractor_id": str(self.contractor_id()),
-            "actor_id": str(self.bkk_staff_id),
             "picked_up_at": PICKED_UP_AT,
             "staff_weight_kg": "40.000",
             "driver_weight_kg": "40.000",
@@ -128,7 +136,8 @@ class HandoffTestContext:
             **{key: str(value) for key, value in fields.items()},
         }
         files = {"scale_photo": photo} if photo else None
-        return self.client.post("/api/handoffs/pickups", data=data, files=files)
+        headers = bearer(as_user or self.bkk_staff_id)
+        return self.client.post("/api/handoffs/pickups", data=data, files=files, headers=headers)
 
     def add_outcome_report(self, handoff_id: int) -> None:
         """Saves a contractor outcome report entry for the handoff, as an import would."""
@@ -153,9 +162,10 @@ class HandoffTestContext:
             )
             session.commit()
 
-    def act(self, handoff_id: int, action: str, actor_id: int | None = None):
+    def act(self, handoff_id: int, action: str, as_user: int | None = None):
+        """Approve or close signed in as ``as_user`` (the Bangkok manager by default)."""
         return self.client.post(
-            f"/api/handoffs/{handoff_id}/{action}", json={"actor_id": actor_id or self.manager_id}
+            f"/api/handoffs/{handoff_id}/{action}", headers=bearer(as_user or self.manager_id)
         )
 
 
@@ -170,7 +180,10 @@ def ctx(tmp_path, monkeypatch, demo_engine) -> Iterator[HandoffTestContext]:
     app.dependency_overrides[get_session] = override_session
     try:
         with TestClient(app) as client:
-            yield HandoffTestContext(client=client, engine=demo_engine)
+            context = HandoffTestContext(client=client, engine=demo_engine)
+            # Reads without a chosen user are made by the administrator, who sees every store.
+            sign_in(client, context.user_id("admin@example.com"))
+            yield context
     finally:
         app.dependency_overrides.clear()
 
@@ -200,7 +213,7 @@ def test_scheduling_endpoints_are_gone(ctx: HandoffTestContext) -> None:
     assert ctx.client.post("/api/handoffs/1/pickup", data={}).status_code == 404
 
 
-def test_options_list_sites_contractors_and_actor_memberships(ctx: HandoffTestContext) -> None:
+def test_options_list_sites_and_contractors_but_no_accounts(ctx: HandoffTestContext) -> None:
     body = ctx.client.get("/api/handoffs/options").json()
 
     assert sorted(site["name"] for site in body["sites"]) == [
@@ -211,9 +224,8 @@ def test_options_list_sites_contractors_and_actor_memberships(ctx: HandoffTestCo
         "Phuket Sorting Center",
     ]
     assert len(body["contractors"]) == 3
-    staff = next(actor for actor in body["actors"] if actor["id"] == ctx.bkk_staff_id)
-    assert staff["role"] == "staff"
-    assert staff["site_ids"] == [ctx.site_id("BKK")]
+    # The acting user comes from the login token, so accounts are no longer listed.
+    assert "actors" not in body
 
 
 def test_ready_bins_are_ready_recycle_bins_without_a_handoff(ctx: HandoffTestContext) -> None:
@@ -262,7 +274,9 @@ def test_pickup_over_three_percent_is_disputed_and_shown_on_dashboard(
     assert record["requires_manager_approval"] is True
     assert record["weight_variance_percent"] == 3.25
     dashboard = ctx.client.get(
-        "/api/dashboard", params={"frequency": "monthly", "year": 2026, "month": 11}
+        "/api/dashboard",
+        params={"frequency": "monthly", "year": 2026, "month": 11},
+        headers=bearer(ctx.user_id("admin@example.com")),
     ).json()
     disputed = [item for item in dashboard["exceptions"] if item["handoff_id"] == record["id"]]
     assert disputed[0]["status"] == "disputed"
@@ -282,7 +296,7 @@ def test_pickup_over_three_percent_is_disputed_and_shown_on_dashboard(
         ({"driver_weight_kg": "-1"}, 422),
         ({"picked_up_at": "2026-11-21T10:15:00"}, 422),  # no UTC offset
         ({"contractor_id": 999_999}, 422),
-        ({"actor_id": 999_999}, 422),
+        ({"as_user": 999_999}, 401),  # a token for an account that doesn't exist
     ],
 )
 def test_rejected_pickups_leave_nothing_behind(
@@ -315,8 +329,8 @@ def test_pickup_checks_the_bin_and_the_actor_site(ctx: HandoffTestContext) -> No
     assert ctx.record(ctx.bin_of_type(BinType.RESALE)).status_code == 409  # not a recycle bin
     second = ctx.new_ready_bin()
     assert ctx.record(second, bin_id=999_999).status_code == 404
-    assert ctx.record(second, actor_id=ctx.cnx_staff_id).status_code == 403
-    assert ctx.record(ctx.ready_bin("CNX"), actor_id=ctx.cnx_staff_id).status_code == 201
+    assert ctx.record(second, as_user=ctx.cnx_staff_id).status_code == 403
+    assert ctx.record(ctx.ready_bin("CNX"), as_user=ctx.cnx_staff_id).status_code == 201
 
     with ctx.session() as session:
         contractor = session.get(Contractor, ctx.contractor_id())
@@ -330,8 +344,8 @@ def test_only_staff_can_record_handoffs(ctx: HandoffTestContext) -> None:
     with ctx.session() as session:
         admin_id = session.exec(select(User.id).where(User.role == UserRole.ADMIN)).first()
 
-    for actor_id in (ctx.manager_id, admin_id):
-        response = ctx.record(actor_id=actor_id)
+    for user_id in (ctx.manager_id, admin_id):
+        response = ctx.record(as_user=user_id)
         assert response.status_code == 403
         assert response.json()["detail"] == "Only store staff can record handoffs."
     assert ctx.bin_status(ctx.ready_bin()) is BinStatus.READY
@@ -357,7 +371,7 @@ def test_disputed_handoff_needs_manager_approval_before_closing(
     handoff_id = ctx.record(driver_weight_kg="45.000").json()["id"]
 
     assert ctx.act(handoff_id, "close").status_code == 409
-    assert ctx.act(handoff_id, "approve", ctx.bkk_staff_id).status_code == 422
+    assert ctx.act(handoff_id, "approve", ctx.bkk_staff_id).status_code == 403
 
     approved = ctx.act(handoff_id, "approve").json()
     assert approved["status"] == "approved"
@@ -375,7 +389,7 @@ def test_disputed_handoff_needs_manager_approval_before_closing(
 def test_close_rules_for_undisputed_handoffs(ctx: HandoffTestContext) -> None:
     handoff_id = ctx.record().json()["id"]
 
-    assert ctx.act(handoff_id, "close", ctx.bkk_staff_id).status_code == 422
+    assert ctx.act(handoff_id, "close", ctx.bkk_staff_id).status_code == 403
     assert ctx.act(handoff_id, "approve").status_code == 409
     ctx.add_outcome_report(handoff_id)
     assert ctx.act(handoff_id, "close").json()["status"] == "closed"
@@ -439,3 +453,69 @@ def test_list_returns_outcomes_and_filters_by_status_and_site(ctx: HandoffTestCo
     assert {item["bin_code"] for item in disputed} == disputed_codes
     cnx = ctx.client.get("/api/handoffs", params={"site_id": ctx.site_id("CNX")}).json()["handoffs"]
     assert {item["site_name"] for item in cnx} == {"Chiang Mai Sorting Center"}
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("get", "/api/handoffs"),
+        ("get", "/api/handoffs/options"),
+        ("get", "/api/handoffs/bins"),
+        ("post", "/api/handoffs/pickups"),
+        ("get", "/api/handoffs/1/scale-photo"),
+        ("post", "/api/handoffs/1/approve"),
+        ("post", "/api/handoffs/1/close"),
+    ],
+)
+def test_handoff_routes_need_a_login(ctx: HandoffTestContext, method, path) -> None:
+    ctx.client.headers.pop("Authorization")
+    assert ctx.client.request(method, path).status_code == 401
+
+
+def test_staff_only_read_their_own_stores_handoffs(ctx: HandoffTestContext) -> None:
+    staff = bearer(ctx.bkk_staff_id)
+    bkk, cnx = ctx.site_id("BKK"), ctx.site_id("CNX")
+
+    handoffs = ctx.client.get("/api/handoffs", headers=staff).json()["handoffs"]
+    bins = ctx.client.get("/api/handoffs/bins", headers=staff).json()["bins"]
+    assert handoffs and {item["site_id"] for item in handoffs} == {bkk}
+    assert bins and {item["site_id"] for item in bins} == {bkk}
+
+    other = {"site_id": cnx}
+    assert ctx.client.get("/api/handoffs", params=other, headers=staff).status_code == 403
+    assert ctx.client.get("/api/handoffs/bins", params=other, headers=staff).status_code == 403
+
+
+def test_scale_photo_follows_the_site_rules(ctx: HandoffTestContext) -> None:
+    record = ctx.record().json()
+    url = record["scale_photo_url"]
+
+    assert ctx.client.get(url, headers=bearer(ctx.bkk_staff_id)).status_code == 200
+    assert ctx.client.get(url, headers=bearer(ctx.manager_id)).status_code == 200
+    assert ctx.client.get(url, headers=bearer(ctx.cnx_staff_id)).status_code == 403
+    cnx_manager = bearer(ctx.user_id("manager.cnx@example.com"))
+    assert ctx.client.get(url, headers=cnx_manager).status_code == 403
+
+
+def test_only_managers_of_the_handoffs_store_can_approve_it(ctx: HandoffTestContext) -> None:
+    handoff_id = ctx.record(driver_weight_kg="41.300").json()["id"]
+    cnx_manager = ctx.user_id("manager.cnx@example.com")
+
+    assert ctx.act(handoff_id, "approve", cnx_manager).status_code == 403
+    assert ctx.act(handoff_id, "close", cnx_manager).status_code == 403
+    approved = ctx.act(handoff_id, "approve", ctx.user_id("admin@example.com"))
+    assert approved.status_code == 200
+    assert approved.json()["approved_by"] == "admin@example.com"
+
+
+def test_the_signed_in_user_is_recorded_not_a_sent_actor_id(ctx: HandoffTestContext) -> None:
+    # Bangkok staff sending the Chiang Mai staff's id still record the pickup as themselves.
+    record = ctx.record(driver_weight_kg="41.300", actor_id=ctx.cnx_staff_id).json()
+    assert record["created_by"] == "staff.bkk@example.com"
+
+    approved = ctx.client.post(
+        f"/api/handoffs/{record['id']}/approve",
+        json={"actor_id": ctx.user_id("admin@example.com")},
+        headers=bearer(ctx.manager_id),
+    ).json()
+    assert approved["approved_by"] == "manager.bkk@example.com"

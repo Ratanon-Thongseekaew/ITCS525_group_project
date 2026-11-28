@@ -28,13 +28,15 @@ const filterOptions = toOptions(handoffRecordFilterLabels)
 const sortOptions = toOptions(handoffRecordSortLabels)
 
 export function HandoffRecordsPage() {
-  const user = useSession()?.user ?? null
+  const session = useSession()
+  const user = session?.user ?? null
+  const token = session?.token ?? ''
   const siteId = user?.role === 'staff' ? (user.store?.id ?? null) : null
   const [filter, setFilter] = useState<HandoffRecordFilter>('all')
   const [sort, setSort] = useState<HandoffRecordSort>('date')
   const loadRecords = useCallback(
-    (signal: AbortSignal) => getHandoffs({ site_id: siteId ?? undefined }, signal),
-    [siteId],
+    (signal: AbortSignal) => getHandoffs(token, { site_id: siteId ?? undefined }, signal),
+    [siteId, token],
   )
   // Staff only see their own store's site, so nothing loads without one.
   const resource = useApiResource(

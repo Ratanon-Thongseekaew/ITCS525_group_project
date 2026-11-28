@@ -3,10 +3,10 @@
 Staff sort each incoming garment into the active bin of the matching type at their own site.
 Sealing a recycling bin makes it ``ready`` so it appears on the handoff page (Feature 4).
 
-Until login is connected, requests name the acting user with ``actor_id`` (the same stopgap the
-handoff and EPR endpoints use). Staff only reach their own site. A manager reaches the sites
-they belong to, or every site when they have no site assigned; an administrator reaches every
-site. Reads that leave out ``site_id`` return all of the actor's sites combined.
+Every route needs a signed-in user, read from the login token. Staff only reach their own site.
+A manager reaches the sites they belong to, or every site when they have no site assigned; an
+administrator reaches every site. Reads that leave out ``site_id`` return all of the user's sites
+combined.
 """
 
 import logging
@@ -20,6 +20,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from .auth import ActiveUser
 from .database import get_session
 from .epr import lock_open_epr_quarter
 from .models import Bin, BinStatus, BinType, GarmentOutcome, GarmentRecord, Site, User, UserSite
@@ -43,10 +44,9 @@ logger = logging.getLogger("uvicorn.error")
 
 router = APIRouter(prefix="/api", tags=["sorting"])
 SessionDependency = Annotated[Session, Depends(get_session)]
-ActorIdQuery = Annotated[int, Query(gt=0, description="Acting user (stands in for login)")]
 SiteIdQuery = Annotated[
     int | None,
-    Query(gt=0, description="One site; leave out for all sites the actor may read"),
+    Query(gt=0, description="One site; leave out for all sites the user may read"),
 ]
 
 OUTCOME_BY_CONDITION: dict[GarmentCondition, GarmentOutcome] = {
@@ -254,23 +254,23 @@ def commit_or_conflict(session: Session) -> None:
 
 
 @router.get("/sorting/sites", response_model=list[SortingSite])
-def get_sorting_sites(actor_id: ActorIdQuery, session: SessionDependency) -> list[SortingSite]:
+def get_sorting_sites(user: ActiveUser, session: SessionDependency) -> list[SortingSite]:
     """The sites this actor may read, for a site switcher. Staff get their own site only."""
 
-    allowed = resolve_read_sites(session, actor_id, None)
+    allowed = resolve_read_sites(session, user.id, None)
     sites = session.exec(select(Site).where(Site.id.in_(allowed)).order_by(Site.name)).all()
     return [SortingSite(id=site.id, code=site.code, name=site.name) for site in sites]
 
 
 @router.get("/bins", response_model=list[BinRecord])
 def get_bins(
-    actor_id: ActorIdQuery,
+    user: ActiveUser,
     session: SessionDependency,
     site_id: SiteIdQuery = None,
     bin_type: Annotated[ApiBinType | None, Query(description="Filter by bin type")] = None,
     status: Annotated[ApiBinStatus | None, Query(description="Filter by status")] = None,
 ) -> list[BinRecord]:
-    sites = resolve_read_sites(session, actor_id, site_id)
+    sites = resolve_read_sites(session, user.id, site_id)
     statement = (
         select(Bin, Site.name).join(Site, Bin.site_id == Site.id).where(Bin.site_id.in_(sites))
     )
@@ -284,11 +284,11 @@ def get_bins(
 
 @router.get("/bins/active", response_model=ActiveBinsResponse)
 def get_active_bins(
-    actor_id: ActorIdQuery, session: SessionDependency, site_id: SiteIdQuery = None
+    user: ActiveUser, session: SessionDependency, site_id: SiteIdQuery = None
 ) -> ActiveBinsResponse:
     """The open bins of one site. Managers must choose the site."""
 
-    site_id = require_single_site(resolve_read_sites(session, actor_id, site_id))
+    site_id = require_single_site(resolve_read_sites(session, user.id, site_id))
     site_name = site_name_of(session, site_id)
 
     def active(bin_type: BinType) -> BinRecord | None:
@@ -303,8 +303,10 @@ def get_active_bins(
 
 
 @router.post("/bins", response_model=BinRecord, status_code=201)
-def create_bin(request: BinCreateRequest, session: SessionDependency) -> BinRecord:
-    site_id = require_staff_site(session, request.actor_id)
+def create_bin(
+    request: BinCreateRequest, user: ActiveUser, session: SessionDependency
+) -> BinRecord:
+    site_id = require_staff_site(session, user.id)
     bin_record = add_bin(
         session,
         site_id,
@@ -319,10 +321,12 @@ def create_bin(request: BinCreateRequest, session: SessionDependency) -> BinReco
 
 
 @router.post("/bins/{bin_id}/close", response_model=BinRecord)
-def close_bin(bin_id: int, request: BinCloseRequest, session: SessionDependency) -> BinRecord:
+def close_bin(
+    bin_id: int, request: BinCloseRequest, user: ActiveUser, session: SessionDependency
+) -> BinRecord:
     """Seal a bin. Recycling bins become ``ready`` for a contractor handoff; others ``closed``."""
 
-    site_id = require_staff_site(session, request.actor_id)
+    site_id = require_staff_site(session, user.id)
     bin_record = session.exec(select(Bin).where(Bin.id == bin_id).with_for_update()).one_or_none()
     if bin_record is None:
         raise HTTPException(status_code=404, detail=f"Bin with ID '{bin_id}' not found.")
@@ -353,8 +357,10 @@ def close_bin(bin_id: int, request: BinCloseRequest, session: SessionDependency)
 
 
 @router.post("/garments/sort", response_model=SortGarmentResponse)
-def sort_garment(request: GarmentSortRequest, session: SessionDependency) -> SortGarmentResponse:
-    site_id = require_staff_site(session, request.actor_id)
+def sort_garment(
+    request: GarmentSortRequest, user: ActiveUser, session: SessionDependency
+) -> SortGarmentResponse:
+    site_id = require_staff_site(session, user.id)
     bin_type = BIN_TYPE_BY_CONDITION[request.condition]
     received_at = utc_now()
     # Garment weights are EPR report inputs, so a submitted quarter must refuse new garments.
@@ -386,7 +392,7 @@ def sort_garment(request: GarmentSortRequest, session: SessionDependency) -> Sor
 
     garment = GarmentRecord(
         site_id=site_id,
-        recorded_by_user_id=request.actor_id,
+        recorded_by_user_id=user.id,
         bin_id=target.id,
         category=request.category,
         outcome=OUTCOME_BY_CONDITION[request.condition],
@@ -420,12 +426,12 @@ def sort_garment(request: GarmentSortRequest, session: SessionDependency) -> Sor
 
 @router.get("/garments/recent", response_model=list[GarmentItem])
 def get_recent_garments(
-    actor_id: ActorIdQuery,
+    user: ActiveUser,
     session: SessionDependency,
     site_id: SiteIdQuery = None,
     limit: Annotated[int, Query(ge=1, le=100, description="Max items to return")] = 15,
 ) -> list[GarmentItem]:
-    sites = resolve_read_sites(session, actor_id, site_id)
+    sites = resolve_read_sites(session, user.id, site_id)
     rows = session.exec(
         select(GarmentRecord, Bin.code, Site.name)
         .join(Bin, GarmentRecord.bin_id == Bin.id)
@@ -453,11 +459,11 @@ def today_bounds_utc(site: Site | None) -> tuple[datetime, datetime]:
 
 @router.get("/sorting/stats", response_model=SortingStatsResponse)
 def get_sorting_stats(
-    actor_id: ActorIdQuery, session: SessionDependency, site_id: SiteIdQuery = None
+    user: ActiveUser, session: SessionDependency, site_id: SiteIdQuery = None
 ) -> SortingStatsResponse:
     """Today's intake. Each site's day follows its own timezone; sites are summed together."""
 
-    sites = resolve_read_sites(session, actor_id, site_id)
+    sites = resolve_read_sites(session, user.id, site_id)
     counts: dict[GarmentOutcome, int] = {}
     for current_site_id in sites:
         start, end = today_bounds_utc(session.get(Site, current_site_id))

@@ -54,7 +54,6 @@ from app.schemas import (
     EprAdjustmentLine,
     EprAdjustmentMetric,
     EprAdjustmentRequest,
-    EprSubmitRequest,
     UserRole,
 )
 from app.security import hash_password
@@ -583,9 +582,7 @@ class _Seeder:
         year, quarter = first.year, (first.month - 1) // 3 + 1
         submitted: list[tuple[int, int]] = []
         while (year, quarter) < open_quarter:
-            submit_epr_quarter(
-                EprSubmitRequest(actor_id=self.admin.id), self.session, year, quarter
-            )
+            submit_epr_quarter(self.admin, self.session, year, quarter)
             submitted.append((year, quarter))
             year, quarter = (year + 1, 1) if quarter == 4 else (year, quarter + 1)
 
@@ -605,7 +602,6 @@ class _Seeder:
             year, quarter = submitted[-1]
             add_epr_adjustment(
                 EprAdjustmentRequest(
-                    actor_id=self.admin.id,
                     site_id=self.sites["BKK"].id,
                     expected_latest_adjustment_id=None,
                     effective_date=quarter_bounds(year, quarter)[1] + timedelta(days=20),
@@ -617,6 +613,7 @@ class _Seeder:
                         )
                     ],
                 ),
+                self.admin,
                 self.session,
                 year,
                 quarter,

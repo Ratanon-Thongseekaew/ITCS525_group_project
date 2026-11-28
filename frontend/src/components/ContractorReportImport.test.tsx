@@ -127,8 +127,7 @@ test('asks for month and contractor only, defaulting the month to the previous m
 test('reviews each row with its site, staff weight, warnings and errors', async () => {
   await uploadReport()
 
-  expect(parseMock).toHaveBeenCalledWith({
-    actorId: 4,
+  expect(parseMock).toHaveBeenCalledWith('token', {
     filename: 'report.csv',
     contentBase64: expect.any(String),
     reportMonth: '2026-10',
@@ -149,7 +148,7 @@ test('reviews each row with its site, staff weight, warnings and errors', async 
   expect(screen.getByRole('button', { name: 'Download Rejected Rows' })).toBeInTheDocument()
 })
 
-test('saves the non-rejected rows with the actor and contractor ids', async () => {
+test('saves the non-rejected rows with the contractor id and the session token', async () => {
   importMock.mockResolvedValue({
     reports: [
       { report_id: 7, site_id: 1, site_name: 'Bangkok Sorting Center', imported_rows: 1 },
@@ -168,8 +167,10 @@ test('saves the non-rejected rows with the actor and contractor ids', async () =
 
   expect(await screen.findByText(/Bangkok Sorting Center • Report #7/)).toBeInTheDocument()
   expect(screen.getByText(/Chiang Mai Sorting Center • Report #8/)).toBeInTheDocument()
-  const request = importMock.mock.calls[0][0]
-  expect(request).toMatchObject({ actor_id: 4, contractor_id: 2, report_month: '2026-10' })
+  const [token, request] = importMock.mock.calls[0]
+  expect(token).toBe('token')
+  expect(request).toMatchObject({ contractor_id: 2, report_month: '2026-10' })
+  expect(request).not.toHaveProperty('actor_id')
   expect(request.rows.map((row) => row.bin_id)).toEqual(['BKK-RC-001', 'CNX-RC-001'])
   expect(request.rows[0]).not.toHaveProperty('store_weight_kg')
 })

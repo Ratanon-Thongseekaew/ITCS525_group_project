@@ -5,15 +5,19 @@ import {
   changePassword,
   closeHandoff,
   createUser,
+  fetchHandoffPhoto,
   getDashboard,
   getHandoffReadyBins,
   getHandoffs,
   getResaleStoreSummary,
   handoffPhotoUrl,
+  isApiPhotoUrl,
   listSites,
   parseAndValidateContractorFile,
   recordHandoffAtPickup,
   resetUserPassword,
+  setUnauthorizedHandler,
+  submitEprQuarter,
 } from './api'
 
 afterEach(() => {
@@ -28,7 +32,7 @@ test('sends dashboard filters as query parameters', async () => {
     }),
   )
 
-  await getDashboard({
+  await getDashboard('test-token', {
     frequency: 'quarterly',
     year: 2026,
     quarter: 4,
@@ -38,11 +42,39 @@ test('sends dashboard filters as query parameters', async () => {
 
   expect(fetchMock).toHaveBeenCalledWith(
     '/api/dashboard?frequency=quarterly&year=2026&quarter=4&site_id=2&contractor_id=3',
-    { signal: undefined },
+    { signal: undefined, headers: { Authorization: 'Bearer test-token' } },
   )
 })
 
-test('sends the actor, month and contractor with a contractor report file', async () => {
+test('submits an EPR quarter with the token and no actor in the body', async () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    new Response(JSON.stringify({ status: 'submitted' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  )
+
+  await submitEprQuarter('test-token', 2026, 4)
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/epr/quarterly-report/submit?year=2026&quarter=4', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer test-token' },
+  })
+})
+
+test('ends the session when a signed-in dashboard request is rejected', async () => {
+  const handler = vi.fn()
+  setUnauthorizedHandler(handler)
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 401 }))
+
+  await expect(
+    getDashboard('expired-token', { frequency: 'monthly', year: 2026 }),
+  ).rejects.toThrow()
+  expect(handler).toHaveBeenCalledWith('expired-token')
+  setUnauthorizedHandler(() => {})
+})
+
+test('sends the token, month and contractor with a contractor report file', async () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
     new Response(JSON.stringify({ filename: 'report.csv', rows: [] }), {
       status: 200,
@@ -50,8 +82,7 @@ test('sends the actor, month and contractor with a contractor report file', asyn
     }),
   )
 
-  await parseAndValidateContractorFile({
-    actorId: 4,
+  await parseAndValidateContractorFile('test-token', {
     filename: 'report.csv',
     contentBase64: 'YmluX2lk',
     reportMonth: '2026-10',
@@ -60,9 +91,8 @@ test('sends the actor, month and contractor with a contractor report file', asyn
 
   expect(fetchMock).toHaveBeenCalledWith('/api/contractor-reports/parse-and-validate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
     body: JSON.stringify({
-      actor_id: 4,
       filename: 'report.csv',
       content_base64: 'YmluX2lk',
       report_month: '2026-10',
@@ -79,9 +109,12 @@ test('requests the persisted resale summary', async () => {
     }),
   )
 
-  await getResaleStoreSummary()
+  await getResaleStoreSummary('test-token')
 
-  expect(fetchMock).toHaveBeenCalledWith('/api/resale-bins/summary', { signal: undefined })
+  expect(fetchMock).toHaveBeenCalledWith('/api/resale-bins/summary', {
+    signal: undefined,
+    headers: { Authorization: 'Bearer test-token' },
+  })
 })
 
 function mockJsonResponse(body: unknown, status = 200) {
@@ -97,28 +130,30 @@ function mockJsonResponse(body: unknown, status = 200) {
 test('requests ready handoff bins and handoff records with optional filters', async () => {
   const fetchMock = mockJsonResponse({ bins: [], handoffs: [] })
 
-  await getHandoffReadyBins()
-  await getHandoffReadyBins(2)
-  await getHandoffs({ status: 'disputed', site_id: 1 })
+  await getHandoffReadyBins('test-token')
+  await getHandoffReadyBins('test-token', 2)
+  await getHandoffs('test-token', { status: 'disputed', site_id: 1 })
 
   expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
     '/api/handoffs/bins',
     '/api/handoffs/bins?site_id=2',
     '/api/handoffs?status=disputed&site_id=1',
   ])
+  for (const [, init] of fetchMock.mock.calls) {
+    expect(init?.headers).toEqual({ Authorization: 'Bearer test-token' })
+  }
 })
 
-test('approves and closes handoffs with JSON bodies', async () => {
+test('approves and closes handoffs with the token and no body', async () => {
   const fetchMock = mockJsonResponse({})
 
-  await approveHandoff(7, 2)
-  await closeHandoff(7, 2)
+  await approveHandoff('test-token', 7)
+  await closeHandoff('test-token', 7)
 
   for (const [index, action] of ['approve', 'close'].entries()) {
     expect(fetchMock).toHaveBeenNthCalledWith(index + 1, `/api/handoffs/7/${action}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ actor_id: 2 }),
+      headers: { Authorization: 'Bearer test-token' },
     })
   }
 })
@@ -126,7 +161,7 @@ test('approves and closes handoffs with JSON bodies', async () => {
 test('shows the API error detail when a handoff request is rejected', async () => {
   mockJsonResponse({ detail: 'A manager must approve this disputed handoff before closing.' }, 409)
 
-  await expect(approveHandoff(7, 2)).rejects.toThrow(
+  await expect(approveHandoff('test-token', 7)).rejects.toThrow(
     'A manager must approve this disputed handoff before closing.',
   )
 })
@@ -135,10 +170,9 @@ test('records a handoff with its evidence and scale photo as multipart form data
   const fetchMock = mockJsonResponse({})
   const photo = new Blob(['png'], { type: 'image/png' })
 
-  await recordHandoffAtPickup({
+  await recordHandoffAtPickup('test-token', {
     bin_id: 4,
     contractor_id: 1,
-    actor_id: 3,
     picked_up_at: '2026-11-21T03:15:00.000Z',
     staff_weight_kg: 40,
     driver_weight_kg: 40.5,
@@ -150,14 +184,31 @@ test('records a handoff with its evidence and scale photo as multipart form data
   const [url, init] = fetchMock.mock.calls[0]
   expect(url).toBe('/api/handoffs/pickups')
   expect(init?.method).toBe('POST')
-  expect(init?.headers).toBeUndefined()
+  // Only the token: the browser adds the multipart Content-Type with its boundary.
+  expect(init?.headers).toEqual({ Authorization: 'Bearer test-token' })
   const form = init?.body as FormData
+  expect(form.has('actor_id')).toBe(false)
   expect(form.get('bin_id')).toBe('4')
   expect(form.get('contractor_id')).toBe('1')
   expect(form.get('staff_weight_kg')).toBe('40')
   expect(form.get('driver_weight_kg')).toBe('40.5')
   expect(form.get('vehicle_plate_number')).toBe('1KB-2345')
   expect(form.get('scale_photo')).toBeInstanceOf(Blob)
+})
+
+test('downloads an API-stored scale photo with the token', async () => {
+  const fetchMock = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(new Response(new Blob(['png'], { type: 'image/png' })))
+
+  const photo = await fetchHandoffPhoto('test-token', '/api/handoffs/7/scale-photo')
+
+  expect(photo.type).toBe('image/png')
+  expect(fetchMock).toHaveBeenCalledWith('/api/handoffs/7/scale-photo', {
+    headers: { Authorization: 'Bearer test-token' },
+  })
+  expect(isApiPhotoUrl('/api/handoffs/7/scale-photo')).toBe(true)
+  expect(isApiPhotoUrl('https://example.invalid/scale.jpg')).toBe(false)
 })
 
 test('keeps external scale photo links and API paths usable', () => {

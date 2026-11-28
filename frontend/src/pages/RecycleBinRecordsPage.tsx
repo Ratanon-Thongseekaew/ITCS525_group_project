@@ -34,7 +34,9 @@ const sortOptions = toOptions(handoffRecordSortLabels)
  * approve Disputed handoffs, and close handoffs whose outcome report is in.
  */
 export function RecycleBinRecordsPage() {
-  const user = useSession()?.user ?? null
+  const session = useSession()
+  const user = session?.user ?? null
+  const token = session?.token ?? ''
   // Staff record handoffs from their own screen; reviewing them is for managers and administrators.
   const viewer = user && user.role !== 'staff' ? user : null
   const viewerId = viewer?.id ?? null
@@ -44,7 +46,7 @@ export function RecycleBinRecordsPage() {
 
   const sitesResource = useApiResource(
     viewerId === null ? null : `handoff-review-sites:${viewerId}`,
-    () => getSortingSites(viewerId!),
+    () => getSortingSites(token),
     'Your sites could not be loaded.',
   )
   const sites = sitesResource.data
@@ -52,11 +54,11 @@ export function RecycleBinRecordsPage() {
     async (signal: AbortSignal): Promise<HandoffListResponse> => {
       const siteIds = new Set((sites ?? []).map((site) => site.id))
       const siteId = siteChoice === ALL_SITES ? undefined : Number(siteChoice)
-      const response = await getHandoffs({ site_id: siteId }, signal)
+      const response = await getHandoffs(token, { site_id: siteId }, signal)
       // Managers only review the sites they run.
       return { handoffs: response.handoffs.filter((record) => siteIds.has(record.site_id)) }
     },
-    [sites, siteChoice],
+    [sites, siteChoice, token],
   )
   const resource = useApiResource(
     viewerId === null || sites === null ? null : `handoff-review:${viewerId}:${siteChoice}`,
@@ -158,13 +160,7 @@ export function RecycleBinRecordsPage() {
                   <li key={record.id}>
                     <HandoffRecordCard
                       record={record}
-                      actions={
-                        <HandoffReviewActions
-                          record={record}
-                          actorId={viewer.id}
-                          onUpdated={replaceRecord}
-                        />
-                      }
+                      actions={<HandoffReviewActions record={record} onUpdated={replaceRecord} />}
                     />
                   </li>
                 ))}

@@ -14,6 +14,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { useSession } from '@/lib/auth-session'
 import { downloadEprCsv } from '@/lib/epr-report'
 
 interface EprReportExportDialogProps {
@@ -26,10 +27,11 @@ function ExportActions({ year, quarter }: { year: number; quarter: number }) {
   const [report, setReport] = useState<EprQuarterReport>()
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
+  const token = useSession()?.token ?? ''
 
   useEffect(() => {
     const controller = new AbortController()
-    void getEprQuarterReport(year, quarter, controller.signal)
+    void getEprQuarterReport(token, year, quarter, controller.signal)
       .then((result) => {
         if (!controller.signal.aborted) setReport(result)
       })
@@ -37,7 +39,7 @@ function ExportActions({ year, quarter }: { year: number; quarter: number }) {
         if (!controller.signal.aborted) setFailed(true)
       })
     return () => controller.abort()
-  }, [year, quarter, attempt])
+  }, [token, year, quarter, attempt])
 
   if (failed) {
     return (

@@ -1,10 +1,12 @@
-import type { ReactNode } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
 import { Clock3, ExternalLink, Recycle, TriangleAlert } from 'lucide-react'
-import { handoffPhotoUrl } from '@/api'
+import { toast } from 'sonner'
+import { fetchHandoffPhoto, handoffPhotoUrl, isApiPhotoUrl } from '@/api'
 import { RecordCard, RecordDetail } from '@/components/RecordCard'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { useSession } from '@/lib/auth-session'
 import { BIN_TYPE_TONES } from '@/lib/bin-type-tones'
 import {
   formatCollectedAt,
@@ -105,9 +107,48 @@ function MaterialOutcomesSection({ outcomes, recordedWeightKg }: MaterialOutcome
   )
 }
 
-function PickupEvidence({ record }: { record: HandoffRecord }) {
-  const photoUrl = handoffPhotoUrl(record.scale_photo_url)
+// How long an opened photo's object URL stays valid; the new tab has loaded it well before then.
+const PHOTO_URL_LIFETIME_MS = 60_000
 
+/**
+ * Opens the scale photo in a new tab. A link can't send the login token, so a photo stored by the
+ * API is downloaded with it first; the tab opens straight away so pop-up blockers allow it.
+ */
+function ScalePhotoLink({ url }: { url: string }) {
+  const token = useSession()?.token ?? ''
+
+  async function openStoredPhoto(event: MouseEvent<HTMLAnchorElement>) {
+    if (!isApiPhotoUrl(url)) return
+    event.preventDefault()
+    const tab = window.open('', '_blank')
+    if (tab) tab.opener = null
+    try {
+      const objectUrl = URL.createObjectURL(await fetchHandoffPhoto(token, url))
+      if (tab) tab.location.href = objectUrl
+      else window.open(objectUrl, '_blank', 'noopener')
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), PHOTO_URL_LIFETIME_MS)
+    } catch {
+      tab?.close()
+      toast.error('The scale photo could not be loaded.')
+    }
+  }
+
+  return (
+    <a
+      href={handoffPhotoUrl(url) ?? undefined}
+      target="_blank"
+      rel="noreferrer"
+      onClick={(event) => void openStoredPhoto(event)}
+      className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline"
+    >
+      View scale photo
+      <ExternalLink className="size-3" aria-hidden="true" />
+      <span className="sr-only">(opens in a new tab)</span>
+    </a>
+  )
+}
+
+function PickupEvidence({ record }: { record: HandoffRecord }) {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
       {record.driver_name ? (
@@ -116,18 +157,7 @@ function PickupEvidence({ record }: { record: HandoffRecord }) {
           {record.vehicle_plate_number ? ` · ${record.vehicle_plate_number}` : ''}
         </span>
       ) : null}
-      {photoUrl ? (
-        <a
-          href={photoUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline"
-        >
-          View scale photo
-          <ExternalLink className="size-3" aria-hidden="true" />
-          <span className="sr-only">(opens in a new tab)</span>
-        </a>
-      ) : null}
+      {record.scale_photo_url ? <ScalePhotoLink url={record.scale_photo_url} /> : null}
       {record.approved_by ? <span>Approved by {record.approved_by}</span> : null}
       <span>Recorded by {record.created_by}</span>
     </div>

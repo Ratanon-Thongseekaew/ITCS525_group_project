@@ -2,9 +2,12 @@ from datetime import date, datetime, time
 from decimal import Decimal
 
 import pytest
+from auth_helpers import bearer, demo_user_id
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
+from app.database import get_session
 from app.epr import (
     add_epr_adjustment,
     get_epr_management,
@@ -12,6 +15,7 @@ from app.epr import (
     lock_open_epr_quarter,
     submit_epr_quarter,
 )
+from app.main import app
 from app.models import (
     Bin,
     ContractorReport,
@@ -24,8 +28,9 @@ from app.models import (
     GarmentRecord,
     ReportStatus,
     Site,
+    User,
 )
-from app.schemas import EprAdjustmentRequest, EprSubmitRequest
+from app.schemas import EprAdjustmentRequest, UserRole
 
 # With the demo seed pinned to 2026-11-27, Q4 2026 (Oct to Nov) is the open draft quarter and
 # Q3 2026 is the latest submitted one.
@@ -37,6 +42,16 @@ SUBMITTED = (2026, 3)
 def report_session(demo_engine):
     with Session(demo_engine) as session:
         yield session
+
+
+def first_manager(session: Session) -> User:
+    """The first manager or admin by username, the account the old EPR actor picker listed first."""
+
+    return session.exec(
+        select(User)
+        .where(User.role.in_((UserRole.ADMIN, UserRole.MANAGER)))
+        .order_by(User.username)
+    ).first()
 
 
 def expected_live_totals(session: Session, start: date, end: date) -> dict[str, Decimal]:
@@ -162,12 +177,12 @@ def test_empty_quarter_has_zero_weights_and_rate(report_session: Session):
 
 def test_submit_saves_draft_totals_and_locks_all_months(report_session: Session):
     draft = get_epr_management(report_session, *OPEN)
-    actor_id = draft.actors[0].id
-    result = submit_epr_quarter(EprSubmitRequest(actor_id=actor_id), report_session, *OPEN)
+    actor = first_manager(report_session)
+    result = submit_epr_quarter(actor, report_session, *OPEN)
 
     assert result.status == "submitted"
     assert result.submitted_at is not None
-    assert result.submitted_by == draft.actors[0].label
+    assert result.submitted_by == actor.username
     assert len(result.sites) == 5
     assert result.report.total_weight_received_kg == draft.report.total_weight_received_kg
     assert result.report.landfilled_weight_kg == draft.report.landfilled_weight_kg
@@ -178,7 +193,7 @@ def test_submit_saves_draft_totals_and_locks_all_months(report_session: Session)
     assert conflict.value.status_code == 409
     report_session.rollback()
     with pytest.raises(HTTPException, match="quarter is locked"):
-        submit_epr_quarter(EprSubmitRequest(actor_id=actor_id), report_session, *OPEN)
+        submit_epr_quarter(actor, report_session, *OPEN)
     report_session.rollback()
     assert get_quarterly_report(report_session, *OPEN) == result.report
 
@@ -186,12 +201,10 @@ def test_submit_saves_draft_totals_and_locks_all_months(report_session: Session)
 def test_adjustment_moves_weight_between_metrics_without_rewriting_export(
     report_session: Session,
 ):
-    draft = get_epr_management(report_session, *OPEN)
-    actor_id = draft.actors[0].id
-    submitted = submit_epr_quarter(EprSubmitRequest(actor_id=actor_id), report_session, *OPEN)
+    actor = first_manager(report_session)
+    submitted = submit_epr_quarter(actor, report_session, *OPEN)
     payload = EprAdjustmentRequest.model_validate(
         {
-            "actor_id": actor_id,
             "expected_latest_adjustment_id": None,
             # Chiang Mai's October report is imported, so it has landfill weight to move.
             "site_id": next(site.id for site in submitted.sites if "Chiang Mai" in site.label),
@@ -203,7 +216,7 @@ def test_adjustment_moves_weight_between_metrics_without_rewriting_export(
             ],
         }
     )
-    amended = add_epr_adjustment(payload, report_session, *OPEN)
+    amended = add_epr_adjustment(payload, actor, report_session, *OPEN)
 
     assert amended.report == submitted.report
     assert get_quarterly_report(report_session, *OPEN) == submitted.report
@@ -217,7 +230,7 @@ def test_adjustment_moves_weight_between_metrics_without_rewriting_export(
     assert all(row.effective_date == date(2026, 11, 19) for row in amended.adjustments)
 
     with pytest.raises(HTTPException, match="adjustment history changed"):
-        add_epr_adjustment(payload, report_session, *OPEN)
+        add_epr_adjustment(payload, actor, report_session, *OPEN)
     report_session.rollback()
 
     invalid = payload.model_copy(
@@ -227,15 +240,15 @@ def test_adjustment_moves_weight_between_metrics_without_rewriting_export(
         }
     )
     with pytest.raises(HTTPException, match="weights outside the valid range"):
-        add_epr_adjustment(invalid, report_session, *OPEN)
+        add_epr_adjustment(invalid, actor, report_session, *OPEN)
     report_session.rollback()
     assert len(get_epr_management(report_session, *OPEN).adjustments) == 2
 
 
 def test_rejects_adjustment_before_submission(report_session: Session):
+    actor = first_manager(report_session)
     payload = EprAdjustmentRequest.model_validate(
         {
-            "actor_id": 1,
             "expected_latest_adjustment_id": None,
             "site_id": 1,
             "effective_date": "2026-11-19",
@@ -244,4 +257,55 @@ def test_rejects_adjustment_before_submission(report_session: Session):
         }
     )
     with pytest.raises(HTTPException, match="Submit the quarter"):
-        add_epr_adjustment(payload, report_session, *OPEN)
+        add_epr_adjustment(payload, actor, report_session, *OPEN)
+
+
+@pytest.fixture
+def epr_http(demo_engine):
+    def override_session():
+        with Session(demo_engine) as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_session
+    with TestClient(app) as client:
+        yield client, demo_engine
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("get", "/api/epr/quarterly-report"),
+        ("get", "/api/epr/quarterly-report/management"),
+        ("post", "/api/epr/quarterly-report/submit"),
+        ("post", "/api/epr/quarterly-report/adjustments"),
+    ],
+)
+def test_epr_routes_require_a_manager_or_admin_token(epr_http, method, path):
+    client, engine = epr_http
+    params = {"year": OPEN[0], "quarter": OPEN[1]}
+    staff = bearer(demo_user_id(engine, "staff.bkk@example.com"))
+
+    assert client.request(method, path, params=params).status_code == 401
+    assert client.request(method, path, params=params, headers=staff).status_code == 403
+
+
+def test_submit_records_the_signed_in_manager_not_a_chosen_account(epr_http):
+    client, engine = epr_http
+    manager = bearer(demo_user_id(engine, "manager.cnx@example.com"))
+    params = {"year": OPEN[0], "quarter": OPEN[1]}
+
+    management = client.get("/api/epr/quarterly-report/management", params=params, headers=manager)
+    assert management.status_code == 200
+    assert "actors" not in management.json()
+
+    # An old client still sending actor_id can't choose who is recorded.
+    admin_id = demo_user_id(engine, "admin@example.com")
+    submitted = client.post(
+        "/api/epr/quarterly-report/submit",
+        params=params,
+        json={"actor_id": admin_id},
+        headers=manager,
+    )
+    assert submitted.status_code == 200
+    assert submitted.json()["submitted_by"] == "manager.cnx@example.com"

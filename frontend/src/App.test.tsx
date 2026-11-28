@@ -240,7 +240,9 @@ test('renders and processes a direct resale bin', async () => {
       ([input, init]) => String(input).includes('/api/resale-bins/') && init?.method === 'POST',
     )
   expect(processCall).toBeDefined()
-  expect(JSON.parse(String(processCall?.[1]?.body))).toMatchObject({ actor_id: 99 })
+  // The signed-in staff member is sent as the token, not as an actor in the body.
+  expect(processCall?.[1]?.headers).toMatchObject({ Authorization: 'Bearer test-token' })
+  expect(JSON.parse(String(processCall?.[1]?.body))).not.toHaveProperty('actor_id')
 })
 
 test('uses the signed-in staff account and store instead of the temporary account picker', async () => {

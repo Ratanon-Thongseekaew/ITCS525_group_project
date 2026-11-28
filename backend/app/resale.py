@@ -7,6 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from .auth import ActiveUser, require_management
 from .database import get_session
 from .epr import lock_open_epr_quarter
 from .models import (
@@ -16,7 +17,6 @@ from .models import (
     GarmentRecord,
     ResaleBinProcess,
     Site,
-    User,
     UserRole,
     UserSite,
 )
@@ -26,6 +26,7 @@ from .schemas import (
     ResaleStoreSummary,
     ResaleStoreSummaryResponse,
 )
+from .sorting import resolve_read_sites
 
 router = APIRouter(prefix="/api/resale-bins", tags=["resale bins"])
 SessionDependency = Annotated[Session, Depends(get_session)]
@@ -62,7 +63,11 @@ def to_resale_bin_record(bin_record: Bin, process: ResaleBinProcess | None) -> R
 
 
 @router.get("", response_model=list[ResaleBinRecord])
-def get_resale_bins(site_id: SiteIdQuery, session: SessionDependency) -> list[ResaleBinRecord]:
+def get_resale_bins(
+    site_id: SiteIdQuery, user: ActiveUser, session: SessionDependency
+) -> list[ResaleBinRecord]:
+    # Staff read their own store; managers read their assigned stores, the same rule as sorting.
+    resolve_read_sites(session, user.id, site_id)
     rows = session.exec(
         select(Bin, ResaleBinProcess)
         .outerjoin(ResaleBinProcess, ResaleBinProcess.bin_id == Bin.id)
@@ -78,7 +83,7 @@ def get_resale_bins(site_id: SiteIdQuery, session: SessionDependency) -> list[Re
 
 @router.post("/{bin_id}/process", response_model=ResaleBinRecord)
 def process_resale_bin(
-    bin_id: int, payload: ResaleProcessRequest, session: SessionDependency
+    bin_id: int, payload: ResaleProcessRequest, user: ActiveUser, session: SessionDependency
 ) -> ResaleBinRecord:
     bin_record = session.exec(select(Bin).where(Bin.id == bin_id).with_for_update()).one_or_none()
     if bin_record is None:
@@ -95,9 +100,9 @@ def process_resale_bin(
             detail=f"Accepted and rejected counts must total {bin_record.item_count}.",
         )
 
-    actor = session.get(User, payload.actor_id)
-    if actor is None or actor.role is not UserRole.STAFF:
-        raise HTTPException(status_code=422, detail="Select an existing staff account.")
+    actor = user
+    if actor.role is not UserRole.STAFF:
+        raise HTTPException(status_code=403, detail="Only store staff can process resale bins.")
     membership = session.exec(
         select(UserSite.id).where(
             UserSite.user_id == actor.id,
@@ -145,7 +150,11 @@ def process_resale_bin(
     return to_resale_bin_record(bin_record, process)
 
 
-@router.get("/summary", response_model=ResaleStoreSummaryResponse)
+@router.get(
+    "/summary",
+    response_model=ResaleStoreSummaryResponse,
+    dependencies=[Depends(require_management)],
+)
 def get_resale_bin_summary(session: SessionDependency) -> ResaleStoreSummaryResponse:
     actual_value_total = func.sum(Bin.actual_value)
     statement = (

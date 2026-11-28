@@ -8,6 +8,7 @@ from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session, select
 
+from .auth import ManagementUser, require_management
 from .database import get_session
 from .models import (
     Bin,
@@ -32,11 +33,11 @@ from .schemas import (
     EprManagementOption,
     EprManagementResponse,
     EprQuarterReportResponse,
-    EprSubmitRequest,
     UserRole,
 )
 
-router = APIRouter(prefix="/api/epr", tags=["EPR"])
+# Every EPR route is for managers and administrators.
+router = APIRouter(prefix="/api/epr", tags=["EPR"], dependencies=[Depends(require_management)])
 ZERO = Decimal("0")
 DISPOSITION_FIELDS = {category: f"{category.value}_weight_kg" for category in DispositionCategory}
 METRIC_FIELDS = {
@@ -228,14 +229,6 @@ def get_epr_management(
     session: SessionDependency, year: ReportYear, quarter: ReportQuarter
 ) -> EprManagementResponse:
     quarter_report = session.exec(quarter_statement(year, quarter)).one_or_none()
-    actors = [
-        EprManagementOption(id=actor_id, label=username)
-        for actor_id, username in session.exec(
-            select(User.id, User.username)
-            .where(User.role.in_(MANAGEMENT_ROLES))
-            .order_by(User.username)
-        ).all()
-    ]
     if quarter_report is None or quarter_report.status != EprReportStatus.SUBMITTED:
         sites, missing_count = get_live_site_weights(session, year, quarter)
         return EprManagementResponse(
@@ -246,7 +239,6 @@ def get_epr_management(
             adjusted_report=None,
             adjustments=[],
             sites=[],
-            actors=actors,
         )
 
     weights = get_submitted_weights(session, quarter_report.id)
@@ -296,16 +288,15 @@ def get_epr_management(
         adjusted_report=summarize_report(year, quarter, weights, None) if adjustments else None,
         adjustments=adjustments,
         sites=sites,
-        actors=actors,
     )
 
 
 @router.post("/quarterly-report/submit", response_model=EprManagementResponse)
 def submit_epr_quarter(
-    payload: EprSubmitRequest, session: SessionDependency, year: ReportYear, quarter: ReportQuarter
+    user: ManagementUser, session: SessionDependency, year: ReportYear, quarter: ReportQuarter
 ) -> EprManagementResponse:
     report = lock_open_epr_quarter(session, quarter_bounds(year, quarter)[0])
-    require_management_actor(session, payload.actor_id)
+    require_management_actor(session, user.id)
     sites = session.exec(select(Site)).all()
     if not sites:
         raise HTTPException(status_code=409, detail="Set up a site before submitting a report.")
@@ -331,7 +322,7 @@ def submit_epr_quarter(
     session.flush()
     session.add_all(snapshots)
     report.status = EprReportStatus.SUBMITTED
-    report.submitted_by_user_id = payload.actor_id
+    report.submitted_by_user_id = user.id
     report.submitted_at = report.locked_at = utc_now()
     session.commit()
     return get_epr_management(session, year, quarter)
@@ -340,6 +331,7 @@ def submit_epr_quarter(
 @router.post("/quarterly-report/adjustments", response_model=EprManagementResponse, status_code=201)
 def add_epr_adjustment(
     payload: EprAdjustmentRequest,
+    user: ManagementUser,
     session: SessionDependency,
     year: ReportYear,
     quarter: ReportQuarter,
@@ -347,7 +339,7 @@ def add_epr_adjustment(
     report = session.exec(quarter_statement(year, quarter).with_for_update()).one_or_none()
     if not report or report.status != EprReportStatus.SUBMITTED:
         raise HTTPException(status_code=409, detail="Submit the quarter before adding adjustments.")
-    require_management_actor(session, payload.actor_id)
+    require_management_actor(session, user.id)
     latest_id = session.exec(
         select(func.max(EprAdjustment.id)).where(EprAdjustment.epr_quarter_report_id == report.id)
     ).one()
@@ -384,7 +376,7 @@ def add_epr_adjustment(
                 weight_delta_kg=line.weight_delta_kg,
                 reason=payload.reason,
                 effective_date=payload.effective_date,
-                created_by_user_id=payload.actor_id,
+                created_by_user_id=user.id,
                 created_at=created_at,
             )
             for line in payload.lines

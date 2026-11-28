@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+from auth_helpers import bearer
 from fastapi.testclient import TestClient
 from sqlmodel import Session, func, select
 
@@ -72,36 +73,41 @@ class SortingTestContext:
             session.add(UserSite(user_id=self.manager_id, site_id=self.site_id("CNX")))
             session.commit()
 
-    def sort(self, condition: str, actor_id: int | None = None, **fields):
-        body = {"actor_id": actor_id or self.bkk_staff_id, "condition": condition, **fields}
-        return self.client.post(SORT, json=body)
+    def signed_in(self, as_user: int | None) -> dict[str, str]:
+        """The token header for ``as_user``, or for Bangkok staff by default."""
 
-    def read(self, path: str, actor_id: int | None = None, site_id: int | None = None, **query):
-        """GET as an actor (BKK staff by default), for the BKK site unless told otherwise."""
+        return bearer(as_user or self.bkk_staff_id)
 
-        params = {"actor_id": actor_id or self.bkk_staff_id, **query}
+    def sort(self, condition: str, as_user: int | None = None, **fields):
+        body = {"condition": condition, **fields}
+        return self.client.post(SORT, json=body, headers=self.signed_in(as_user))
+
+    def read(self, path: str, as_user: int | None = None, site_id: int | None = None, **query):
+        """GET signed in as a user (BKK staff by default), for all their sites unless told."""
+
+        params = dict(query)
         if site_id is not None:
             params["site_id"] = site_id
-        return self.client.get(path, params=params)
+        return self.client.get(path, params=params, headers=self.signed_in(as_user))
 
-    def active_bins(self, actor_id: int | None = None, site_id: int | None = None) -> dict:
-        response = self.read("/api/bins/active", actor_id, site_id)
+    def active_bins(self, as_user: int | None = None, site_id: int | None = None) -> dict:
+        response = self.read("/api/bins/active", as_user, site_id)
         assert response.status_code == 200
         return response.json()
 
-    def stats(self, actor_id: int | None = None, site_id: int | None = None) -> dict:
-        response = self.read("/api/sorting/stats", actor_id, site_id)
+    def stats(self, as_user: int | None = None, site_id: int | None = None) -> dict:
+        response = self.read("/api/sorting/stats", as_user, site_id)
         assert response.status_code == 200
         return response.json()
 
-    def make_bin(self, bin_type: str, **fields):
+    def make_bin(self, bin_type: str, as_user: int | None = None, **fields):
         return self.client.post(
-            "/api/bins", json={"actor_id": self.bkk_staff_id, "bin_type": bin_type, **fields}
+            "/api/bins", json={"bin_type": bin_type, **fields}, headers=self.signed_in(as_user)
         )
 
-    def close(self, bin_id: int, actor_id: int | None = None, **fields):
+    def close(self, bin_id: int, as_user: int | None = None, **fields):
         return self.client.post(
-            f"/api/bins/{bin_id}/close", json={"actor_id": actor_id or self.bkk_staff_id, **fields}
+            f"/api/bins/{bin_id}/close", json=fields, headers=self.signed_in(as_user)
         )
 
     def close_all(self, bin_type: BinType, site_code: str = "BKK") -> None:
@@ -294,9 +300,10 @@ def test_unknown_condition_and_blank_category_are_rejected(ctx) -> None:
 
 
 def test_only_staff_with_a_site_can_sort(ctx) -> None:
-    assert ctx.sort("good_reusable", actor_id=ctx.manager_id).status_code == 403
-    assert ctx.sort("good_reusable", actor_id=999_999).status_code == 422
-    assert ctx.client.post(SORT, json={"condition": "good_reusable"}).status_code == 422
+    assert ctx.sort("good_reusable", as_user=ctx.manager_id).status_code == 403
+    # A token for an account that doesn't exist is not a login.
+    assert ctx.sort("good_reusable", as_user=999_999).status_code == 401
+    assert ctx.client.post(SORT, json={"condition": "good_reusable"}).status_code == 401
 
 
 def test_staff_only_see_and_fill_their_own_sites_bins(ctx) -> None:
@@ -305,7 +312,7 @@ def test_staff_only_see_and_fill_their_own_sites_bins(ctx) -> None:
     cnx_active = ctx.active_bins(ctx.cnx_staff_id)["resale_bin"]
     ctx.sort("good_reusable")
 
-    cnx = ctx.sort("good_reusable", actor_id=ctx.cnx_staff_id).json()
+    cnx = ctx.sort("good_reusable", as_user=ctx.cnx_staff_id).json()
 
     assert cnx["bin"]["bin_code"] == cnx_active["bin_code"]
     assert ctx.stats()["total_sorted_today"] == bkk_before + 1
@@ -340,12 +347,12 @@ READ_PATHS = (
 
 
 @pytest.mark.parametrize("path", READ_PATHS)
-def test_reads_require_a_known_actor(ctx, path) -> None:
-    assert ctx.client.get(path).status_code == 422
-    assert ctx.read(path, actor_id=999_999).status_code == 422
+def test_reads_require_a_login(ctx, path) -> None:
+    assert ctx.client.get(path).status_code == 401
+    assert ctx.read(path, as_user=999_999).status_code == 401
 
 
-# The sites list takes no site: it always names what the actor may read.
+# The sites list takes no site: it always names what the user may read.
 @pytest.mark.parametrize("path", [path for path in READ_PATHS if path != "/api/sorting/sites"])
 def test_staff_cannot_read_another_site(ctx, path) -> None:
     cnx_site = ctx.site_id("CNX")
@@ -371,7 +378,7 @@ def test_manager_can_switch_between_their_sites(ctx) -> None:
     cnx_before = ctx.stats(ctx.manager_id, cnx_site)["recycle_count"]
     bkk_before = ctx.stats(ctx.manager_id, ctx.bkk_site_id)["resale_count"]
     ctx.sort("good_reusable")
-    ctx.sort("worn_recyclable", actor_id=ctx.cnx_staff_id)
+    ctx.sort("worn_recyclable", as_user=ctx.cnx_staff_id)
 
     cnx = ctx.read("/api/bins", ctx.manager_id, cnx_site).json()
     bkk = ctx.read("/api/bins", ctx.manager_id, ctx.bkk_site_id).json()
@@ -386,7 +393,7 @@ def test_manager_without_a_site_filter_sees_all_their_sites_combined(ctx) -> Non
     ctx.add_cnx_to_manager()
     before = ctx.stats(ctx.manager_id)
     ctx.sort("good_reusable")
-    ctx.sort("worn_recyclable", actor_id=ctx.cnx_staff_id)
+    ctx.sort("worn_recyclable", as_user=ctx.cnx_staff_id)
 
     bins = ctx.read("/api/bins", ctx.manager_id).json()
     recent = ctx.read("/api/garments/recent", ctx.manager_id).json()
@@ -450,7 +457,7 @@ def test_generated_bin_codes_are_prefixed_with_the_site_code(ctx) -> None:
     cnx_next = ctx.bin_count(BinType.RECYCLE, "CNX") + 1
 
     bkk = ctx.make_bin("recycle").json()
-    cnx = ctx.make_bin("recycle", actor_id=ctx.cnx_staff_id).json()
+    cnx = ctx.make_bin("recycle", as_user=ctx.cnx_staff_id).json()
 
     # Each site counts its own bins.
     assert bkk["bin_code"] == f"BKK-RC-{bkk_next:03d}"
@@ -460,7 +467,7 @@ def test_generated_bin_codes_are_prefixed_with_the_site_code(ctx) -> None:
 def test_custom_bin_code_must_be_unique_across_sites(ctx) -> None:
     assert ctx.make_bin("repair", bin_code="SHARED-1").status_code == 201
 
-    response = ctx.make_bin("repair", bin_code="SHARED-1", actor_id=ctx.cnx_staff_id)
+    response = ctx.make_bin("repair", bin_code="SHARED-1", as_user=ctx.cnx_staff_id)
 
     assert response.status_code == 409
     assert response.json()["detail"] == "A bin with this code already exists."
@@ -494,7 +501,7 @@ def test_sealing_a_recycling_bin_makes_it_ready_for_handoff(ctx) -> None:
     assert data["notes"].endswith("Full, moved to backroom")
     assert ctx.active_bins()["recycle_bin"] is None
 
-    handoff_bins = ctx.client.get(f"/api/handoffs/bins?site_id={ctx.bkk_site_id}").json()["bins"]
+    handoff_bins = ctx.read("/api/handoffs/bins", site_id=ctx.bkk_site_id).json()["bins"]
     assert recycle_bin["id"] in {b["id"] for b in handoff_bins}
 
 
@@ -517,12 +524,12 @@ def test_sealing_rules(ctx) -> None:
     bin_id = ctx.active_bins()["resale_bin"]["id"]
 
     assert ctx.close(999_999).status_code == 404
-    assert ctx.close(bin_id, actor_id=ctx.cnx_staff_id).status_code == 403
-    assert ctx.close(bin_id, actor_id=ctx.manager_id).status_code == 403
+    assert ctx.close(bin_id, as_user=ctx.cnx_staff_id).status_code == 403
+    assert ctx.close(bin_id, as_user=ctx.manager_id).status_code == 403
     assert ctx.close(bin_id, notes="x" * 501).status_code == 422
     assert ctx.close(bin_id).status_code == 200
     assert ctx.close(bin_id).status_code == 409
-    assert ctx.client.post(f"/api/bins/{bin_id}/close", json={}).status_code == 422
+    assert ctx.client.post(f"/api/bins/{bin_id}/close", json={}).status_code == 401
 
 
 def test_sorted_garments_cannot_be_added_to_a_sealed_bin(ctx) -> None:
@@ -574,7 +581,7 @@ def test_admins_cannot_sort(ctx) -> None:
     with ctx.session() as session:
         admin = session.get(User, ctx.admin_id)
         assert admin.role is UserRole.ADMIN
-    assert ctx.sort("good_reusable", actor_id=ctx.admin_id).status_code == 403
+    assert ctx.sort("good_reusable", as_user=ctx.admin_id).status_code == 403
 
 
 def test_sites_for_staff_are_their_own_site_only(ctx) -> None:
@@ -605,3 +612,26 @@ def test_sites_for_an_administrator_or_a_manager_without_a_site_are_every_site(c
 
     for actor_id in (ctx.manager_id, ctx.admin_id):
         assert {s["id"] for s in ctx.read("/api/sorting/sites", actor_id).json()} == every_site
+
+
+def test_writes_record_the_signed_in_staff_and_ignore_a_sent_actor_id(ctx) -> None:
+    # Bangkok staff sending the Chiang Mai staff's id still sort at Bangkok, as themselves.
+    response = ctx.sort("good_reusable", actor_id=ctx.cnx_staff_id)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["garment"]["site_id"] == ctx.bkk_site_id
+    with ctx.session() as session:
+        garment = session.get(GarmentRecord, response.json()["garment"]["id"])
+    assert garment.recorded_by_user_id == ctx.bkk_staff_id
+
+
+def test_a_pending_password_change_blocks_sorting(ctx) -> None:
+    with ctx.session() as session:
+        staff = session.get(User, ctx.bkk_staff_id)
+        staff.must_change_password = True
+        session.add(staff)
+        session.commit()
+
+    blocked = ctx.sort("good_reusable")
+    assert (blocked.status_code, blocked.json()["detail"]) == (403, "Password change required")
+    assert ctx.read("/api/sorting/stats").status_code == 403
