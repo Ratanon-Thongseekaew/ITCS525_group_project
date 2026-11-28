@@ -19,8 +19,7 @@ This is a minimal full-stack monorepo:
 - The backend uses SQLModel as its ORM, PyMySQL as the MySQL driver, and Alembic
   for versioned schema migrations. Database settings are loaded from the root
   `.env`, with an optional `DATABASE_URL` override.
-- The backend has JWT authentication and admin user management, and the frontend signs in against it. Every API route except health, greeting and login checks the token. Deployment configuration remains
-  unimplemented.
+- The backend has JWT authentication and admin user management, and the frontend signs in against it. Every API route except health, greeting and login checks the token. Deployment configuration remains unimplemented.
 
 ## Repository map
 
@@ -80,8 +79,11 @@ This is a minimal full-stack monorepo:
 │   └── pyproject.toml       Python package and tool configuration
 ├── .github/
 │   └── workflows/
-│       └── ci.yaml           Pull request and main-branch CI checks
+│       └── ci.yaml          Pull request and main-branch CI checks
 ├── compose.yaml             Local MySQL service
+├── compose.local.yaml       Full 3-container local Docker Compose stack (frontend, backend, mysql)
+├── backend/Dockerfile       FastAPI + Alembic container image
+├── frontend/Dockerfile      Multi-stage Vite build served by Caddy with `/api` proxy
 ├── .env.example             Safe template for local environment values
 ├── package.json             Root development commands
 └── README.md                Human setup and usage guide
@@ -552,8 +554,9 @@ npm run commit          # Guardrails, lint, backend tests, then Commitizen
 - `Frontend checks`: Node.js 24, `npm ci`, Prettier, ESLint, Vitest, and the
   production Vite build. It also runs and tests the executable project
   guardrails.
-- `Compose validation`: validates the resolved Compose configuration with
-  disposable CI environment values and does not start containers.
+- `Compose validation`: validates the resolved `compose.yaml` and
+  `compose.local.yaml` configurations with disposable CI environment values and
+  does not start containers.
 
 CI dependency caches are keyed from `backend/pyproject.toml` and the root
 `package-lock.json`. Superseded runs for the same pull request are cancelled.

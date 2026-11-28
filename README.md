@@ -245,6 +245,16 @@ npm run dev
 
 Vite proxies `/api` requests to FastAPI during development. To point the frontend at a different API, copy `frontend/.env.example` to `frontend/.env` and set `VITE_API_URL`.
 
+To run all three containers (`mysql`, `backend`, and `frontend` with Caddy) locally in Docker instead of host Node/Python dev servers (note: code changes require rebuilding):
+
+```bash
+npm run docker:up    # builds & starts mysql, backend (auto-migrated), and frontend
+npm run docker:down  # stops all three containers while preserving mysql_data
+```
+
+- Web App (Caddy): http://localhost:5173
+- Backend API & Swagger: http://127.0.0.1:8000/docs (also proxied at http://localhost:5173/docs)
+
 ## Frontend routes
 
 | Route                                                          | Purpose                                             |
@@ -426,8 +436,8 @@ three independent checks:
 - **Frontend checks:** install the locked npm dependencies on Node.js 24, check
   and test the executable project guardrails, check Prettier and ESLint, run
   Vitest, then create a production build.
-- **Compose validation:** resolve `compose.yaml` with non-production CI values
-  and validate its syntax without starting MySQL.
+- **Compose validation:** resolve `compose.yaml` and `compose.local.yaml` with
+  non-production CI values and validate their syntax without starting MySQL.
 
 The backend CI job uses a disposable MySQL service with non-production
 credentials and applies all migrations before running checks. Database tests
