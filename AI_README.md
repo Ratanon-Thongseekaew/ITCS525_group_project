@@ -546,7 +546,8 @@ npm run commit          # Guardrails, lint, backend tests, then Commitizen
 ## Continuous integration
 
 `.github/workflows/ci.yaml` runs on pull requests targeting `main`, pushes to
-`main`, and manual dispatches. It provides these independent status checks:
+`main` or `feat/local-docker-compose`, and manual dispatches. It provides these
+independent status checks:
 
 - `Backend checks`: Python 3.12, disposable MySQL 8.4, editable `backend[dev]`
   installation, Alembic migration and metadata check, Ruff lint, Ruff format
@@ -556,7 +557,8 @@ npm run commit          # Guardrails, lint, backend tests, then Commitizen
   guardrails.
 - `Compose validation`: validates the resolved `compose.yaml` and
   `compose.local.yaml` configurations with disposable CI environment values and
-  does not start containers.
+  builds the local `compose.local.yaml` Docker images without starting
+  containers.
 
 CI dependency caches are keyed from `backend/pyproject.toml` and the root
 `package-lock.json`. Superseded runs for the same pull request are cancelled.

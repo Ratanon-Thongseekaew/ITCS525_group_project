@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - main
+      - feat/local-docker-compose
   workflow_dispatch:
 
 permissions:
@@ -108,7 +109,7 @@ jobs:
   compose:
     name: Compose validation
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     env:
       MYSQL_ROOT_PASSWORD: ci-root-password
       MYSQL_DATABASE: textile_track
@@ -125,3 +126,6 @@ jobs:
         run: |
           docker compose config --quiet
           docker compose -f compose.local.yaml config --quiet
+
+      - name: Build local Compose images
+        run: docker compose -f compose.local.yaml build

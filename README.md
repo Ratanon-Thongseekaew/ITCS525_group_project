@@ -427,8 +427,8 @@ You can run each side independently with `npm run dev:frontend` and `npm run dev
 ## Continuous integration
 
 GitHub Actions runs `.github/workflows/ci.yaml` for pull requests targeting
-`main`, pushes to `main`, and manual workflow dispatches. The workflow runs
-three independent checks:
+`main`, pushes to `main` or `feat/local-docker-compose`, and manual workflow
+dispatches. The workflow runs three independent checks:
 
 - **Backend checks:** start MySQL 8.4, install `backend[dev]` on Python 3.12,
   apply every Alembic migration, verify SQLModel metadata with `alembic check`,
@@ -437,7 +437,8 @@ three independent checks:
   and test the executable project guardrails, check Prettier and ESLint, run
   Vitest, then create a production build.
 - **Compose validation:** resolve `compose.yaml` and `compose.local.yaml` with
-  non-production CI values and validate their syntax without starting MySQL.
+  non-production CI values, validate their syntax, and build the local
+  `compose.local.yaml` Docker images without starting containers.
 
 The backend CI job uses a disposable MySQL service with non-production
 credentials and applies all migrations before running checks. Database tests
